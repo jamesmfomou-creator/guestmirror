@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="sky5" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FBEFE0"/>
+      <stop offset="60%" stop-color="#F3D9BC"/>
+      <stop offset="100%" stop-color="#E7A97C"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#sky5)"/>
+  <circle cx="640" cy="150" r="70" fill="#FBDFB0" opacity="0.9"/>
+  <rect x="0" y="380" width="800" height="60" fill="#D9BFA0"/>
+  <rect x="0" y="440" width="800" height="160" fill="#C9A47C"/>
+  <rect x="90" y="440" width="120" height="70" rx="8" fill="#8E6B48"/>
+  <rect x="110" y="450" width="30" height="45" rx="4" fill="#EFE0C8"/>
+  <rect x="150" y="450" width="30" height="45" rx="4" fill="#EFE0C8"/>
+  <rect x="560" y="410" width="150" height="30" rx="15" fill="#7C5C3E"/>
+  <rect x="580" y="380" width="20" height="35" fill="#7C5C3E"/>
+  <rect x="690" y="380" width="20" height="35" fill="#7C5C3E"/>
+</svg>
