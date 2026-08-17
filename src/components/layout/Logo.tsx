@@ -9,9 +9,8 @@ export function Logo({ className }: { className?: string }) {
         className ?? ""
       }`}
     >
-      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-accent text-[11px] font-bold text-accent-foreground">
-        {BRAND_NAME[0]}
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/brand/logo.png" alt="" className="h-7 w-7" width={28} height={28} />
       {BRAND_NAME}
     </Link>
   );
