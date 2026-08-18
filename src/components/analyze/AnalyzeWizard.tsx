@@ -98,7 +98,14 @@ export function AnalyzeWizard() {
         }),
       });
 
-      const json = await res.json();
+      let json: { id?: string; error?: string };
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error(
+          "Une erreur est survenue. Essaie avec des captures moins nombreuses ou plus légères."
+        );
+      }
       if (!res.ok) {
         throw new Error(json.error || "Une erreur est survenue. Merci de réessayer.");
       }

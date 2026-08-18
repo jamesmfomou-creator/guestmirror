@@ -141,7 +141,14 @@ export function CompareWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ a: encodedA, b: encodedB }),
       });
-      const json = await res.json();
+      let json: CompareResult & { error?: string };
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error(
+          "Une erreur est survenue. Essaie avec des captures moins nombreuses ou plus légères."
+        );
+      }
       if (!res.ok) throw new Error(json.error || "Une erreur est survenue. Merci de réessayer.");
 
       finish(json);
