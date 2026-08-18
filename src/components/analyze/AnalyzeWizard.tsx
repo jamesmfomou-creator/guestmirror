@@ -40,6 +40,7 @@ export function AnalyzeWizard() {
   const [error, setError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [analysisDone, setAnalysisDone] = useState(false);
   const startedAt = useRef<number | null>(null);
 
   const previousAnalysisId = searchParams.get("previous");
@@ -68,6 +69,7 @@ export function AnalyzeWizard() {
 
   async function runAnalysis() {
     setSubmitting(true);
+    setAnalysisDone(false);
     track("email_submitted");
     setStep("analyzing");
     startedAt.current = Date.now();
@@ -101,8 +103,9 @@ export function AnalyzeWizard() {
         throw new Error(json.error || "Une erreur est survenue. Merci de réessayer.");
       }
 
+      setAnalysisDone(true);
       const elapsed = Date.now() - (startedAt.current ?? Date.now());
-      const wait = Math.max(0, MIN_ANIMATION_MS - elapsed);
+      const wait = Math.max(MIN_ANIMATION_MS - elapsed, 700);
       setTimeout(() => {
         track("analysis_completed");
         if (previousAnalysisId) track("rescan_completed");
@@ -144,7 +147,7 @@ export function AnalyzeWizard() {
           error={apiError}
         />
       )}
-      {step === "analyzing" && <StepAnalyzing done={false} />}
+      {step === "analyzing" && <StepAnalyzing done={analysisDone} />}
     </div>
   );
 }
