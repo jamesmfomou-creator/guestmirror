@@ -66,8 +66,8 @@ export default function LandingPage() {
               Ton Airbnb passe-t-il le test des 5 secondes ?
             </h1>
             <p className="mx-auto mt-5 max-w-xl text-balance text-lg text-muted lg:mx-0">
-              Vois ton annonce avec les yeux d&apos;un voyageur et découvre ce qui lui donne envie
-              de cliquer… ou de passer.
+              Importe ton annonce et découvre en quelques secondes ce qu&apos;un voyageur voit,
+              comprend… et ce qui le fait hésiter.
             </p>
             <div className="mt-8 flex flex-col items-center gap-4 lg:items-start">
               <HeroForm />
