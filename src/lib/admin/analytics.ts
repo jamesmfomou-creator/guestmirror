@@ -30,6 +30,7 @@ interface EventRow {
 interface AnalysisRow {
   id: string;
   email: string | null;
+  overall_score: number;
   created_at: string;
 }
 
@@ -64,6 +65,14 @@ export interface CampaignRow {
   revenue: number;
 }
 
+export interface UserRow {
+  email: string;
+  analysisCount: number;
+  lastScore: number;
+  firstSeen: string;
+  lastSeen: string;
+}
+
 export interface AnalyticsDashboard {
   configured: boolean;
   period: Period;
@@ -74,6 +83,7 @@ export interface AnalyticsDashboard {
   revenue: number;
   bySource: SourceRow[];
   byCampaign: CampaignRow[];
+  users: UserRow[];
   repeatUsage: {
     uniqueAnalysisUsers: number;
     totalAnalyses: number;
@@ -121,6 +131,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     revenue: 0,
     bySource: [],
     byCampaign: [],
+    users: [],
     repeatUsage: {
       uniqueAnalysisUsers: 0,
       totalAnalyses: 0,
@@ -140,7 +151,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       .select("event_name, anonymous_id, session_id, source, metadata, created_at")
       .gte("created_at", since.toISOString())
       .limit(50000),
-    supabase.from("analyses").select("id, email, created_at").limit(50000),
+    supabase.from("analyses").select("id, email, overall_score, created_at").limit(50000),
   ]);
 
   const rows = (events as EventRow[] | null) ?? [];
@@ -239,15 +250,30 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     .filter((c) => c.views > 0 || c.payments > 0)
     .sort((a, b) => b.revenue - a.revenue || b.views - a.views);
 
-  // ---- Repeat usage (all-time, from the analyses table itself) ----
-  const perEmail = new Map<string, number>();
+  // ---- Repeat usage + user list (all-time, from the analyses table itself) ----
+  const perEmail = new Map<string, AnalysisRow[]>();
   for (const a of allAnalyses) {
     const key = a.email || `anon:${a.id}`;
-    perEmail.set(key, (perEmail.get(key) ?? 0) + 1);
+    if (!perEmail.has(key)) perEmail.set(key, []);
+    perEmail.get(key)!.push(a);
   }
-  const counts = Array.from(perEmail.values());
-  const uniqueAnalysisUsers = counts.length;
+  const counts = Array.from(perEmail.values()).map((v) => v.length);
+  const uniqueAnalysisUsers = perEmail.size;
   const totalAnalyses = allAnalyses.length;
+
+  const users: UserRow[] = Array.from(perEmail.entries())
+    .filter(([email]) => !email.startsWith("anon:"))
+    .map(([email, userAnalyses]) => {
+      const sorted = [...userAnalyses].sort((a, b) => a.created_at.localeCompare(b.created_at));
+      return {
+        email,
+        analysisCount: sorted.length,
+        lastScore: sorted[sorted.length - 1].overall_score,
+        firstSeen: sorted[0].created_at,
+        lastSeen: sorted[sorted.length - 1].created_at,
+      };
+    })
+    .sort((a, b) => b.analysisCount - a.analysisCount || b.lastSeen.localeCompare(a.lastSeen));
 
   return {
     configured: true,
@@ -259,6 +285,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     revenue,
     bySource,
     byCampaign,
+    users,
     repeatUsage: {
       uniqueAnalysisUsers,
       totalAnalyses,

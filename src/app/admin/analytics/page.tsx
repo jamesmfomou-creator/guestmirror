@@ -162,7 +162,7 @@ export default async function AdminAnalyticsPage({
       </section>
 
       {/* Repeat usage (all-time) */}
-      <section className="mt-10 mb-10">
+      <section className="mt-10">
         <h2 className="text-lg font-semibold">Analyses uniques (depuis le début)</h2>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Kpi label="Utilisateurs uniques" value={data.repeatUsage.uniqueAnalysisUsers} />
@@ -171,6 +171,48 @@ export default async function AdminAnalyticsPage({
           <Kpi label="Utilisateurs 2+ analyses" value={data.repeatUsage.usersWith2Plus} />
           <Kpi label="Utilisateurs 3+ analyses" value={data.repeatUsage.usersWith3Plus} />
         </div>
+      </section>
+
+      {/* User list (all-time) */}
+      <section className="mt-10 mb-10">
+        <h2 className="text-lg font-semibold">Utilisateurs (depuis le début)</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Classés par nombre d&apos;analyses, du plus actif au moins actif.
+        </p>
+        {data.users.length === 0 ? (
+          <p className="mt-3 text-sm text-muted-2">Aucun utilisateur pour l&apos;instant.</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead>
+                <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                  <th className="px-4 py-2.5 font-medium">#</th>
+                  <th className="px-4 py-2.5 font-medium">Email</th>
+                  <th className="px-4 py-2.5 font-medium">Analyses</th>
+                  <th className="px-4 py-2.5 font-medium">Dernier score</th>
+                  <th className="px-4 py-2.5 font-medium">Première visite</th>
+                  <th className="px-4 py-2.5 font-medium">Dernière visite</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.users.map((u, i) => (
+                  <tr key={u.email} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2.5 text-muted-2">{i + 1}</td>
+                    <td className="px-4 py-2.5 font-medium">{u.email}</td>
+                    <td className="px-4 py-2.5 tabular-nums">{u.analysisCount}</td>
+                    <td className="px-4 py-2.5 tabular-nums">{u.lastScore}/100</td>
+                    <td className="px-4 py-2.5 tabular-nums text-muted">
+                      {new Date(u.firstSeen).toLocaleDateString("fr-FR")}
+                    </td>
+                    <td className="px-4 py-2.5 tabular-nums text-muted">
+                      {new Date(u.lastSeen).toLocaleDateString("fr-FR")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );
