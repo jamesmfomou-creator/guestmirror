@@ -10,8 +10,8 @@ import { ReportMockup } from "@/components/landing/ReportMockup";
 import { SimpleBand } from "@/components/landing/SimpleBand";
 import { FAQAccordion } from "@/components/landing/FAQAccordion";
 import { Reveal } from "@/components/landing/Reveal";
-import { Button } from "@/components/ui/Button";
 import { BRAND_NAME } from "@/lib/brand";
+import { CtaTrackedButton } from "@/components/landing/CtaTrackedButton";
 
 const CHECKS = [
   "Gratuit pour commencer",
@@ -145,9 +145,9 @@ export default function LandingPage() {
             </ul>
             <p className="mt-7 text-5xl font-semibold tracking-tight">9,90 €</p>
             <p className="mt-2 text-sm text-muted">Paiement unique • Aucun abonnement</p>
-            <Button href="/analyze" size="lg" className="mt-7">
+            <CtaTrackedButton href="/analyze" size="lg" className="mt-7" ctaLocation="pricing">
               Faire mon test gratuitement
-            </Button>
+            </CtaTrackedButton>
           </div>
         </Reveal>
       </section>
@@ -173,9 +173,9 @@ export default function LandingPage() {
           <p className="mt-4 text-muted">
             Découvre ce qu&apos;un voyageur voit pendant ses premières secondes.
           </p>
-          <Button href="/analyze" size="lg" className="mt-7">
+          <CtaTrackedButton href="/analyze" size="lg" className="mt-7" ctaLocation="final_cta">
             Faire le test des 5 secondes
-          </Button>
+          </CtaTrackedButton>
           <p className="mt-3 text-xs text-muted-2">
             Gratuit pour commencer • Résultat en moins d&apos;une minute
           </p>

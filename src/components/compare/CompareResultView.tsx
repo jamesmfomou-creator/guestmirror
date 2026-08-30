@@ -5,6 +5,7 @@ import { verdictFor } from "@/lib/utils";
 import { BRAND_NAME } from "@/lib/brand";
 import { ShareCardCompare } from "./ShareCardCompare";
 import { Button } from "@/components/ui/Button";
+import { track } from "@/lib/analytics";
 
 interface ScoredResult {
   overall_score: number;
@@ -101,7 +102,11 @@ export function CompareResultView({
           <Button size="lg" onClick={onRestart}>
             Faire une nouvelle comparaison
           </Button>
-          <Button href="/analyze" variant="outline">
+          <Button
+            href="/analyze"
+            variant="outline"
+            onClick={() => track("cta_test_clicked", { cta_location: "compare_result" })}
+          >
             Faire le test des 5 secondes sur une annonce
           </Button>
         </div>

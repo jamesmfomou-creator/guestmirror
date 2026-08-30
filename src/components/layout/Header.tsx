@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { track } from "@/lib/analytics";
 import { Logo } from "./Logo";
 
 export function Header() {
@@ -40,6 +41,7 @@ export function Header() {
           </Link>
           <Link
             href="/analyze"
+            onClick={() => track("cta_test_clicked", { cta_location: "navbar" })}
             className="rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background transition-transform duration-200 hover:-translate-y-px hover:scale-[1.02] active:scale-[0.98]"
           >
             Test des 5 secondes

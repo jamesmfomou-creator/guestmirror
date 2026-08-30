@@ -9,6 +9,7 @@ import { PendingImage, fileToBase64 } from "@/lib/files";
 import { track } from "@/lib/analytics";
 import { takePendingFiles } from "@/lib/pendingUpload";
 import { BRAND_NAME } from "@/lib/brand";
+import { verdictFor } from "@/lib/utils";
 
 type Step = "import" | "email" | "analyzing";
 
@@ -63,17 +64,17 @@ export function AnalyzeWizard() {
   }
 
   function goToEmail() {
-    track("upload_completed", { images: images.length, hasUrl: url.trim().length > 0 });
+    track("upload_completed", { image_count: images.length, hasUrl: url.trim().length > 0 });
     setStep("email");
   }
 
   async function runAnalysis() {
     setSubmitting(true);
     setAnalysisDone(false);
-    track("email_submitted");
+    track("email_submitted", { email: email.trim() });
     setStep("analyzing");
     startedAt.current = Date.now();
-    track("analysis_started");
+    track("analysis_started", { image_count: images.length, has_listing_url: url.trim().length > 0 });
 
     try {
       const encodedImages = await Promise.all(
@@ -98,7 +99,7 @@ export function AnalyzeWizard() {
         }),
       });
 
-      let json: { id?: string; error?: string };
+      let json: { id?: string; overall_score?: number; error?: string };
       try {
         json = await res.json();
       } catch {
@@ -114,7 +115,13 @@ export function AnalyzeWizard() {
       const elapsed = Date.now() - (startedAt.current ?? Date.now());
       const wait = Math.max(MIN_ANIMATION_MS - elapsed, 700);
       setTimeout(() => {
-        track("analysis_completed");
+        track("analysis_completed", {
+          analysisId: json.id,
+          overall_score: json.overall_score,
+          verdict: json.overall_score != null ? verdictFor(json.overall_score).short : undefined,
+          image_count: images.length,
+          has_listing_url: url.trim().length > 0,
+        });
         if (previousAnalysisId) track("rescan_completed");
         router.push(`/result/${json.id}`);
       }, wait);

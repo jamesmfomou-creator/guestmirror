@@ -5,6 +5,63 @@ import { SUPABASE_CONFIGURED } from "@/lib/env";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { randomUUID } from "crypto";
 
+/**
+ * Records the authoritative payment_completed analytics event once the
+ * Stripe webhook confirms a real payment -- never inferred from the
+ * client-side success redirect alone. Idempotent: Stripe retries webhook
+ * deliveries, so this is a no-op if we've already recorded this session.
+ * Best-effort attribution: reuses the source/UTM already captured on this
+ * analysis's earlier funnel events (the webhook itself has no browser
+ * context to read UTM params from).
+ */
+async function trackPaymentCompleted(params: {
+  analysisId: string;
+  stripeSessionId: string;
+  amount: number | null;
+  paymentIntentId: string | null;
+}) {
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return;
+
+  const { data: existing } = await supabase
+    .from("analytics_events")
+    .select("id")
+    .eq("event_name", "payment_completed")
+    .contains("metadata", { stripe_session_id: params.stripeSessionId })
+    .maybeSingle();
+  if (existing) return;
+
+  const { data: priorEvent } = await supabase
+    .from("analytics_events")
+    .select("source, anonymous_id, session_id, email, metadata")
+    .eq("analysis_id", params.analysisId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const priorMetadata = (priorEvent?.metadata as Record<string, unknown> | null) ?? null;
+
+  await supabase.from("analytics_events").insert({
+    id: randomUUID(),
+    event_name: "payment_completed",
+    analysis_id: params.analysisId,
+    anonymous_id: priorEvent?.anonymous_id ?? null,
+    session_id: priorEvent?.session_id ?? null,
+    email: priorEvent?.email ?? null,
+    source: priorEvent?.source ?? "direct",
+    metadata: {
+      analysis_id: params.analysisId,
+      amount: params.amount,
+      currency: "EUR",
+      payment_status: "paid",
+      stripe_session_id: params.stripeSessionId,
+      stripe_payment_intent_id: params.paymentIntentId,
+      first_touch: priorMetadata?.first_touch ?? null,
+      last_touch: priorMetadata?.last_touch ?? null,
+    },
+  });
+}
+
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("stripe-signature");
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -40,6 +97,17 @@ export async function POST(req: NextRequest) {
           amount: session.amount_total ?? null,
           status: "paid",
         });
+
+        try {
+          await trackPaymentCompleted({
+            analysisId,
+            stripeSessionId: session.id,
+            amount: session.amount_total ?? null,
+            paymentIntentId: (session.payment_intent as string) ?? null,
+          });
+        } catch {
+          // analytics must never break payment confirmation handling
+        }
       }
     }
   }

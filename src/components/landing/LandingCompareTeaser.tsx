@@ -110,7 +110,13 @@ export function LandingCompareTeaser() {
             l&apos;outil.
           </p>
 
-          <Button href="/compare" variant="outline" size="lg" className="mt-6">
+          <Button
+            href="/compare"
+            variant="outline"
+            size="lg"
+            className="mt-6"
+            onClick={() => track("compare_cta_clicked", { cta_location: "landing_compare_teaser" })}
+          >
             Comparer mes propres annonces
           </Button>
         </div>

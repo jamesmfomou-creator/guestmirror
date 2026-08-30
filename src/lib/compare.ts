@@ -16,20 +16,23 @@ export function buildComparison(a: AnalysisResult, b: AnalysisResult): Compariso
   const winnerResult = winner === "a" ? a : b;
   const loserResult = winner === "a" ? b : a;
 
-  const whyWinner = winnerResult.strengths
+  const whyWinner = (winnerResult.strengths ?? [])
     .slice(0, 3)
     .map((s) => s.explanation || s.title)
     .filter(Boolean);
   if (whyWinner.length === 0) whyWinner.push(...FALLBACK_REASONS.slice(0, 1));
 
+  const loserWeaknesses = loserResult.weaknesses ?? [];
+  const loserPriorities = loserResult.top_priorities ?? [];
+
   const mainProblem =
-    loserResult.weaknesses[0]?.title ||
-    loserResult.top_priorities[0]?.current_issue ||
+    loserWeaknesses[0]?.title ||
+    loserPriorities[0]?.current_issue ||
     "Rien ne se démarque assez vite pour donner envie de cliquer.";
 
   const firstChange =
-    loserResult.top_priorities[0]?.recommended_change ||
-    loserResult.weaknesses[0]?.recommendation ||
+    loserPriorities[0]?.recommended_change ||
+    loserWeaknesses[0]?.recommendation ||
     "Retravailler la photo de couverture pour capter l'attention plus vite.";
 
   return { winner, why_winner: whyWinner, main_problem: mainProblem, first_change: firstChange };

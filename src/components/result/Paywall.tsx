@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { track } from "@/lib/analytics";
+import { useInViewOnce } from "@/lib/tracking/useInViewOnce";
+
+const PRICE_EUR = 9.9;
 
 const FEATURES = [
   "Photo de couverture",
@@ -19,21 +22,23 @@ const FEATURES = [
 export function Paywall({
   analysisId,
   canceled,
+  overallScore,
 }: {
   analysisId: string;
   canceled?: boolean;
+  overallScore?: number;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    track("paywall_viewed", { analysisId });
-  }, [analysisId]);
+  const ref = useInViewOnce<HTMLDivElement>(() => {
+    track("paywall_viewed", { analysisId, price: PRICE_EUR, currency: "EUR" });
+  });
 
   async function handleUnlock() {
     setLoading(true);
     setError(null);
-    track("checkout_clicked", { analysisId });
+    track("unlock_clicked", { analysisId, price: PRICE_EUR, overall_score: overallScore });
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
@@ -42,6 +47,7 @@ export function Paywall({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Le paiement n'a pas pu être initié.");
+      track("checkout_started", { analysisId, price: PRICE_EUR, currency: "EUR" });
       window.location.href = json.url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Une erreur est survenue.");
@@ -50,7 +56,7 @@ export function Paywall({
   }
 
   return (
-    <div id="paywall" className="mx-auto mt-6 max-w-md scroll-mt-20">
+    <div ref={ref} id="paywall" className="mx-auto mt-6 max-w-md scroll-mt-20">
       <div className="card overflow-hidden p-6 text-center sm:p-7">
         <h2 className="text-2xl font-semibold tracking-tight">Découvre exactement quoi améliorer.</h2>
         <p className="mt-2 text-sm text-muted">

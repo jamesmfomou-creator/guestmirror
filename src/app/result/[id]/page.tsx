@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getAnalysis } from "@/lib/store";
 import { resolveImageUrls } from "@/lib/images";
 import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
+import { verdictFor } from "@/lib/utils";
 import { ScoreHeader } from "@/components/result/ScoreHeader";
 import { FirstHesitation } from "@/components/result/FirstHesitation";
 import { MainProblem } from "@/components/result/MainProblem";
@@ -59,16 +60,25 @@ export default async function ResultPage({
         <AnalyticsBeacon event="before_after_viewed" props={{ analysisId: id }} />
       )}
       {!unlocked && <AnalyticsBeacon event="aha_moment_viewed" props={{ analysisId: id }} />}
+      {!unlocked && (
+        <AnalyticsBeacon
+          event="free_result_viewed"
+          props={{
+            analysisId: id,
+            overall_score: analysis.overall_score,
+            verdict: verdictFor(analysis.overall_score).short,
+          }}
+        />
+      )}
 
       <ScoreHeader result={analysis.result} locked={!unlocked} />
 
       {!unlocked && (
         <>
           <FirstHesitation result={analysis.result} />
-          <AnalyticsBeacon event="main_problem_viewed" props={{ analysisId: id }} />
-          <MainProblem result={analysis.result} />
+          <MainProblem result={analysis.result} analysisId={id} />
           <LockedTeaser count={lockedRecommendationCount(analysis.result)} />
-          <Paywall analysisId={id} canceled={sp.canceled === "1"} />
+          <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} />
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
             {analysis.result.disclaimer}
           </p>

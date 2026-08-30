@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { STRIPE_CONFIGURED, SITE_URL } from "@/lib/env";
+import { randomUUID } from "crypto";
+import { STRIPE_CONFIGURED, SUPABASE_CONFIGURED, SITE_URL } from "@/lib/env";
 import { getAnalysis, unlockAnalysis } from "@/lib/store";
 import { getStripe } from "@/lib/stripe";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 const bodySchema = z.object({ analysisId: z.string().min(1) });
 
@@ -26,6 +28,42 @@ export async function POST(req: NextRequest) {
     // No Stripe keys configured (demo / early dev): simulate the unlock so
     // the full flow can still be tested end to end.
     await unlockAnalysis(analysisId, "paid");
+
+    if (SUPABASE_CONFIGURED) {
+      try {
+        const supabase = getSupabaseAdmin()!;
+        const { data: priorEvent } = await supabase
+          .from("analytics_events")
+          .select("source, anonymous_id, session_id, email, metadata")
+          .eq("analysis_id", analysisId)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        const priorMetadata = (priorEvent?.metadata as Record<string, unknown> | null) ?? null;
+
+        await supabase.from("analytics_events").insert({
+          id: randomUUID(),
+          event_name: "payment_completed",
+          analysis_id: analysisId,
+          anonymous_id: priorEvent?.anonymous_id ?? null,
+          session_id: priorEvent?.session_id ?? null,
+          email: priorEvent?.email ?? null,
+          source: priorEvent?.source ?? "direct",
+          metadata: {
+            analysis_id: analysisId,
+            amount: null,
+            currency: "EUR",
+            payment_status: "paid",
+            simulated: true,
+            first_touch: priorMetadata?.first_touch ?? null,
+            last_touch: priorMetadata?.last_touch ?? null,
+          },
+        });
+      } catch {
+        // analytics must never break checkout
+      }
+    }
+
     return NextResponse.json({ url: `/result/${analysisId}?unlocked=1&simulated=1` });
   }
 

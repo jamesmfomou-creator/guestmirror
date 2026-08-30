@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ a: resultA, b: resultB, comparison });
   } catch (err) {
+    console.error("[/api/compare] unexpected error:", err);
     if (err instanceof AnalysisError) {
       return NextResponse.json({ error: err.message }, { status: 422 });
     }

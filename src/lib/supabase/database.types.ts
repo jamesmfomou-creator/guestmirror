@@ -75,6 +75,34 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["payments"]["Insert"]>;
         Relationships: [];
       };
+      analytics_events: {
+        Row: {
+          id: string;
+          event_name: string;
+          anonymous_id: string | null;
+          user_id: string | null;
+          analysis_id: string | null;
+          email: string | null;
+          session_id: string | null;
+          source: string | null;
+          metadata: unknown;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          event_name: string;
+          anonymous_id?: string | null;
+          user_id?: string | null;
+          analysis_id?: string | null;
+          email?: string | null;
+          session_id?: string | null;
+          source?: string | null;
+          metadata?: unknown;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["analytics_events"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

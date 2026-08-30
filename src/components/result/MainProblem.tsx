@@ -1,11 +1,25 @@
-import { AnalysisResult } from "@/lib/types";
+"use client";
 
-export function MainProblem({ result }: { result: AnalysisResult }) {
+import { AnalysisResult } from "@/lib/types";
+import { track } from "@/lib/analytics";
+import { useInViewOnce } from "@/lib/tracking/useInViewOnce";
+
+export function MainProblem({
+  result,
+  analysisId,
+}: {
+  result: AnalysisResult;
+  analysisId: string;
+}) {
+  const ref = useInViewOnce<HTMLDivElement>(() => {
+    track("main_problem_viewed", { analysisId });
+  });
+
   const problem = result.top_priorities[0];
   if (!problem) return null;
 
   return (
-    <div className="mx-auto mt-6 max-w-xl">
+    <div ref={ref} className="mx-auto mt-6 max-w-xl">
       <div className="card p-7 text-center">
         <span className="inline-flex items-center gap-2 rounded-full bg-score-low/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-score-low">
           🔴 Problème principal

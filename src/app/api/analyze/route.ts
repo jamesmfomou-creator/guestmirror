@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
         result,
         previousAnalysisId: data.previous_analysis_id || null,
       });
-      return NextResponse.json({ id: record.id });
+      return NextResponse.json({ id: record.id, overall_score: record.overall_score });
     }
 
     const result = await analyzeListing({ images: data.images, input });
@@ -77,11 +77,12 @@ export async function POST(req: NextRequest) {
       previousAnalysisId: data.previous_analysis_id || null,
     });
 
-    return NextResponse.json({ id: record.id });
+    return NextResponse.json({ id: record.id, overall_score: record.overall_score });
   } catch (err) {
     if (err instanceof AnalysisError) {
       return NextResponse.json({ error: err.message }, { status: 422 });
     }
+    console.error("[/api/analyze] unexpected error:", err);
     return NextResponse.json(
       { error: "Une erreur inattendue est survenue. Merci de réessayer dans quelques instants." },
       { status: 500 }

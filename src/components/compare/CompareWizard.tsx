@@ -42,9 +42,11 @@ export function CompareWizard() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CompareResult | null>(null);
   const startedAt = useRef<number | null>(null);
+  const uploadTrackedA = useRef(false);
+  const uploadTrackedB = useRef(false);
 
   useEffect(() => {
-    track("compare_view");
+    track("compare_viewed");
   }, []);
 
   function addFiles(side: "a" | "b") {
@@ -60,6 +62,14 @@ export function CompareWizard() {
       }));
       setIsExample(false);
       setter((prev) => [...prev, ...next]);
+
+      const trackedRef = side === "a" ? uploadTrackedA : uploadTrackedB;
+      if (!trackedRef.current && toAdd.length > 0) {
+        trackedRef.current = true;
+        track(side === "a" ? "compare_upload_a_completed" : "compare_upload_b_completed", {
+          image_count: current.length + toAdd.length,
+        });
+      }
     };
   }
 
@@ -95,6 +105,7 @@ export function CompareWizard() {
       setImagesA([{ id: genId(), file: fileA, previewUrl: URL.createObjectURL(fileA) }]);
       setImagesB([{ id: genId(), file: fileB, previewUrl: URL.createObjectURL(fileB) }]);
       setIsExample(true);
+      track("compare_demo_viewed");
     } catch {
       setError("L'exemple n'a pas pu être chargé. Merci de réessayer.");
     } finally {

@@ -20,24 +20,25 @@ const sizes: Record<Size, string> = {
   lg: "px-7 py-3.5 text-base",
 };
 
-interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface Props extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onClick"> {
   variant?: Variant;
   size?: Size;
   href?: string;
   children: ReactNode;
+  onClick?: () => void;
 }
 
-export function Button({ variant = "primary", size = "md", href, className, children, ...rest }: Props) {
+export function Button({ variant = "primary", size = "md", href, className, children, onClick, ...rest }: Props) {
   const classes = cn(base, variants[variant], sizes[size], "w-full sm:w-auto", className);
   if (href) {
     return (
-      <Link href={href} className={classes}>
+      <Link href={href} className={classes} onClick={onClick}>
         {children}
       </Link>
     );
   }
   return (
-    <button className={classes} {...rest}>
+    <button className={classes} onClick={onClick} {...rest}>
       {children}
     </button>
   );

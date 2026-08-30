@@ -97,11 +97,12 @@ tool-call structuré (`submit_guestmirror_analysis`) pour garantir une réponse 
 ### 2. Supabase (base de données + stockage des captures)
 
 1. Crée un projet sur [supabase.com](https://supabase.com).
-2. Exécute les migrations `supabase/migrations/0001_init.sql` puis `0002_add_email.sql` (SQL
-   editor ou `supabase db push`). Elles créent les tables `profiles`, `analyses`
-   (avec la colonne `email` du funnel), `analysis_images`, `payments`, activent la RLS
-   (verrouillée : tout accès passe par la clé service-role côté serveur) et créent le bucket de
-   stockage privé `listing-screenshots`.
+2. Exécute les migrations `supabase/migrations/0001_init.sql`, `0002_add_email.sql` puis
+   `0003_analytics_events.sql` (SQL editor ou `supabase db push`). Elles créent les tables
+   `profiles`, `analyses` (avec la colonne `email` du funnel), `analysis_images`, `payments`,
+   `analytics_events` (funnel — voir section Analytics ci-dessous), activent la RLS (verrouillée :
+   tout accès passe par la clé service-role côté serveur) et créent le bucket de stockage privé
+   `listing-screenshots`.
 3. Renseigne :
    ```
    NEXT_PUBLIC_SUPABASE_URL=
@@ -126,6 +127,56 @@ tool-call structuré (`submit_guestmirror_analysis`) pour garantir une réponse 
 
 Tant que `STRIPE_SECRET_KEY`/`STRIPE_PRICE_ID` ne sont pas renseignés, le bouton de paiement
 simule directement le déblocage (utile pour démontrer le produit sans compte Stripe).
+
+## Analytics & tracking du funnel
+
+Le funnel complet (landing → paiement) est instrumenté de bout en bout et persisté dans
+Supabase (table `analytics_events`, migration `0003_analytics_events.sql`) — aucun outil tiers
+requis pour voir les chiffres.
+
+- **Fonction centrale** : tous les composants appellent `track(event, props)`
+  (`src/lib/analytics.ts`), qui pousse l'événement vers `POST /api/track`
+  (`src/app/api/track/route.ts`, insertion via la clé service-role). Aucun composant n'écrit
+  directement dans Supabase.
+- **Identité visiteur** : un `anonymous_id` (UUID, `localStorage`) est créé au premier passage et
+  ne change jamais ; un `session_id` est renouvelé après 30 min d'inactivité
+  (`src/lib/tracking/identity.ts`). Aucun fingerprinting.
+- **Événements vus au scroll** (`main_problem_viewed`, `paywall_viewed`) utilisent un
+  `IntersectionObserver` (`src/lib/tracking/useInViewOnce.ts`) et ne se déclenchent qu'une fois,
+  seulement quand le bloc entre réellement dans le viewport — pas au chargement de la page.
+- **`payment_completed`** est écrit côté serveur depuis le webhook Stripe
+  (`src/app/api/stripe/webhook/route.ts`), jamais depuis la simple redirection de succès côté
+  client — c'est la seule source fiable de "paiement confirmé".
+- **RLS** : `analytics_events` n'a aucune policy publique (comme le reste du schéma) : la table
+  n'est ni lisible ni inscriptible depuis le navigateur, tout passe par le serveur.
+
+### UTM pour le contenu TikTok / Instagram
+
+Ajoute ces paramètres à tes liens en bio / description pour que l'attribution remonte jusqu'au
+paiement (`first_touch`/`last_touch` sont capturés au premier chargement d'une URL taguée et
+réutilisés sur tout le funnel, y compris `payment_completed`) :
+
+```
+utm_source=tiktok          # ou instagram
+utm_medium=organic
+utm_campaign=nom_du_format   # ex: first_photo, five_errors
+utm_content=variation_du_hook  # ex: hook_before_price, hook_a
+```
+
+Exemples prêts à l'emploi :
+
+```
+https://guestmirror.app/?utm_source=tiktok&utm_medium=organic&utm_campaign=first_photo&utm_content=hook_before_price
+https://guestmirror.app/?utm_source=instagram&utm_medium=organic&utm_campaign=five_errors&utm_content=reel_01
+```
+
+### Dashboard admin
+
+`/admin/analytics` (protégé par Basic Auth — renseigne `ADMIN_USERNAME`/`ADMIN_PASSWORD`) affiche,
+par période (aujourd'hui / 7j / 30j) : visiteurs uniques, chaque étape du funnel avec son taux de
+passage depuis l'étape précédente, la conversion globale landing → paiement, le revenue, une
+ventilation par source et par campagne UTM, et les statistiques de ré-utilisation (utilisateurs
+ayant fait 2+ / 3+ analyses).
 
 ## Déploiement Vercel
 
@@ -174,9 +225,9 @@ supabase/migrations/        schéma SQL + policies RLS + bucket de stockage
 - [ ] Politique de confidentialité et conditions relues par un juriste (contenu actuel = base de
       départ provisoire)
 - [ ] Adresse de contact réelle ajoutée sur `/privacy` et `/terms`
-- [ ] Analytics branché (PostHog ou Plausible — voir `src/lib/analytics.ts`, déjà tous les
-      événements du parcours sont émis, il suffit de brancher le script du fournisseur dans
-      `layout.tsx`)
+- [ ] `ADMIN_USERNAME`/`ADMIN_PASSWORD` renseignés (protège `/admin/analytics`) — le tracking
+      fonctionne déjà sans ça, mais le dashboard reste inaccessible tant que ce n'est pas fait
+- [ ] Migration `0003_analytics_events.sql` exécutée (sinon le funnel n'est pas enregistré)
 - [ ] Test du parcours complet en conditions réelles : paiement Stripe réel (mode test d'abord),
       upload de vraies captures, webhook reçu
 
@@ -190,6 +241,6 @@ supabase/migrations/        schéma SQL + policies RLS + bucket de stockage
   contourner leurs protections). L'analyse réelle repose sur les captures d'écran importées.
 - **Stockage local en mode démo** : fonctionne pour tester/démontrer le produit, mais n'est pas
   une persistance de production (voir section Supabase ci-dessus).
-- **Analytics** : les événements sont émis mais aucun fournisseur n'est branché par défaut
-  (`window.posthog` / `window.plausible` sont appelés s'ils existent, sans faire échouer l'app
-  sinon).
+- **Analytics** : persisté nativement dans Supabase (`analytics_events`, voir section Analytics
+  ci-dessus) — aucun fournisseur tiers requis. `window.posthog` / `window.plausible` sont aussi
+  appelés s'ils existent (pour brancher un outil externe en plus), sans faire échouer l'app sinon.

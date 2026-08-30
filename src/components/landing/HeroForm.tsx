@@ -10,14 +10,14 @@ export function HeroForm() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleClick() {
+    track("cta_test_clicked", { cta_location: "hero" });
+    track("upload_started");
     inputRef.current?.click();
   }
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     if (e.target.files?.length) {
       setPendingFiles(e.target.files);
-      track("test_clicked", { source: "hero_upload" });
-      track("upload_started");
       router.push("/analyze");
     }
   }
