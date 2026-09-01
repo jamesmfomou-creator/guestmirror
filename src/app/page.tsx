@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Check } from "lucide-react";
 import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
 import { HeroForm } from "@/components/landing/HeroForm";
@@ -12,6 +13,10 @@ import { FAQAccordion } from "@/components/landing/FAQAccordion";
 import { Reveal } from "@/components/landing/Reveal";
 import { BRAND_NAME } from "@/lib/brand";
 import { CtaTrackedButton } from "@/components/landing/CtaTrackedButton";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 const CHECKS = [
   "Gratuit pour commencer",
