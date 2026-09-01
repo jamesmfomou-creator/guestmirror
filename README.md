@@ -166,8 +166,8 @@ utm_content=variation_du_hook  # ex: hook_before_price, hook_a
 Exemples prêts à l'emploi :
 
 ```
-https://guestmirror.app/?utm_source=tiktok&utm_medium=organic&utm_campaign=first_photo&utm_content=hook_before_price
-https://guestmirror.app/?utm_source=instagram&utm_medium=organic&utm_campaign=five_errors&utm_content=reel_01
+https://guestmirror.fr/?utm_source=tiktok&utm_medium=organic&utm_campaign=first_photo&utm_content=hook_before_price
+https://guestmirror.fr/?utm_source=instagram&utm_medium=organic&utm_campaign=five_errors&utm_content=reel_01
 ```
 
 ### Dashboard admin
