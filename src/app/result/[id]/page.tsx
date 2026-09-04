@@ -22,8 +22,10 @@ import { CoverPhotoImpact } from "@/components/result/CoverPhotoImpact";
 import { GuestQuestions } from "@/components/result/GuestQuestions";
 import { DeleteAnalysis } from "@/components/result/DeleteAnalysis";
 import { OptionalInfoCard } from "@/components/result/OptionalInfoCard";
+import { ManageSubscriptionLink } from "@/components/result/ManageSubscriptionLink";
 import { lockedRecommendationCount } from "@/lib/utils";
 import { BRAND_NAME } from "@/lib/brand";
+import { getSubscriptionByEmail, isPlusActive } from "@/lib/subscriptions";
 
 export const metadata: Metadata = {
   title: `Ton ${BRAND_NAME}`,
@@ -44,7 +46,9 @@ export default async function ResultPage({
   if (!analysis) notFound();
 
   const images = await resolveImageUrls(analysis.images);
-  const unlocked = analysis.is_unlocked;
+  const subscription = await getSubscriptionByEmail(analysis.email);
+  const plusActive = isPlusActive(subscription);
+  const unlocked = analysis.is_unlocked || plusActive;
 
   const previous = analysis.previous_analysis_id
     ? await getAnalysis(analysis.previous_analysis_id)
@@ -104,6 +108,15 @@ export default async function ResultPage({
           <ShareCard result={analysis.result} />
           <DeleteAnalysis analysisId={id} />
         </>
+      )}
+
+      {unlocked && plusActive && analysis.email && (
+        <p className="mx-auto mt-10 flex max-w-xl items-center justify-center gap-2 text-xs text-muted-2">
+          <span className="inline-flex items-center rounded-full bg-accent-soft px-2.5 py-1 font-medium text-accent-hover">
+            GuestMirror Plus actif
+          </span>
+          <ManageSubscriptionLink email={analysis.email} />
+        </p>
       )}
 
       {unlocked && (

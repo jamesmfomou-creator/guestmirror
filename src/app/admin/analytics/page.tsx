@@ -91,6 +91,44 @@ export default async function AdminAnalyticsPage({
         </div>
       </section>
 
+      {/* Pricing: one-time vs Plus */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Pricing — Analyse unique vs Plus</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Abonnements actifs et MRR sont un instantané actuel (pas filtré par période). Le reste
+          correspond à la période sélectionnée.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Kpi label="Abonnements Plus actifs" value={data.pricing.activePlusSubscriptions} />
+          <Kpi label="MRR" value={eur(data.pricing.mrr)} />
+          <Kpi label="Nouveaux abonnements" value={data.pricing.newSubscriptions} />
+          <Kpi label="Annulations" value={data.pricing.cancellations} />
+          <Kpi label="Paiements analyse unique" value={data.pricing.oneTimePayments} />
+          <Kpi label="Revenue analyse unique" value={eur(data.pricing.oneTimeRevenue)} />
+          <Kpi label="Revenue total" value={eur(data.pricing.revenueTotal)} />
+          <Kpi label="Échecs de paiement abo." value={data.pricing.paymentFailures} />
+        </div>
+
+        <div className="mt-5 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[420px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Étape</th>
+                <th className="px-4 py-2.5 font-medium">Visiteurs uniques</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.pricing.funnel.map((step) => (
+                <tr key={step.key} className="border-b border-border last:border-0">
+                  <td className="px-4 py-2.5">{step.label}</td>
+                  <td className="px-4 py-2.5 font-medium tabular-nums">{step.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       {/* By source */}
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Par source</h2>

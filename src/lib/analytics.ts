@@ -20,6 +20,16 @@ export const ANALYTICS_EVENTS = [
   "unlock_clicked",
   "checkout_started",
   "payment_completed",
+  // Pricing (2-offer paywall: one-time analysis vs GuestMirror Plus).
+  "pricing_viewed",
+  "one_time_offer_clicked",
+  "plus_offer_clicked",
+  "one_time_checkout_started",
+  "subscription_checkout_started",
+  "one_time_payment_completed",
+  "subscription_started",
+  "subscription_cancelled",
+  "subscription_payment_failed",
   // Compare mode.
   "compare_viewed",
   "compare_upload_a_completed",

@@ -24,16 +24,14 @@ const CHECKS = [
   "Aucune connexion Airbnb",
 ];
 
-const PRICING_FEATURES = [
-  "Photo de couverture",
-  "Ordre des photos",
-  "Différenciation",
-  "3 propositions de titre",
-  "Description retravaillée",
-  "Questions voyageurs",
-  "Top 3 actions prioritaires",
-  "Nouveau test après correction",
+const ONE_TIME_FEATURES = [
+  "Analyse complète",
+  "Recommandations prioritaires",
+  "Titres et description",
+  "1 re-test après correction",
 ];
+
+const PLUS_FEATURES = ["Plusieurs analyses", "Comparaisons A/B", "Re-tests", "Historique", "Plusieurs annonces"];
 
 const FAQ = [
   {
@@ -54,7 +52,7 @@ const FAQ = [
   },
   {
     q: "Combien coûte l'analyse complète ?",
-    a: "9,90 € en paiement unique, sans abonnement ni renouvellement automatique.",
+    a: "4,90 € en paiement unique pour une analyse, ou 6,90 €/mois avec GuestMirror Plus pour tester et améliorer régulièrement. L'abonnement est annulable à tout moment.",
   },
 ];
 
@@ -135,24 +133,68 @@ export default function LandingPage() {
 
       {/* PRICING */}
       <section className="border-t border-border/70 py-20 sm:py-28">
-        <Reveal className="mx-auto max-w-md px-5 text-center">
-          <div className="card p-8 shadow-[0_24px_60px_-30px_rgba(28,26,23,0.2)] sm:p-10">
-            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Découvre exactement quoi améliorer.
-            </h2>
-            <ul className="mx-auto mt-7 max-w-xs space-y-2.5 text-left">
-              {PRICING_FEATURES.map((f) => (
-                <li key={f} className="flex items-start gap-3 text-sm text-foreground">
-                  <Check size={16} className="mt-0.5 shrink-0 text-score-high" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-7 text-5xl font-semibold tracking-tight">9,90 €</p>
-            <p className="mt-2 text-sm text-muted">Paiement unique • Aucun abonnement</p>
-            <CtaTrackedButton href="/analyze" size="lg" className="mt-7" ctaLocation="pricing">
-              Faire mon test gratuitement
-            </CtaTrackedButton>
+        <Reveal className="mx-auto max-w-3xl px-5 text-center">
+          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            Choisis comment tu veux améliorer ton annonce
+          </h2>
+          <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
+            Une analyse ponctuelle ou un accès régulier pour tester tes nouvelles photos et
+            améliorations.
+          </p>
+
+          <div className="mx-auto mt-8 grid max-w-3xl gap-5 sm:grid-cols-2">
+            <div className="order-1 sm:order-2">
+              <div className="card relative h-full overflow-hidden border-2 border-accent p-6 text-center shadow-[0_20px_50px_-24px_rgba(217,103,63,0.35)] sm:p-7">
+                <span className="inline-flex items-center rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-foreground">
+                  Recommandé
+                </span>
+                <h3 className="mt-4 text-lg font-semibold tracking-tight">GuestMirror Plus</h3>
+                <p className="mt-1.5 text-sm text-muted">
+                  Pour tester, comparer et améliorer régulièrement.
+                </p>
+                <p className="mt-4 text-4xl font-semibold tracking-tight">
+                  6,90&nbsp;€<span className="text-base font-medium text-muted"> / mois</span>
+                </p>
+                <ul className="mx-auto mt-5 max-w-[220px] space-y-2.5 text-left">
+                  {PLUS_FEATURES.map((f) => (
+                    <li key={f} className="flex items-start gap-3 text-sm text-foreground">
+                      <Check size={16} className="mt-0.5 shrink-0 text-score-high" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <CtaTrackedButton href="/analyze" size="lg" className="mt-6 w-full" ctaLocation="pricing_plus">
+                  Faire le test des 5 secondes
+                </CtaTrackedButton>
+                <p className="mt-3 text-xs text-muted-2">Annulable à tout moment</p>
+              </div>
+            </div>
+
+            <div className="order-2 sm:order-1">
+              <div className="card h-full p-6 text-center sm:p-7">
+                <h3 className="text-lg font-semibold tracking-tight">Analyse unique</h3>
+                <p className="mt-1.5 text-sm text-muted">Pour optimiser une annonce maintenant.</p>
+                <p className="mt-4 text-4xl font-semibold tracking-tight">4,90&nbsp;€</p>
+                <ul className="mx-auto mt-5 max-w-[220px] space-y-2.5 text-left">
+                  {ONE_TIME_FEATURES.map((f) => (
+                    <li key={f} className="flex items-start gap-3 text-sm text-foreground">
+                      <Check size={16} className="mt-0.5 shrink-0 text-score-high" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <CtaTrackedButton
+                  href="/analyze"
+                  size="lg"
+                  variant="outline"
+                  className="mt-6 w-full"
+                  ctaLocation="pricing_one_time"
+                >
+                  Faire le test des 5 secondes
+                </CtaTrackedButton>
+                <p className="mt-3 text-xs text-muted-2">Paiement unique</p>
+              </div>
+            </div>
           </div>
         </Reveal>
       </section>

@@ -73,6 +73,31 @@ export interface UserRow {
   lastSeen: string;
 }
 
+const PLUS_PRICE_EUR = 6.9;
+
+export interface PricingFunnelStep {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface PricingStats {
+  // period-scoped
+  oneTimeOfferClicks: number;
+  plusOfferClicks: number;
+  oneTimePayments: number;
+  oneTimeRevenue: number;
+  newSubscriptions: number;
+  newSubscriptionRevenue: number;
+  cancellations: number;
+  paymentFailures: number;
+  revenueTotal: number;
+  funnel: PricingFunnelStep[];
+  // all-time snapshot (not period-scoped -- these describe current state)
+  activePlusSubscriptions: number;
+  mrr: number;
+}
+
 export interface AnalyticsDashboard {
   configured: boolean;
   period: Period;
@@ -84,6 +109,7 @@ export interface AnalyticsDashboard {
   bySource: SourceRow[];
   byCampaign: CampaignRow[];
   users: UserRow[];
+  pricing: PricingStats;
   repeatUsage: {
     uniqueAnalysisUsers: number;
     totalAnalyses: number;
@@ -132,6 +158,20 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     bySource: [],
     byCampaign: [],
     users: [],
+    pricing: {
+      oneTimeOfferClicks: 0,
+      plusOfferClicks: 0,
+      oneTimePayments: 0,
+      oneTimeRevenue: 0,
+      newSubscriptions: 0,
+      newSubscriptionRevenue: 0,
+      cancellations: 0,
+      paymentFailures: 0,
+      revenueTotal: 0,
+      funnel: [],
+      activePlusSubscriptions: 0,
+      mrr: 0,
+    },
     repeatUsage: {
       uniqueAnalysisUsers: 0,
       totalAnalyses: 0,
@@ -145,13 +185,18 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
   const supabase = getSupabaseAdmin()!;
   const since = periodSince(period);
 
-  const [{ data: events }, { data: analyses }] = await Promise.all([
+  const [{ data: events }, { data: analyses }, { data: activeSubs }] = await Promise.all([
     supabase
       .from("analytics_events")
       .select("event_name, anonymous_id, session_id, source, metadata, created_at")
       .gte("created_at", since.toISOString())
       .limit(50000),
     supabase.from("analyses").select("id, email, overall_score, created_at").limit(50000),
+    supabase
+      .from("subscriptions")
+      .select("subscription_status")
+      .in("subscription_status", ["active", "trialing"])
+      .limit(50000),
   ]);
 
   const rows = (events as EventRow[] | null) ?? [];
@@ -250,6 +295,36 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     .filter((c) => c.views > 0 || c.payments > 0)
     .sort((a, b) => b.revenue - a.revenue || b.views - a.views);
 
+  // ---- Pricing: one-time vs Plus, which offer actually converts ----
+  const countEvent = (name: string) => new Set(rows.filter((r) => r.event_name === name).map(distinctVisitor)).size;
+  const oneTimePaymentRows = rows.filter((r) => r.event_name === "one_time_payment_completed");
+  const oneTimeRevenue = oneTimePaymentRows.reduce((sum, r) => sum + metadataNumber(r.metadata, "amount") / 100, 0);
+  const newSubscriptions = countEvent("subscription_started");
+  const newSubscriptionRevenue = newSubscriptions * PLUS_PRICE_EUR;
+
+  const pricingFunnel: PricingFunnelStep[] = [
+    { key: "paywall_viewed", label: "Paywall vu", count: countEvent("paywall_viewed") },
+    { key: "one_time_offer_clicked", label: "Analyse unique cliquée", count: countEvent("one_time_offer_clicked") },
+    { key: "plus_offer_clicked", label: "Plus cliqué", count: countEvent("plus_offer_clicked") },
+    { key: "one_time_payment_completed", label: "Paiement analyse unique", count: countEvent("one_time_payment_completed") },
+    { key: "subscription_started", label: "Abonnement démarré", count: countEvent("subscription_started") },
+  ];
+
+  const pricing: PricingStats = {
+    oneTimeOfferClicks: countEvent("one_time_offer_clicked"),
+    plusOfferClicks: countEvent("plus_offer_clicked"),
+    oneTimePayments: countEvent("one_time_payment_completed"),
+    oneTimeRevenue,
+    newSubscriptions,
+    newSubscriptionRevenue,
+    cancellations: countEvent("subscription_cancelled"),
+    paymentFailures: countEvent("subscription_payment_failed"),
+    revenueTotal: oneTimeRevenue + newSubscriptionRevenue,
+    funnel: pricingFunnel,
+    activePlusSubscriptions: activeSubs?.length ?? 0,
+    mrr: (activeSubs?.length ?? 0) * PLUS_PRICE_EUR,
+  };
+
   // ---- Repeat usage + user list (all-time, from the analyses table itself) ----
   const perEmail = new Map<string, AnalysisRow[]>();
   for (const a of allAnalyses) {
@@ -286,6 +361,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     bySource,
     byCampaign,
     users,
+    pricing,
     repeatUsage: {
       uniqueAnalysisUsers,
       totalAnalyses,

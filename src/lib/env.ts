@@ -7,7 +7,9 @@ export const SUPABASE_CONFIGURED = Boolean(
 );
 
 export const STRIPE_CONFIGURED = Boolean(
-  process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID
+  process.env.STRIPE_SECRET_KEY &&
+    process.env.STRIPE_PRICE_ONE_TIME &&
+    process.env.STRIPE_PRICE_PLUS_MONTHLY
 );
 
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
