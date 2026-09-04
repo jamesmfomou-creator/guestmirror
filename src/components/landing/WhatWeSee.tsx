@@ -40,7 +40,7 @@ export function WhatWeSee() {
     <section className="border-t border-border/70 bg-background-alt/50 py-20 sm:py-28">
       <div className="mx-auto max-w-4xl px-5">
         <Reveal className="mx-auto max-w-xl text-center">
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
             Ce que {BRAND_NAME} regarde
           </h2>
           <p className="mt-3 text-muted">

@@ -65,7 +65,7 @@ export default function LandingPage() {
       <section className="mx-auto max-w-6xl px-5 pt-14 pb-16 sm:pt-20 sm:pb-24">
         <div className="grid items-center gap-14 lg:grid-cols-2 lg:gap-10">
           <div className="text-center lg:text-left">
-            <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+            <h1 className="font-display text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
               Ton Airbnb passe-t-il le test des 5 secondes ?
             </h1>
             <p className="mx-auto mt-5 max-w-xl text-balance text-lg text-muted lg:mx-0">
@@ -111,7 +111,7 @@ export default function LandingPage() {
       <section className="border-t border-border/70 bg-background-alt/50 py-20 sm:py-28">
         <div className="mx-auto max-w-3xl px-5 text-center">
           <Reveal>
-            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
               Laquelle tu cliquerais ?
             </h2>
             <p className="mx-auto mt-3 max-w-md text-muted">
@@ -134,7 +134,7 @@ export default function LandingPage() {
       {/* PRICING */}
       <section className="border-t border-border/70 py-20 sm:py-28">
         <Reveal className="mx-auto max-w-3xl px-5 text-center">
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
             Choisis comment tu veux améliorer ton annonce
           </h2>
           <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
@@ -203,7 +203,7 @@ export default function LandingPage() {
       <section className="border-t border-border/70 py-20 sm:py-28">
         <div className="mx-auto max-w-2xl px-5">
           <Reveal>
-            <h2 className="text-center text-2xl font-semibold tracking-tight sm:text-3xl">
+            <h2 className="font-display text-center text-2xl font-bold tracking-tight sm:text-3xl">
               Questions fréquentes
             </h2>
           </Reveal>
@@ -216,7 +216,7 @@ export default function LandingPage() {
       {/* FINAL CTA */}
       <section className="border-t border-border/70 bg-background-alt/50 py-20 sm:py-28">
         <Reveal className="mx-auto max-w-lg px-5 text-center">
-          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Et ton annonce ?</h2>
+          <h2 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">Et ton annonce ?</h2>
           <p className="mt-4 text-muted">
             Découvre ce qu&apos;un voyageur voit pendant ses premières secondes.
           </p>

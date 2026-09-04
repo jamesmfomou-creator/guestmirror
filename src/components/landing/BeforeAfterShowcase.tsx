@@ -7,7 +7,7 @@ export function BeforeAfterShowcase() {
     <section className="py-20 sm:py-28">
       <div className="mx-auto max-w-3xl px-5 text-center">
         <Reveal>
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
             Corrige. Refais le test. Compare.
           </h2>
         </Reveal>

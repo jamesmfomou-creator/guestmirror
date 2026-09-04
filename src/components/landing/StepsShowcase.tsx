@@ -51,7 +51,7 @@ export function StepsShowcase() {
     <section className="border-t border-border/70 bg-background-alt/50 py-20 sm:py-28">
       <div className="mx-auto max-w-5xl px-5">
         <Reveal className="text-center">
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
             4 étapes. Moins d&apos;une minute.
           </h2>
         </Reveal>
