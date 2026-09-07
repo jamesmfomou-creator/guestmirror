@@ -15,6 +15,10 @@ type Step = "import" | "email" | "analyzing";
 
 const MAX_IMAGES = 10;
 const MIN_ANIMATION_MS = 3400;
+// Above the AI call's own worst case (~90s, see lib/ai.ts) with headroom
+// for image upload + DB write, so this only fires on a genuinely stuck
+// request instead of racing a real-but-slow analysis.
+const FETCH_TIMEOUT_MS = 110_000;
 
 function genId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -43,6 +47,7 @@ export function AnalyzeWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [analysisDone, setAnalysisDone] = useState(false);
   const startedAt = useRef<number | null>(null);
+  const attemptId = useRef<string | null>(null);
 
   const previousAnalysisId = searchParams.get("previous");
 
@@ -69,12 +74,21 @@ export function AnalyzeWizard() {
   }
 
   async function runAnalysis() {
+    if (submitting) return;
     setSubmitting(true);
     setAnalysisDone(false);
     track("email_submitted", { email: email.trim() });
     setStep("analyzing");
     startedAt.current = Date.now();
-    track("analysis_started", { image_count: images.length, has_listing_url: url.trim().length > 0 });
+    attemptId.current = genId();
+    track("analysis_started", {
+      attemptId: attemptId.current,
+      image_count: images.length,
+      has_listing_url: url.trim().length > 0,
+    });
+
+    const timeoutController = new AbortController();
+    const timeoutTimer = setTimeout(() => timeoutController.abort(), FETCH_TIMEOUT_MS);
 
     try {
       const encodedImages = await Promise.all(
@@ -97,6 +111,7 @@ export function AnalyzeWizard() {
           images: encodedImages,
           previous_analysis_id: previousAnalysisId || null,
         }),
+        signal: timeoutController.signal,
       });
 
       let json: { id?: string; overall_score?: number; error?: string };
@@ -116,20 +131,40 @@ export function AnalyzeWizard() {
       const wait = Math.max(MIN_ANIMATION_MS - elapsed, 700);
       setTimeout(() => {
         track("analysis_completed", {
+          attemptId: attemptId.current,
           analysisId: json.id,
           overall_score: json.overall_score,
           verdict: json.overall_score != null ? verdictFor(json.overall_score).short : undefined,
           image_count: images.length,
           has_listing_url: url.trim().length > 0,
+          duration_ms: elapsed,
         });
         if (previousAnalysisId) track("rescan_completed");
         router.push(`/result/${json.id}`);
       }, wait);
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : "Une erreur est survenue.");
+      const isTimeout = err instanceof DOMException && err.name === "AbortError";
+      const message = isTimeout
+        ? "L'analyse a pris plus de temps que prévu. Réessaie, tes images sont toujours prêtes."
+        : err instanceof Error
+          ? err.message
+          : "Une erreur est survenue.";
+      track("analysis_failed", {
+        attemptId: attemptId.current,
+        error_code: isTimeout ? "timeout" : "api_error",
+        duration_ms: Date.now() - (startedAt.current ?? Date.now()),
+        image_count: images.length,
+      });
+      setApiError(message);
       setSubmitting(false);
       setStep("email");
+    } finally {
+      clearTimeout(timeoutTimer);
     }
+  }
+
+  function handleFinalizing() {
+    track("analysis_progress_90", { attemptId: attemptId.current });
   }
 
   return (
@@ -161,7 +196,9 @@ export function AnalyzeWizard() {
           error={apiError}
         />
       )}
-      {step === "analyzing" && <StepAnalyzing done={analysisDone} />}
+      {step === "analyzing" && (
+        <StepAnalyzing done={analysisDone} onFinalizing={handleFinalizing} />
+      )}
     </div>
   );
 }

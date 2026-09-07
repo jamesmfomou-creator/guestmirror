@@ -98,6 +98,28 @@ export interface PricingStats {
   mrr: number;
 }
 
+export interface AnalysisPerformanceStats {
+  // Attempts are deduplicated by the client-generated attemptId carried on
+  // analysis_started/analysis_progress_90/analysis_completed/analysis_failed
+  // (shipped alongside this instrumentation -- older events predating it
+  // have no attemptId and are counted individually rather than matched).
+  attemptsStarted: number;
+  attemptsCompleted: number;
+  attemptsFailed: number;
+  attemptsAbandoned: number;
+  completionRate: number | null;
+  avgDurationS: number | null;
+  medianDurationS: number | null;
+  p75DurationS: number | null;
+  p90DurationS: number | null;
+  avgTimeBefore90S: number | null;
+  avgFinalizingS: number | null;
+  // Of the abandoned attempts, how many never reached the "finalizing"
+  // (~90%) phase vs. abandoned while already finalizing.
+  abandonedBeforeFinalizing: number;
+  abandonedDuringFinalizing: number;
+}
+
 export interface AnalyticsDashboard {
   configured: boolean;
   period: Period;
@@ -110,6 +132,7 @@ export interface AnalyticsDashboard {
   byCampaign: CampaignRow[];
   users: UserRow[];
   pricing: PricingStats;
+  analysisPerformance: AnalysisPerformanceStats;
   repeatUsage: {
     uniqueAnalysisUsers: number;
     totalAnalyses: number;
@@ -146,6 +169,17 @@ function metadataNumber(meta: Record<string, unknown> | null, key: string): numb
   return typeof v === "number" ? v : 0;
 }
 
+function percentile(sortedAsc: number[], p: number): number | null {
+  if (sortedAsc.length === 0) return null;
+  const idx = Math.min(sortedAsc.length - 1, Math.floor(p * sortedAsc.length));
+  return sortedAsc[idx];
+}
+
+function average(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
 export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDashboard> {
   const empty: AnalyticsDashboard = {
     configured: false,
@@ -158,6 +192,21 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     bySource: [],
     byCampaign: [],
     users: [],
+    analysisPerformance: {
+      attemptsStarted: 0,
+      attemptsCompleted: 0,
+      attemptsFailed: 0,
+      attemptsAbandoned: 0,
+      completionRate: null,
+      avgDurationS: null,
+      medianDurationS: null,
+      p75DurationS: null,
+      p90DurationS: null,
+      avgTimeBefore90S: null,
+      avgFinalizingS: null,
+      abandonedBeforeFinalizing: 0,
+      abandonedDuringFinalizing: 0,
+    },
     pricing: {
       oneTimeOfferClicks: 0,
       plusOfferClicks: 0,
@@ -325,6 +374,103 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     mrr: (activeSubs?.length ?? 0) * PLUS_PRICE_EUR,
   };
 
+  // ---- Analysis loading performance: how long it really takes, and where
+  // people give up. Attempts are matched by the client-generated attemptId
+  // carried on analysis_started / analysis_progress_90 / analysis_completed
+  // / analysis_failed (see AnalyzeWizard.tsx) rather than by session, which
+  // breaks down across retries and rescans within the same session. ----
+  const startedRows = rows.filter((r) => r.event_name === "analysis_started");
+  const completedRows = rows.filter((r) => r.event_name === "analysis_completed");
+  const failedRows = rows.filter((r) => r.event_name === "analysis_failed");
+  const progress90Rows = rows.filter((r) => r.event_name === "analysis_progress_90");
+
+  function distinctAttemptCount(rowsForEvent: EventRow[]): number {
+    const seen = new Set<string>();
+    let count = 0;
+    for (const r of rowsForEvent) {
+      const id = metadataString(r.metadata, ["attemptId"]);
+      if (id) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+      }
+      count++;
+    }
+    return count;
+  }
+
+  const startedAtByAttempt = new Map<string, number>();
+  for (const r of startedRows) {
+    const id = metadataString(r.metadata, ["attemptId"]);
+    if (id && !startedAtByAttempt.has(id)) startedAtByAttempt.set(id, new Date(r.created_at).getTime());
+  }
+  const progress90AtByAttempt = new Map<string, number>();
+  for (const r of progress90Rows) {
+    const id = metadataString(r.metadata, ["attemptId"]);
+    if (id) progress90AtByAttempt.set(id, new Date(r.created_at).getTime());
+  }
+  const resolvedAttemptIds = new Set<string>();
+  for (const r of [...completedRows, ...failedRows]) {
+    const id = metadataString(r.metadata, ["attemptId"]);
+    if (id) resolvedAttemptIds.add(id);
+  }
+
+  const durationsS = completedRows
+    .map((r) => metadataNumber(r.metadata, "duration_ms"))
+    .filter((ms) => ms > 0)
+    .map((ms) => ms / 1000)
+    .sort((a, b) => a - b);
+
+  const timeBefore90S: number[] = [];
+  for (const [id, at] of progress90AtByAttempt.entries()) {
+    const startMs = startedAtByAttempt.get(id);
+    if (startMs != null) timeBefore90S.push((at - startMs) / 1000);
+  }
+
+  const finalizingDurationsS: number[] = [];
+  for (const r of [...completedRows, ...failedRows]) {
+    const id = metadataString(r.metadata, ["attemptId"]);
+    const p90At = id ? progress90AtByAttempt.get(id) : undefined;
+    if (p90At != null) {
+      finalizingDurationsS.push((new Date(r.created_at).getTime() - p90At) / 1000);
+    }
+  }
+
+  // An attempt is "abandoned" once it started, was never resolved
+  // (completed or failed), and it's been at least 5 minutes since it
+  // started -- comfortably above the observed p90 (~90s) so a genuinely
+  // slow-but-still-running analysis isn't miscounted as a drop-off.
+  const ABANDON_THRESHOLD_MS = 5 * 60 * 1000;
+  const nowMs = Date.now();
+  let abandonedBeforeFinalizing = 0;
+  let abandonedDuringFinalizing = 0;
+  for (const [id, startMs] of startedAtByAttempt.entries()) {
+    if (resolvedAttemptIds.has(id)) continue;
+    if (nowMs - startMs < ABANDON_THRESHOLD_MS) continue;
+    if (progress90AtByAttempt.has(id)) abandonedDuringFinalizing++;
+    else abandonedBeforeFinalizing++;
+  }
+  const attemptsAbandoned = abandonedBeforeFinalizing + abandonedDuringFinalizing;
+
+  const attemptsStarted = distinctAttemptCount(startedRows);
+  const attemptsCompleted = distinctAttemptCount(completedRows);
+  const attemptsFailed = distinctAttemptCount(failedRows);
+
+  const analysisPerformance: AnalysisPerformanceStats = {
+    attemptsStarted,
+    attemptsCompleted,
+    attemptsFailed,
+    attemptsAbandoned,
+    completionRate: attemptsStarted > 0 ? attemptsCompleted / attemptsStarted : null,
+    avgDurationS: average(durationsS),
+    medianDurationS: percentile(durationsS, 0.5),
+    p75DurationS: percentile(durationsS, 0.75),
+    p90DurationS: percentile(durationsS, 0.9),
+    avgTimeBefore90S: average(timeBefore90S),
+    avgFinalizingS: average(finalizingDurationsS),
+    abandonedBeforeFinalizing,
+    abandonedDuringFinalizing,
+  };
+
   // ---- Repeat usage + user list (all-time, from the analyses table itself) ----
   const perEmail = new Map<string, AnalysisRow[]>();
   for (const a of allAnalyses) {
@@ -362,6 +508,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     byCampaign,
     users,
     pricing,
+    analysisPerformance,
     repeatUsage: {
       uniqueAnalysisUsers,
       totalAnalyses,

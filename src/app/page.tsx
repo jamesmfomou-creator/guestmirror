@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 
 const CHECKS = [
   "Gratuit pour commencer",
-  "Résultat en moins d'une minute",
+  "Résultat en quelques instants",
   "Aucune connexion Airbnb",
 ];
 
@@ -224,7 +224,7 @@ export default function LandingPage() {
             Faire le test des 5 secondes
           </CtaTrackedButton>
           <p className="mt-3 text-xs text-muted-2">
-            Gratuit pour commencer • Résultat en moins d&apos;une minute
+            Gratuit pour commencer • Résultat en quelques instants
           </p>
         </Reveal>
       </section>

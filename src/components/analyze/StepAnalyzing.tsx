@@ -1,39 +1,66 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Loader2 } from "lucide-react";
 
-const MESSAGES = [
-  "Analyse de ta première impression…",
-  "Ce qu'un voyageur remarque en premier…",
-  "Recherche de ton meilleur atout…",
-  "Analyse des hésitations…",
-  "Préparation de ton résultat…",
+// Messages are staged on elapsed time, not on real backend state (the
+// analysis is a single request with no incremental progress to report).
+// Thresholds are tuned so all 4 stages play out in the first ~11s -- well
+// before a typical analysis finishes -- then we hand off to a dedicated
+// "finalizing" phase for however long the backend actually takes, instead
+// of leaving a frozen percentage on screen.
+const STAGES = [
+  { atMs: 0, message: "Lecture de ton annonce…" },
+  { atMs: 2500, message: "Analyse de ta première impression…" },
+  { atMs: 5500, message: "Je cherche ce qui peut faire hésiter…" },
+  { atMs: 8500, message: "Je prépare tes recommandations…" },
 ];
-
-const STEP_DURATION = 650;
-const SOFT_CAP = 92;
+const FINALIZING_AT_MS = 11_000;
+const REASSURANCE_AT_MS = 25_000;
+const SOFT_CAP = 90;
 const RING_SIZE = 96;
 const STROKE_WIDTH = 7;
 
-export function StepAnalyzing({ done }: { done: boolean }) {
-  const [activeIndex, setActiveIndex] = useState(0);
+export function StepAnalyzing({
+  done,
+  onFinalizing,
+}: {
+  done: boolean;
+  /** Fires once, the moment the loader enters the finalizing phase. */
+  onFinalizing?: () => void;
+}) {
+  const [elapsed, setElapsed] = useState(0);
   const [progress, setProgress] = useState(0);
+  const firedFinalizing = useRef(false);
 
   useEffect(() => {
-    if (activeIndex >= MESSAGES.length - 1) return;
-    const t = setTimeout(() => setActiveIndex((i) => i + 1), STEP_DURATION);
-    return () => clearTimeout(t);
-  }, [activeIndex]);
+    const start = Date.now();
+    const t = setInterval(() => setElapsed(Date.now() - start), 200);
+    return () => clearInterval(t);
+  }, []);
 
+  // Ring: quick at first, slows down, caps at SOFT_CAP until the backend
+  // actually responds -- never fakes its way to 100%.
   useEffect(() => {
     const target = done ? 100 : SOFT_CAP;
-    const rate = done ? 0.2 : 0.05;
+    const rate = done ? 0.25 : 0.05;
     const interval = setInterval(() => {
       setProgress((p) => (Math.abs(target - p) < 0.3 ? target : p + (target - p) * rate));
     }, 50);
     return () => clearInterval(interval);
   }, [done]);
+
+  const finalizing = !done && elapsed >= FINALIZING_AT_MS;
+
+  useEffect(() => {
+    if (finalizing && !firedFinalizing.current) {
+      firedFinalizing.current = true;
+      onFinalizing?.();
+    }
+  }, [finalizing, onFinalizing]);
+
+  const stageIndex = STAGES.reduce((acc, s, i) => (elapsed >= s.atMs ? i : acc), 0);
+  const showReassurance = finalizing && elapsed >= REASSURANCE_AT_MS;
 
   const displayProgress = Math.round(progress);
   const radius = (RING_SIZE - STROKE_WIDTH) / 2;
@@ -66,28 +93,43 @@ export function StepAnalyzing({ done }: { done: boolean }) {
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-xl font-semibold tabular-nums text-foreground">
-            {displayProgress}%
-          </span>
+          {finalizing ? (
+            <Loader2 size={26} className="animate-spin text-accent" />
+          ) : (
+            <span className="text-xl font-semibold tabular-nums text-foreground">
+              {displayProgress}%
+            </span>
+          )}
         </div>
       </div>
       <div className="mt-8 space-y-3">
-        {MESSAGES.map((msg, i) => {
-          if (i > activeIndex) return null;
-          const isActive = i === activeIndex && !(done && i === MESSAGES.length - 1);
-          const isFinished = i < activeIndex || (done && i === MESSAGES.length - 1);
-          return (
-            <p
-              key={msg}
-              className={`flex items-center justify-center gap-2 text-[15px] transition-opacity ${
-                isActive ? "text-foreground" : "text-muted-2"
-              }`}
-            >
-              {isFinished && <Check size={15} className="text-score-high" />}
-              {msg}
-            </p>
-          );
-        })}
+        {finalizing ? (
+          <>
+            <p className="text-[15px] text-foreground">Finalisation de ton analyse…</p>
+            {showReassurance && (
+              <p className="animate-fade-up max-w-xs text-sm text-muted-2">
+                Ton analyse prend un peu plus de temps que d&apos;habitude, mais elle est
+                toujours en cours.
+              </p>
+            )}
+          </>
+        ) : (
+          STAGES.slice(0, stageIndex + 1).map((s, i) => {
+            const isActive = i === stageIndex && !done;
+            const isFinished = i < stageIndex || done;
+            return (
+              <p
+                key={s.message}
+                className={`flex items-center justify-center gap-2 text-[15px] transition-opacity ${
+                  isActive ? "text-foreground" : "text-muted-2"
+                }`}
+              >
+                {isFinished && <Check size={15} className="text-score-high" />}
+                {s.message}
+              </p>
+            );
+          })
+        )}
       </div>
     </div>
   );

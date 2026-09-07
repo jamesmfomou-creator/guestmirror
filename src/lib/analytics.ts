@@ -13,7 +13,15 @@ export const ANALYTICS_EVENTS = [
   "upload_completed",
   "email_submitted",
   "analysis_started",
+  // Fires once per attempt, when the loader visually enters the
+  // "finalizing" phase (~90%). Doubles as the marker for "time spent
+  // finalizing" (diffed against analysis_completed/analysis_failed) --
+  // see the "Performance des analyses" section of /admin/analytics.
+  "analysis_progress_90",
   "analysis_completed",
+  // Real failure (API error, timeout, network) as opposed to a silent
+  // drop-off -- lets the dashboard tell errors apart from abandonment.
+  "analysis_failed",
   "free_result_viewed",
   "main_problem_viewed",
   "paywall_viewed",

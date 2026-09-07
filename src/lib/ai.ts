@@ -173,10 +173,23 @@ const RESULT_SCHEMA = {
   ],
 };
 
+// The SDK defaults to a 10-minute timeout with 2 retries -- in the worst
+// case (timeout + 2 retries) that lets a single request hang for ~30
+// minutes with zero feedback to the user. Bounding both keeps the longest
+// possible wait predictable (~90s) so the frontend's own timeout/retry UX
+// (see StepAnalyzing.tsx) can kick in with a clear message instead of a
+// silently frozen loader.
+const AI_TIMEOUT_MS = 45_000;
+const AI_MAX_RETRIES = 1;
+
 let anthropicClient: Anthropic | null = null;
 function getClient() {
   if (!anthropicClient) {
-    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    anthropicClient = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      timeout: AI_TIMEOUT_MS,
+      maxRetries: AI_MAX_RETRIES,
+    });
   }
   return anthropicClient;
 }
@@ -219,6 +232,7 @@ export async function analyzeListing(params: {
   ];
 
   let response;
+  const aiStartedAt = Date.now();
   try {
     response = await getClient().messages.create({
       model: MODEL,
@@ -234,7 +248,9 @@ export async function analyzeListing(params: {
       tool_choice: { type: "tool", name: "submit_guestmirror_analysis" },
       messages: [{ role: "user", content }],
     });
-  } catch {
+    console.log(`[ai] messages.create ok duration_ms=${Date.now() - aiStartedAt} images=${params.images.length}`);
+  } catch (err) {
+    console.error(`[ai] messages.create failed duration_ms=${Date.now() - aiStartedAt}:`, err);
     throw new AnalysisError(
       "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants."
     );

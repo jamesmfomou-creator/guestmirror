@@ -20,6 +20,11 @@ function eur(n: number): string {
   return n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 }
 
+function seconds(n: number | null): string {
+  if (n === null) return "—";
+  return `${n.toFixed(1)}s`;
+}
+
 export default async function AdminAnalyticsPage({
   searchParams,
 }: {
@@ -88,6 +93,35 @@ export default async function AdminAnalyticsPage({
               ))}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      {/* Analysis loading performance */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Performance des analyses</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Basé sur les tentatives d&apos;analyse (attemptId) depuis la mise en place de ce
+          tracking — les événements antérieurs n&apos;y figurent pas.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Kpi label="Analyses démarrées" value={data.analysisPerformance.attemptsStarted} />
+          <Kpi label="Analyses complétées" value={data.analysisPerformance.attemptsCompleted} />
+          <Kpi label="Taux de complétion" value={pct(data.analysisPerformance.completionRate)} />
+          <Kpi label="Échecs" value={data.analysisPerformance.attemptsFailed} />
+          <Kpi label="Durée moyenne" value={seconds(data.analysisPerformance.avgDurationS)} />
+          <Kpi label="Durée médiane" value={seconds(data.analysisPerformance.medianDurationS)} />
+          <Kpi label="p75" value={seconds(data.analysisPerformance.p75DurationS)} />
+          <Kpi label="p90" value={seconds(data.analysisPerformance.p90DurationS)} />
+          <Kpi label="Temps moyen avant 90%" value={seconds(data.analysisPerformance.avgTimeBefore90S)} />
+          <Kpi label="Temps moyen en finalisation" value={seconds(data.analysisPerformance.avgFinalizingS)} />
+          <Kpi label="Abandons" value={data.analysisPerformance.attemptsAbandoned} />
+        </div>
+        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">
+          Répartition des abandons par dernière étape connue
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-2">
+          <Kpi label="Avant la finalisation (< 90%)" value={data.analysisPerformance.abandonedBeforeFinalizing} />
+          <Kpi label="Pendant la finalisation (90%+)" value={data.analysisPerformance.abandonedDuringFinalizing} />
         </div>
       </section>
 

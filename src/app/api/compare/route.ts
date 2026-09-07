@@ -5,6 +5,8 @@ import { buildComparison } from "@/lib/compare";
 import { DEMO_MODE } from "@/lib/env";
 import { DEMO_COMPARE_A, DEMO_COMPARE_B } from "@/lib/demo-data";
 
+export const maxDuration = 120;
+
 export async function POST(req: NextRequest) {
   let body: unknown;
   try {

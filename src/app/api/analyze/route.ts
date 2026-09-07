@@ -6,7 +6,13 @@ import { storeImage } from "@/lib/images";
 import { DEMO_MODE } from "@/lib/env";
 import { DEMO_IMAGES, DEMO_RESULT, DEMO_RESULT_AFTER } from "@/lib/demo-data";
 
+// Explicit ceiling so a hung request fails cleanly instead of running
+// indefinitely. Comfortably above the AI call's own worst case (~90s with
+// the timeout/retry settings in lib/ai.ts) plus image storage + DB writes.
+export const maxDuration = 120;
+
 export async function POST(req: NextRequest) {
+  const requestStartedAt = Date.now();
   let body: unknown;
   try {
     body = await req.json();
@@ -64,11 +70,14 @@ export async function POST(req: NextRequest) {
 
     const result = await analyzeListing({ images: data.images, input });
 
+    const storageStartedAt = Date.now();
     const tempId = crypto.randomUUID();
     const storedImages = await Promise.all(
       data.images.map((img, i) => storeImage(tempId, i, img.base64, img.mediaType))
     );
+    console.log(`[analyze] image storage duration_ms=${Date.now() - storageStartedAt} count=${storedImages.length}`);
 
+    const dbStartedAt = Date.now();
     const record = await createAnalysis({
       input,
       email: data.email,
@@ -76,13 +85,15 @@ export async function POST(req: NextRequest) {
       result,
       previousAnalysisId: data.previous_analysis_id || null,
     });
+    console.log(`[analyze] db write duration_ms=${Date.now() - dbStartedAt}`);
+    console.log(`[analyze] total duration_ms=${Date.now() - requestStartedAt} id=${record.id}`);
 
     return NextResponse.json({ id: record.id, overall_score: record.overall_score });
   } catch (err) {
+    console.error(`[analyze] failed duration_ms=${Date.now() - requestStartedAt}:`, err);
     if (err instanceof AnalysisError) {
       return NextResponse.json({ error: err.message }, { status: 422 });
     }
-    console.error("[/api/analyze] unexpected error:", err);
     return NextResponse.json(
       { error: "Une erreur inattendue est survenue. Merci de réessayer dans quelques instants." },
       { status: 500 }

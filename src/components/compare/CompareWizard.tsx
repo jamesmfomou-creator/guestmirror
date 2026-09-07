@@ -285,7 +285,7 @@ export function CompareWizard() {
         >
           {canCompare ? "Comparer les deux annonces" : "Ajoute 2 photos pour comparer"}
         </Button>
-        <p className="mt-2 text-xs text-muted-2">Résultat en moins d&apos;une minute.</p>
+        <p className="mt-2 text-xs text-muted-2">Résultat en quelques instants.</p>
       </div>
     </div>
   );

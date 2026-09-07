@@ -33,11 +33,11 @@ export const metadata: Metadata = {
     template: `%s · ${BRAND_NAME}`,
   },
   description:
-    "Analyse ton annonce de location courte durée en moins d'une minute et découvre ce qui peut freiner tes futurs voyageurs.",
+    "Analyse ton annonce de location courte durée en quelques instants et découvre ce qui peut freiner tes futurs voyageurs.",
   openGraph: {
     title: `${BRAND_NAME} — ${BRAND_TAGLINE}`,
     description:
-      "Analyse ton annonce en moins d'une minute et découvre ce qui peut freiner tes futurs voyageurs.",
+      "Analyse ton annonce en quelques instants et découvre ce qui peut freiner tes futurs voyageurs.",
     url: siteUrl,
     siteName: BRAND_NAME,
     locale: "fr_FR",
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: `${BRAND_NAME} — ${BRAND_TAGLINE}`,
     description:
-      "Analyse ton annonce en moins d'une minute et découvre ce qui peut freiner tes futurs voyageurs.",
+      "Analyse ton annonce en quelques instants et découvre ce qui peut freiner tes futurs voyageurs.",
   },
 };
 
