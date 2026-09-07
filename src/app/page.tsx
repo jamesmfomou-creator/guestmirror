@@ -135,11 +135,11 @@ export default function LandingPage() {
       <section className="border-t border-border/70 py-20 sm:py-28">
         <Reveal className="mx-auto max-w-3xl px-5 text-center">
           <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
-            Choisis comment tu veux améliorer ton annonce
+            Découvre exactement quoi améliorer
           </h2>
           <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
-            Une analyse ponctuelle ou un accès régulier pour tester tes nouvelles photos et
-            améliorations.
+            Une analyse ponctuelle pour corriger maintenant, ou un accès régulier pour tester et
+            comparer tes améliorations.
           </p>
 
           <div className="mx-auto mt-8 grid max-w-3xl gap-5 sm:grid-cols-2">
@@ -163,8 +163,13 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <CtaTrackedButton href="/analyze" size="lg" className="mt-6 w-full" ctaLocation="pricing_plus">
-                  Faire le test des 5 secondes
+                <CtaTrackedButton
+                  href="/analyze"
+                  size="lg"
+                  className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
+                  ctaLocation="pricing_plus"
+                >
+                  Passer à GuestMirror Plus — 6,90&nbsp;€/mois
                 </CtaTrackedButton>
                 <p className="mt-3 text-xs text-muted-2">Annulable à tout moment</p>
               </div>
@@ -187,10 +192,10 @@ export default function LandingPage() {
                   href="/analyze"
                   size="lg"
                   variant="outline"
-                  className="mt-6 w-full"
+                  className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
                   ctaLocation="pricing_one_time"
                 >
-                  Faire le test des 5 secondes
+                  Débloquer mon analyse — 4,90&nbsp;€
                 </CtaTrackedButton>
                 <p className="mt-3 text-xs text-muted-2">Paiement unique</p>
               </div>
