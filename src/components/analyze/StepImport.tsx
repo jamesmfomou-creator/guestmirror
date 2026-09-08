@@ -97,17 +97,22 @@ export function StepImport({
         />
       </div>
 
-      <div className="my-6 h-px bg-border" />
+      <div className="relative my-6 h-px bg-border">
+        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-2">
+          Ou
+        </span>
+      </div>
 
-      <div className="p-1">
-        <label className="text-sm text-muted-2">Ou ajoute le lien de ton annonce</label>
+      <div className="card p-6 sm:p-7">
+        <p className="text-sm font-medium text-foreground">Colle le lien de ton annonce</p>
+        <p className="mt-1.5 text-[11px] text-muted-2">Fonctionne aussi bien qu&apos;une capture d&apos;écran</p>
         <input
           type="text"
           inputMode="url"
           value={url}
           onChange={(e) => onUrlChange(e.target.value)}
           placeholder="https://www.airbnb..."
-          className="mt-2 w-full rounded-xl border border-border bg-background px-4 py-3 text-[15px] focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+          className="mt-4 w-full rounded-xl border border-border bg-background px-4 py-3 text-[15px] focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         />
       </div>
 
