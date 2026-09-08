@@ -125,6 +125,25 @@ export default async function AdminAnalyticsPage({
         </div>
       </section>
 
+      {/* Input type + Airbnb URL reliability */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Analyses par méthode d&apos;import</h2>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Kpi label="Capture d'écran" value={data.inputTypeBreakdown.screenshot} />
+          <Kpi label="Lien Airbnb" value={data.inputTypeBreakdown.airbnbUrl} />
+          <Kpi label="Capture + lien" value={data.inputTypeBreakdown.mixed} />
+        </div>
+        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">
+          Fiabilité du mode lien Airbnb
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Kpi label="Liens soumis" value={data.airbnbUrl.submitted} />
+          <Kpi label="Extraction réussie" value={data.airbnbUrl.extractionSucceeded} />
+          <Kpi label="Extraction échouée" value={data.airbnbUrl.extractionFailed} />
+          <Kpi label="Analyses complétées" value={data.airbnbUrl.completed} />
+        </div>
+      </section>
+
       {/* Pricing: one-time vs Plus */}
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Pricing — Analyse unique vs Plus</h2>

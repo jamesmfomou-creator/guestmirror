@@ -115,7 +115,7 @@ export function AnalyzeWizard() {
         signal: timeoutController.signal,
       });
 
-      let json: { id?: string; overall_score?: number; error?: string };
+      let json: { id?: string; overall_score?: number; error?: string; error_code?: string };
       try {
         json = await res.json();
       } catch {
@@ -124,6 +124,21 @@ export function AnalyzeWizard() {
         );
       }
       if (!res.ok) {
+        if (json.error_code === "airbnb_url_extraction_failed") {
+          // Not a real analysis failure: nothing was analyzed, no record
+          // was created. Send the user back to add a screenshot (URL stays
+          // filled in) instead of the generic "réessayer" retry screen,
+          // and track it separately so it never counts as
+          // analysis_completed/analysis_failed downstream.
+          track("airbnb_url_extraction_failed", {
+            attemptId: attemptId.current,
+            duration_ms: Date.now() - (startedAt.current ?? Date.now()),
+          });
+          setApiError(json.error || "Impossible d'analyser automatiquement ce lien Airbnb.");
+          setSubmitting(false);
+          setStep("import");
+          return;
+        }
         throw new Error(json.error || "Une erreur est survenue. Merci de réessayer.");
       }
 

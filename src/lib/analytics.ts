@@ -22,6 +22,12 @@ export const ANALYTICS_EVENTS = [
   // Real failure (API error, timeout, network) as opposed to a silent
   // drop-off -- lets the dashboard tell errors apart from abandonment.
   "analysis_failed",
+  // Airbnb-URL-only submission where the listing page couldn't be fetched
+  // or had no usable photos. Deliberately NOT analysis_failed/completed:
+  // this never reaches the AI and no analysis record is created, so it
+  // must not count toward analysis_completed, free_result_viewed, or
+  // paywall_viewed downstream.
+  "airbnb_url_extraction_failed",
   "free_result_viewed",
   "main_problem_viewed",
   "paywall_viewed",

@@ -206,6 +206,13 @@ function getClient() {
 export async function analyzeListing(params: {
   images: { base64: string; mediaType: string }[];
   input: AnalysisInput;
+  // Title/description read from the Airbnb page itself when the analysis
+  // came from a listing URL (see lib/airbnbExtract.ts) -- the extracted
+  // photos alone carry no text, so without this the model would see the
+  // listing's images but none of its actual title/description wording.
+  // Not persisted anywhere; used only to build the prompt's context text
+  // below, the same way city/property_type already are.
+  extractedListingText?: { title: string | null; description: string | null } | null;
 }): Promise<AnalysisResult> {
   if (DEMO_MODE) {
     return { ...DEMO_RESULT };
@@ -223,6 +230,12 @@ export async function analyzeListing(params: {
     params.input.property_type ? `Type de logement : ${params.input.property_type}` : null,
     params.input.guest_capacity ? `Nombre de voyageurs : ${params.input.guest_capacity}` : null,
     params.input.nightly_price ? `Prix moyen par nuit : ${params.input.nightly_price}` : null,
+    params.extractedListingText?.title
+      ? `Titre actuel de l'annonce (récupéré automatiquement depuis le lien) : ${params.extractedListingText.title}`
+      : null,
+    params.extractedListingText?.description
+      ? `Description actuelle de l'annonce (récupérée automatiquement depuis le lien) : ${params.extractedListingText.description}`
+      : null,
   ].filter(Boolean);
 
   const content: Anthropic.MessageParam["content"] = [

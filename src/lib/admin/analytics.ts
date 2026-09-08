@@ -120,6 +120,19 @@ export interface AnalysisPerformanceStats {
   abandonedDuringFinalizing: number;
 }
 
+export interface InputTypeBreakdown {
+  screenshot: number;
+  airbnbUrl: number;
+  mixed: number;
+}
+
+export interface AirbnbUrlStats {
+  submitted: number;
+  extractionSucceeded: number;
+  extractionFailed: number;
+  completed: number;
+}
+
 export interface AnalyticsDashboard {
   configured: boolean;
   period: Period;
@@ -133,6 +146,8 @@ export interface AnalyticsDashboard {
   users: UserRow[];
   pricing: PricingStats;
   analysisPerformance: AnalysisPerformanceStats;
+  inputTypeBreakdown: InputTypeBreakdown;
+  airbnbUrl: AirbnbUrlStats;
   repeatUsage: {
     uniqueAnalysisUsers: number;
     totalAnalyses: number;
@@ -207,6 +222,8 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       abandonedBeforeFinalizing: 0,
       abandonedDuringFinalizing: 0,
     },
+    inputTypeBreakdown: { screenshot: 0, airbnbUrl: 0, mixed: 0 },
+    airbnbUrl: { submitted: 0, extractionSucceeded: 0, extractionFailed: 0, completed: 0 },
     pricing: {
       oneTimeOfferClicks: 0,
       plusOfferClicks: 0,
@@ -471,6 +488,51 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     abandonedDuringFinalizing,
   };
 
+  // ---- Input type breakdown (screenshot / airbnb_url / mixed) + how
+  // reliable the Airbnb-URL-only path is in production. Derived from the
+  // same analysis_started rows (image_count + has_listing_url), first
+  // occurrence per attemptId. ----
+  const attemptFlags = new Map<string, { imageCount: number; hasListingUrl: boolean }>();
+  for (const r of startedRows) {
+    const id = metadataString(r.metadata, ["attemptId"]);
+    if (!id || attemptFlags.has(id)) continue;
+    attemptFlags.set(id, {
+      imageCount: metadataNumber(r.metadata, "image_count"),
+      hasListingUrl: r.metadata?.has_listing_url === true,
+    });
+  }
+  let screenshotCount = 0;
+  let airbnbUrlCount = 0;
+  let mixedCount = 0;
+  for (const flags of attemptFlags.values()) {
+    if (flags.hasListingUrl && flags.imageCount === 0) airbnbUrlCount++;
+    else if (flags.hasListingUrl && flags.imageCount > 0) mixedCount++;
+    else screenshotCount++;
+  }
+  const inputTypeBreakdown: InputTypeBreakdown = {
+    screenshot: screenshotCount,
+    airbnbUrl: airbnbUrlCount,
+    mixed: mixedCount,
+  };
+
+  const extractionFailedRows = rows.filter((r) => r.event_name === "airbnb_url_extraction_failed");
+  const extractionFailedAttemptIds = new Set(
+    extractionFailedRows.map((r) => metadataString(r.metadata, ["attemptId"])).filter((id): id is string => !!id)
+  );
+  const completedAttemptIds = new Set(
+    completedRows.map((r) => metadataString(r.metadata, ["attemptId"])).filter((id): id is string => !!id)
+  );
+  const airbnbUrlCompleted = Array.from(attemptFlags.entries()).filter(
+    ([id, flags]) => flags.hasListingUrl && flags.imageCount === 0 && completedAttemptIds.has(id)
+  ).length;
+
+  const airbnbUrl: AirbnbUrlStats = {
+    submitted: airbnbUrlCount,
+    extractionFailed: extractionFailedAttemptIds.size,
+    extractionSucceeded: Math.max(0, airbnbUrlCount - extractionFailedAttemptIds.size),
+    completed: airbnbUrlCompleted,
+  };
+
   // ---- Repeat usage + user list (all-time, from the analyses table itself) ----
   const perEmail = new Map<string, AnalysisRow[]>();
   for (const a of allAnalyses) {
@@ -509,6 +571,8 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     users,
     pricing,
     analysisPerformance,
+    inputTypeBreakdown,
+    airbnbUrl,
     repeatUsage: {
       uniqueAnalysisUsers,
       totalAnalyses,
