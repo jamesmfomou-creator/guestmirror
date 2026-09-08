@@ -15,10 +15,10 @@ type Step = "import" | "email" | "analyzing";
 
 const MAX_IMAGES = 10;
 const MIN_ANIMATION_MS = 3400;
-// Above the AI call's own worst case (~90s, see lib/ai.ts) with headroom
+// Above the AI call's own worst case (~225s, see lib/ai.ts) with headroom
 // for image upload + DB write, so this only fires on a genuinely stuck
 // request instead of racing a real-but-slow analysis.
-const FETCH_TIMEOUT_MS = 110_000;
+const FETCH_TIMEOUT_MS = 290_000;
 
 function genId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -77,6 +77,7 @@ export function AnalyzeWizard() {
     if (submitting) return;
     setSubmitting(true);
     setAnalysisDone(false);
+    setApiError(null);
     track("email_submitted", { email: email.trim() });
     setStep("analyzing");
     startedAt.current = Date.now();

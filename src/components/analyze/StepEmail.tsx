@@ -20,6 +20,12 @@ export function StepEmail({
 }) {
   const [touched, setTouched] = useState(false);
   const isValid = EMAIL_RE.test(email.trim());
+  // `error` is only ever set after a real failed attempt (see
+  // AnalyzeWizard's catch block) -- never for first-time validation, so
+  // it's a reliable signal to distinguish "about to start" from "just
+  // failed, offering a retry" and avoid showing a stale success-flavored
+  // headline next to a failure message.
+  const isRetry = Boolean(error);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -29,8 +35,14 @@ export function StepEmail({
 
   return (
     <form onSubmit={handleSubmit} className="animate-fade-up">
-      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Ton analyse est prête.</h1>
-      <p className="mt-3 text-muted">Où veux-tu recevoir ton résultat ?</p>
+      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+        {isRetry ? "L'analyse n'a pas pu être terminée." : "Ton analyse est prête."}
+      </h1>
+      <p className="mt-3 text-muted">
+        {isRetry
+          ? "Tes captures sont toujours prêtes, tu peux réessayer directement."
+          : "Où veux-tu recevoir ton résultat ?"}
+      </p>
 
       <div className="card mt-8 p-6 sm:p-7">
         <input
@@ -53,7 +65,7 @@ export function StepEmail({
       )}
 
       <Button type="submit" size="lg" className="mt-6 w-full" disabled={loading}>
-        {loading ? "Un instant…" : "Voir ma première impression"}
+        {loading ? "Un instant…" : isRetry ? "Réessayer l'analyse" : "Voir ma première impression"}
       </Button>
       <p className="mt-3 text-center text-xs text-muted-2">
         Aucun spam. Ton email sert uniquement à sauvegarder et retrouver ton analyse.

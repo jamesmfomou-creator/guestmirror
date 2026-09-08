@@ -7,9 +7,10 @@ import { DEMO_MODE } from "@/lib/env";
 import { DEMO_IMAGES, DEMO_RESULT, DEMO_RESULT_AFTER } from "@/lib/demo-data";
 
 // Explicit ceiling so a hung request fails cleanly instead of running
-// indefinitely. Comfortably above the AI call's own worst case (~90s with
-// the timeout/retry settings in lib/ai.ts) plus image storage + DB writes.
-export const maxDuration = 120;
+// indefinitely. Comfortably above the AI call's own worst case (~225s
+// with the timeout/retry settings in lib/ai.ts: 110s + backoff + 110s)
+// plus image storage + DB writes.
+export const maxDuration = 280;
 
 export async function POST(req: NextRequest) {
   const requestStartedAt = Date.now();

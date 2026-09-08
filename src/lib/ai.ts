@@ -174,12 +174,21 @@ const RESULT_SCHEMA = {
 };
 
 // The SDK defaults to a 10-minute timeout with 2 retries -- in the worst
-// case (timeout + 2 retries) that lets a single request hang for ~30
-// minutes with zero feedback to the user. Bounding both keeps the longest
-// possible wait predictable (~90s) so the frontend's own timeout/retry UX
-// (see StepAnalyzing.tsx) can kick in with a clear message instead of a
-// silently frozen loader.
-const AI_TIMEOUT_MS = 45_000;
+// case that lets a single request hang for ~30 minutes with zero feedback.
+// Bounding both keeps the longest possible wait predictable.
+//
+// IMPORTANT: an earlier version of this file set AI_TIMEOUT_MS to 45s,
+// which turned out to be *shorter* than a lot of genuinely successful
+// analyses -- real production data (2026-09-07/08) showed successful
+// calls landing anywhere up to ~92s, and the 45s cutoff was killing the
+// majority of real requests after two truncated attempts (~91-93s of
+// wasted time), then surfacing them as "analysis_failed". 110s is chosen
+// with headroom above that observed ceiling so the timeout only fires on
+// genuinely stuck requests, not normal slow ones. See api/analyze &
+// api/compare's maxDuration (280s) and AnalyzeWizard's client-side fetch
+// timeout (290s), which were raised in lockstep so neither one now cuts
+// off a request before this timeout/retry pair would.
+const AI_TIMEOUT_MS = 110_000;
 const AI_MAX_RETRIES = 1;
 
 let anthropicClient: Anthropic | null = null;
