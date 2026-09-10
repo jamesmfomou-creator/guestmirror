@@ -133,6 +133,34 @@ export interface AirbnbUrlStats {
   completed: number;
 }
 
+// "Aha moment" pre-paywall A/B test (marketing experiment -- distinct from
+// GuestMirror's own A/B photo compare product feature). Only events that
+// carry an ab_variant are counted; older events without one are ignored
+// rather than mis-bucketed.
+export interface AbVariantStats {
+  visitors: number;
+  analysesCompleted: number;
+  resultsViewed: number;
+  paywallsViewed: number;
+  unlockClicks: number;
+  checkoutsStarted: number;
+  paymentsCompleted: number;
+  revenue: number;
+  resultToPaywallRate: number | null;
+  paywallToUnlockRate: number | null;
+  unlockToCheckoutRate: number | null;
+  checkoutToPaymentRate: number | null;
+  resultToPaymentRate: number | null;
+  revenuePerVisitor: number | null;
+  revenuePerAnalysis: number | null;
+  revenuePerPaywall: number | null;
+}
+
+export interface AbTestStats {
+  A: AbVariantStats;
+  B: AbVariantStats;
+}
+
 export interface AnalyticsDashboard {
   configured: boolean;
   period: Period;
@@ -148,6 +176,7 @@ export interface AnalyticsDashboard {
   analysisPerformance: AnalysisPerformanceStats;
   inputTypeBreakdown: InputTypeBreakdown;
   airbnbUrl: AirbnbUrlStats;
+  abTest: AbTestStats;
   repeatUsage: {
     uniqueAnalysisUsers: number;
     totalAnalyses: number;
@@ -195,6 +224,27 @@ function average(values: number[]): number | null {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
+function emptyAbVariantStats(): AbVariantStats {
+  return {
+    visitors: 0,
+    analysesCompleted: 0,
+    resultsViewed: 0,
+    paywallsViewed: 0,
+    unlockClicks: 0,
+    checkoutsStarted: 0,
+    paymentsCompleted: 0,
+    revenue: 0,
+    resultToPaywallRate: null,
+    paywallToUnlockRate: null,
+    unlockToCheckoutRate: null,
+    checkoutToPaymentRate: null,
+    resultToPaymentRate: null,
+    revenuePerVisitor: null,
+    revenuePerAnalysis: null,
+    revenuePerPaywall: null,
+  };
+}
+
 export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDashboard> {
   const empty: AnalyticsDashboard = {
     configured: false,
@@ -224,6 +274,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     },
     inputTypeBreakdown: { screenshot: 0, airbnbUrl: 0, mixed: 0 },
     airbnbUrl: { submitted: 0, extractionSucceeded: 0, extractionFailed: 0, completed: 0 },
+    abTest: { A: emptyAbVariantStats(), B: emptyAbVariantStats() },
     pricing: {
       oneTimeOfferClicks: 0,
       plusOfferClicks: 0,
@@ -533,6 +584,48 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     completed: airbnbUrlCompleted,
   };
 
+  // ---- "Aha moment" pre-paywall A/B test ----
+  function computeAbVariantStats(variant: "A" | "B"): AbVariantStats {
+    const variantRows = rows.filter((r) => r.metadata?.ab_variant === variant);
+    const countDistinct = (eventName: string) =>
+      new Set(variantRows.filter((r) => r.event_name === eventName).map(distinctVisitor)).size;
+
+    const visitors = new Set(variantRows.map(distinctVisitor)).size;
+    const analysesCompleted = countDistinct("analysis_completed");
+    const resultsViewed = new Set(
+      variantRows
+        .filter((r) => r.event_name === "free_result_viewed" || r.event_name === "aha_moment_viewed")
+        .map(distinctVisitor)
+    ).size;
+    const paywallsViewed = countDistinct("paywall_viewed");
+    const unlockClicks = countDistinct("unlock_clicked");
+    const checkoutsStarted = countDistinct("checkout_started");
+    const paymentRows = variantRows.filter((r) => r.event_name === "payment_completed");
+    const paymentsCompleted = paymentRows.length;
+    const revenue = paymentRows.reduce((sum, r) => sum + metadataNumber(r.metadata, "amount") / 100, 0);
+
+    return {
+      visitors,
+      analysesCompleted,
+      resultsViewed,
+      paywallsViewed,
+      unlockClicks,
+      checkoutsStarted,
+      paymentsCompleted,
+      revenue,
+      resultToPaywallRate: resultsViewed > 0 ? paywallsViewed / resultsViewed : null,
+      paywallToUnlockRate: paywallsViewed > 0 ? unlockClicks / paywallsViewed : null,
+      unlockToCheckoutRate: unlockClicks > 0 ? checkoutsStarted / unlockClicks : null,
+      checkoutToPaymentRate: checkoutsStarted > 0 ? paymentsCompleted / checkoutsStarted : null,
+      resultToPaymentRate: resultsViewed > 0 ? paymentsCompleted / resultsViewed : null,
+      revenuePerVisitor: visitors > 0 ? revenue / visitors : null,
+      revenuePerAnalysis: analysesCompleted > 0 ? revenue / analysesCompleted : null,
+      revenuePerPaywall: paywallsViewed > 0 ? revenue / paywallsViewed : null,
+    };
+  }
+
+  const abTest: AbTestStats = { A: computeAbVariantStats("A"), B: computeAbVariantStats("B") };
+
   // ---- Repeat usage + user list (all-time, from the analyses table itself) ----
   const perEmail = new Map<string, AnalysisRow[]>();
   for (const a of allAnalyses) {
@@ -573,6 +666,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     analysisPerformance,
     inputTypeBreakdown,
     airbnbUrl,
+    abTest,
     repeatUsage: {
       uniqueAnalysisUsers,
       totalAnalyses,

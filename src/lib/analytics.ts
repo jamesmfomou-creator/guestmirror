@@ -1,4 +1,5 @@
 import { captureAttribution, getAnonymousId, getFirstTouch, getLastTouch, getSessionId } from "@/lib/tracking/identity";
+import { getAbVariant } from "@/lib/ab";
 
 /**
  * Full set of event names this app can emit. Exported as a plain array
@@ -61,6 +62,15 @@ export const ANALYTICS_EVENTS = [
   "rescan_completed",
   "before_after_viewed",
   "share_clicked",
+  // "Aha moment" A/B test (marketing experiment on the pre-paywall flow --
+  // not to be confused with GuestMirror's own A/B photo compare product
+  // feature). ab_variant is attached to every event automatically by
+  // track() below, these are the handful of genuinely new observation
+  // points variant B's enriched loader/teaser needed.
+  "analysis_progress_viewed",
+  "aha_score_viewed",
+  "aha_verdict_viewed",
+  "locked_recommendations_viewed",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];
@@ -86,11 +96,18 @@ declare global {
 export function track(event: AnalyticsEvent, props?: Props) {
   if (typeof window === "undefined") return;
 
+  // Attached to every event automatically (rather than requiring each of
+  // the ~30 call sites to pass it) so the A/B dashboard can never miss it
+  // on a new event by omission. Old events predating this simply have no
+  // ab_variant key, which admin/analytics's A/B section already accounts
+  // for (it only counts events that carry one).
+  const enrichedProps: Props = { ...props, ab_variant: getAbVariant() };
+
   try {
-    window.posthog?.capture(event, props);
-    window.plausible?.(event, props ? { props } : undefined);
+    window.posthog?.capture(event, enrichedProps);
+    window.plausible?.(event, enrichedProps ? { props: enrichedProps } : undefined);
     if (process.env.NODE_ENV !== "production") {
-      console.debug("[analytics]", event, props ?? {});
+      console.debug("[analytics]", event, enrichedProps ?? {});
     }
   } catch {
     // analytics must never break the product experience
@@ -98,8 +115,8 @@ export function track(event: AnalyticsEvent, props?: Props) {
 
   try {
     captureAttribution();
-    const analysisId = props?.analysisId != null ? String(props.analysisId) : null;
-    const email = props?.email != null ? String(props.email) : null;
+    const analysisId = enrichedProps?.analysisId != null ? String(enrichedProps.analysisId) : null;
+    const email = enrichedProps?.email != null ? String(enrichedProps.email) : null;
 
     const payload = {
       event_name: event,
@@ -111,7 +128,7 @@ export function track(event: AnalyticsEvent, props?: Props) {
       referrer: document.referrer || null,
       first_touch: getFirstTouch(),
       last_touch: getLastTouch(),
-      metadata: props ?? null,
+      metadata: enrichedProps ?? null,
     };
 
     const body = JSON.stringify(payload);

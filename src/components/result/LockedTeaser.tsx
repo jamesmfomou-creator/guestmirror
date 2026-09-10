@@ -1,4 +1,8 @@
+"use client";
+
 import { Lock } from "lucide-react";
+import { track } from "@/lib/analytics";
+import { useInViewOnce } from "@/lib/tracking/useInViewOnce";
 
 const LOCKED_ITEMS = [
   "Quelle photo mettre en première",
@@ -11,9 +15,13 @@ const LOCKED_ITEMS = [
   "Les 3 changements prioritaires",
 ];
 
-export function LockedTeaser({ count }: { count: number }) {
+export function LockedTeaser({ count, analysisId }: { count: number; analysisId?: string }) {
+  const ref = useInViewOnce<HTMLDivElement>(() => {
+    track("locked_recommendations_viewed", { analysisId, count });
+  });
+
   return (
-    <div className="mx-auto mt-6 max-w-xl">
+    <div ref={ref} className="mx-auto mt-6 max-w-xl">
       <h2 className="text-center text-lg font-semibold">
         {count > 0
           ? `J'ai détecté ${count} autres améliorations importantes.`

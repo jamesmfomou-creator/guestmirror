@@ -66,6 +66,11 @@ async function trackServerEvent(params: {
       ...params.metadata,
       first_touch: priorMetadata?.first_touch ?? null,
       last_touch: priorMetadata?.last_touch ?? null,
+      // Same propagation pattern as first_touch/last_touch: webhook events
+      // have no browser cookie to read, so the A/B variant is carried over
+      // from the earliest client-side event tracked against this analysis
+      // (e.g. aha_moment_viewed / free_result_viewed on first page view).
+      ab_variant: priorMetadata?.ab_variant ?? null,
     },
   });
 }

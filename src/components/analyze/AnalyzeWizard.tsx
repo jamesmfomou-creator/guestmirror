@@ -5,8 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { StepImport } from "./StepImport";
 import { StepEmail } from "./StepEmail";
 import { StepAnalyzing } from "./StepAnalyzing";
+import { AnalysisAhaFlow } from "./AnalysisAhaFlow";
 import { PendingImage, fileToBase64 } from "@/lib/files";
 import { track } from "@/lib/analytics";
+import { getAbVariant } from "@/lib/ab";
 import { takePendingFiles } from "@/lib/pendingUpload";
 import { BRAND_NAME } from "@/lib/brand";
 import { verdictFor } from "@/lib/utils";
@@ -48,6 +50,10 @@ export function AnalyzeWizard() {
   const [analysisDone, setAnalysisDone] = useState(false);
   const startedAt = useRef<number | null>(null);
   const attemptId = useRef<string | null>(null);
+  // Assigned once per visitor (persisted, see lib/ab.ts) and read once per
+  // mount -- never re-rolled mid-session.
+  const [abVariant] = useState(() => getAbVariant());
+  const pendingResult = useRef<{ id?: string; overall_score?: number } | null>(null);
 
   const previousAnalysisId = searchParams.get("previous");
 
@@ -73,11 +79,26 @@ export function AnalyzeWizard() {
     setStep("email");
   }
 
+  function finishAndRedirect(json: { id?: string; overall_score?: number }) {
+    track("analysis_completed", {
+      attemptId: attemptId.current,
+      analysisId: json.id,
+      overall_score: json.overall_score,
+      verdict: json.overall_score != null ? verdictFor(json.overall_score).short : undefined,
+      image_count: images.length,
+      has_listing_url: url.trim().length > 0,
+      duration_ms: Date.now() - (startedAt.current ?? Date.now()),
+    });
+    if (previousAnalysisId) track("rescan_completed");
+    router.push(`/result/${json.id}`);
+  }
+
   async function runAnalysis() {
     if (submitting) return;
     setSubmitting(true);
     setAnalysisDone(false);
     setApiError(null);
+    pendingResult.current = null;
     track("email_submitted", { email: email.trim() });
     setStep("analyzing");
     startedAt.current = Date.now();
@@ -143,21 +164,15 @@ export function AnalyzeWizard() {
       }
 
       setAnalysisDone(true);
-      const elapsed = Date.now() - (startedAt.current ?? Date.now());
-      const wait = Math.max(MIN_ANIMATION_MS - elapsed, 700);
-      setTimeout(() => {
-        track("analysis_completed", {
-          attemptId: attemptId.current,
-          analysisId: json.id,
-          overall_score: json.overall_score,
-          verdict: json.overall_score != null ? verdictFor(json.overall_score).short : undefined,
-          image_count: images.length,
-          has_listing_url: url.trim().length > 0,
-          duration_ms: elapsed,
-        });
-        if (previousAnalysisId) track("rescan_completed");
-        router.push(`/result/${json.id}`);
-      }, wait);
+      if (abVariant === "B") {
+        // AnalysisAhaFlow drives its own short "Ta première impression est
+        // prête." beat once `done` flips true, then calls onTransitionEnd.
+        pendingResult.current = json;
+      } else {
+        const elapsed = Date.now() - (startedAt.current ?? Date.now());
+        const wait = Math.max(MIN_ANIMATION_MS - elapsed, 700);
+        setTimeout(() => finishAndRedirect(json), wait);
+      }
     } catch (err) {
       const isTimeout = err instanceof DOMException && err.name === "AbortError";
       const message = isTimeout
@@ -181,6 +196,14 @@ export function AnalyzeWizard() {
 
   function handleFinalizing() {
     track("analysis_progress_90", { attemptId: attemptId.current });
+  }
+
+  function handleAhaMount() {
+    track("analysis_progress_viewed", { attemptId: attemptId.current });
+  }
+
+  function handleTransitionEnd() {
+    if (pendingResult.current) finishAndRedirect(pendingResult.current);
   }
 
   return (
@@ -212,7 +235,15 @@ export function AnalyzeWizard() {
           error={apiError}
         />
       )}
-      {step === "analyzing" && (
+      {step === "analyzing" && abVariant === "B" && (
+        <AnalysisAhaFlow
+          done={analysisDone}
+          onMount={handleAhaMount}
+          onFinalizing={handleFinalizing}
+          onTransitionEnd={handleTransitionEnd}
+        />
+      )}
+      {step === "analyzing" && abVariant === "A" && (
         <StepAnalyzing done={analysisDone} onFinalizing={handleFinalizing} />
       )}
     </div>

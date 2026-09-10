@@ -74,6 +74,18 @@ export default async function ResultPage({
           }}
         />
       )}
+      {!unlocked && (
+        <AnalyticsBeacon
+          event="aha_score_viewed"
+          props={{ analysisId: id, overall_score: analysis.overall_score }}
+        />
+      )}
+      {!unlocked && (
+        <AnalyticsBeacon
+          event="aha_verdict_viewed"
+          props={{ analysisId: id, verdict: verdictFor(analysis.overall_score).short }}
+        />
+      )}
 
       <ScoreHeader result={analysis.result} locked={!unlocked} />
 
@@ -81,7 +93,7 @@ export default async function ResultPage({
         <>
           <FirstHesitation result={analysis.result} />
           <MainProblem result={analysis.result} analysisId={id} />
-          <LockedTeaser count={lockedRecommendationCount(analysis.result)} />
+          <LockedTeaser count={lockedRecommendationCount(analysis.result)} analysisId={id} />
           <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} />
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
             {analysis.result.disclaimer}

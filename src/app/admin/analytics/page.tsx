@@ -25,6 +25,11 @@ function seconds(n: number | null): string {
   return `${n.toFixed(1)}s`;
 }
 
+function money(n: number | null): string {
+  if (n === null) return "—";
+  return eur(n);
+}
+
 export default async function AdminAnalyticsPage({
   searchParams,
 }: {
@@ -141,6 +146,85 @@ export default async function AdminAnalyticsPage({
           <Kpi label="Extraction réussie" value={data.airbnbUrl.extractionSucceeded} />
           <Kpi label="Extraction échouée" value={data.airbnbUrl.extractionFailed} />
           <Kpi label="Analyses complétées" value={data.airbnbUrl.completed} />
+        </div>
+      </section>
+
+      {/* A/B test: pre-paywall "Aha moment" */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">A/B Test — Aha moment</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Variante A = flow actuel, Variante B = loader &quot;Aha moment&quot; renforcé avant le
+          paywall. Seuls les événements portant une variante sont comptés — le trafic antérieur à
+          ce test n&apos;y figure pas.
+        </p>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Métrique</th>
+                <th className="px-4 py-2.5 font-medium">Variante A</th>
+                <th className="px-4 py-2.5 font-medium">Variante B</th>
+              </tr>
+            </thead>
+            <tbody>
+              <AbRow label="Utilisateurs" a={data.abTest.A.visitors} b={data.abTest.B.visitors} />
+              <AbRow
+                label="Analyses complétées"
+                a={data.abTest.A.analysesCompleted}
+                b={data.abTest.B.analysesCompleted}
+              />
+              <AbRow label="Résultats vus" a={data.abTest.A.resultsViewed} b={data.abTest.B.resultsViewed} />
+              <AbRow label="Paywalls vus" a={data.abTest.A.paywallsViewed} b={data.abTest.B.paywallsViewed} />
+              <AbRow label="Clics unlock" a={data.abTest.A.unlockClicks} b={data.abTest.B.unlockClicks} />
+              <AbRow
+                label="Checkouts démarrés"
+                a={data.abTest.A.checkoutsStarted}
+                b={data.abTest.B.checkoutsStarted}
+              />
+              <AbRow label="Paiements" a={data.abTest.A.paymentsCompleted} b={data.abTest.B.paymentsCompleted} />
+              <AbRow label="Revenu" a={eur(data.abTest.A.revenue)} b={eur(data.abTest.B.revenue)} />
+              <AbRow
+                label="Résultat → Paywall"
+                a={pct(data.abTest.A.resultToPaywallRate)}
+                b={pct(data.abTest.B.resultToPaywallRate)}
+              />
+              <AbRow
+                label="Paywall → Unlock"
+                a={pct(data.abTest.A.paywallToUnlockRate)}
+                b={pct(data.abTest.B.paywallToUnlockRate)}
+              />
+              <AbRow
+                label="Unlock → Checkout"
+                a={pct(data.abTest.A.unlockToCheckoutRate)}
+                b={pct(data.abTest.B.unlockToCheckoutRate)}
+              />
+              <AbRow
+                label="Checkout → Paiement"
+                a={pct(data.abTest.A.checkoutToPaymentRate)}
+                b={pct(data.abTest.B.checkoutToPaymentRate)}
+              />
+              <AbRow
+                label="Résultat → Paiement"
+                a={pct(data.abTest.A.resultToPaymentRate)}
+                b={pct(data.abTest.B.resultToPaymentRate)}
+              />
+              <AbRow
+                label="Revenue / visiteur"
+                a={money(data.abTest.A.revenuePerVisitor)}
+                b={money(data.abTest.B.revenuePerVisitor)}
+              />
+              <AbRow
+                label="Revenue / analyse"
+                a={money(data.abTest.A.revenuePerAnalysis)}
+                b={money(data.abTest.B.revenuePerAnalysis)}
+              />
+              <AbRow
+                label="Revenue / paywall"
+                a={money(data.abTest.A.revenuePerPaywall)}
+                b={money(data.abTest.B.revenuePerPaywall)}
+              />
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -315,5 +399,15 @@ function Kpi({ label, value }: { label: string; value: string | number }) {
       <p className="text-xs font-medium uppercase tracking-wide text-muted-2">{label}</p>
       <p className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
     </div>
+  );
+}
+
+function AbRow({ label, a, b }: { label: string; a: string | number; b: string | number }) {
+  return (
+    <tr className="border-b border-border last:border-0">
+      <td className="px-4 py-2.5">{label}</td>
+      <td className="px-4 py-2.5 font-medium tabular-nums">{a}</td>
+      <td className="px-4 py-2.5 font-medium tabular-nums">{b}</td>
+    </tr>
   );
 }
