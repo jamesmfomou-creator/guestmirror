@@ -23,6 +23,9 @@ const STAGES = [
 const FINALIZING_AT_MS = STAGES[STAGES.length - 1].atMs;
 const REASSURANCE_AT_MS = 25_000;
 const TRANSITION_MS = 1300;
+const SOFT_CAP = 90;
+const RING_SIZE = 72;
+const STROKE_WIDTH = 6;
 
 export function AnalysisAhaFlow({
   done,
@@ -39,6 +42,7 @@ export function AnalysisAhaFlow({
   onTransitionEnd?: () => void;
 }) {
   const [elapsed, setElapsed] = useState(0);
+  const [progress, setProgress] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
   const firedFinalizing = useRef(false);
 
@@ -52,6 +56,19 @@ export function AnalysisAhaFlow({
     const t = setInterval(() => setElapsed(Date.now() - start), 200);
     return () => clearInterval(t);
   }, []);
+
+  // Same easing as StepAnalyzing's ring: quick at first, slows down, caps
+  // at SOFT_CAP until the backend actually responds -- so the user can see
+  // both "how far along" and, once finalizing, that it's still working,
+  // without ever showing a fabricated 100% before the result is real.
+  useEffect(() => {
+    const target = done ? 100 : SOFT_CAP;
+    const rate = done ? 0.25 : 0.05;
+    const interval = setInterval(() => {
+      setProgress((p) => (Math.abs(target - p) < 0.3 ? target : p + (target - p) * rate));
+    }, 50);
+    return () => clearInterval(interval);
+  }, [done]);
 
   const finalizing = !done && elapsed >= FINALIZING_AT_MS;
 
@@ -76,6 +93,11 @@ export function AnalysisAhaFlow({
   const stageIndex = STAGES.reduce((acc, s, i) => (elapsed >= s.atMs ? i : acc), -1);
   const showReassurance = finalizing && elapsed >= REASSURANCE_AT_MS;
 
+  const displayProgress = Math.round(progress);
+  const radius = (RING_SIZE - STROKE_WIDTH) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (displayProgress / 100) * circumference;
+
   if (transitioning) {
     return (
       <div className="animate-fade-up flex min-h-[60vh] flex-col items-center justify-center px-5 text-center">
@@ -89,7 +111,41 @@ export function AnalysisAhaFlow({
 
   return (
     <div className="animate-fade-up flex min-h-[60vh] flex-col items-center justify-center px-5 text-center">
-      <p className="max-w-xs text-lg font-medium text-foreground">
+      <div className="relative" style={{ width: RING_SIZE, height: RING_SIZE }}>
+        <svg width={RING_SIZE} height={RING_SIZE} className="-rotate-90">
+          <circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={radius}
+            fill="none"
+            stroke="var(--border)"
+            strokeWidth={STROKE_WIDTH}
+          />
+          <circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={radius}
+            fill="none"
+            stroke="var(--accent)"
+            strokeWidth={STROKE_WIDTH}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            style={{ transition: "stroke-dashoffset 0.1s linear" }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          {finalizing ? (
+            <Loader2 size={20} className="animate-spin text-accent" />
+          ) : (
+            <span className="text-base font-semibold tabular-nums text-foreground">
+              {displayProgress}%
+            </span>
+          )}
+        </div>
+      </div>
+
+      <p className="mt-5 max-w-xs text-lg font-medium text-foreground">
         Je regarde ton annonce comme un voyageur…
       </p>
 
@@ -110,7 +166,6 @@ export function AnalysisAhaFlow({
 
       {finalizing && (
         <div className="mt-8 flex flex-col items-center gap-3">
-          <Loader2 size={22} className="animate-spin text-accent" />
           <p className="text-sm text-muted">Finalisation de ton analyse…</p>
           {showReassurance && (
             <p className="animate-fade-up max-w-xs text-sm text-muted-2">
