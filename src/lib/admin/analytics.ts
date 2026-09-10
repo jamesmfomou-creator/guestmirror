@@ -141,6 +141,8 @@ export interface AbVariantStats {
   visitors: number;
   analysesCompleted: number;
   resultsViewed: number;
+  ahaMomentsViewed: number;
+  unlockCtaClicks: number;
   paywallsViewed: number;
   unlockClicks: number;
   checkoutsStarted: number;
@@ -229,6 +231,8 @@ function emptyAbVariantStats(): AbVariantStats {
     visitors: 0,
     analysesCompleted: 0,
     resultsViewed: 0,
+    ahaMomentsViewed: 0,
+    unlockCtaClicks: 0,
     paywallsViewed: 0,
     unlockClicks: 0,
     checkoutsStarted: 0,
@@ -592,11 +596,9 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
 
     const visitors = new Set(variantRows.map(distinctVisitor)).size;
     const analysesCompleted = countDistinct("analysis_completed");
-    const resultsViewed = new Set(
-      variantRows
-        .filter((r) => r.event_name === "free_result_viewed" || r.event_name === "aha_moment_viewed")
-        .map(distinctVisitor)
-    ).size;
+    const resultsViewed = countDistinct("result_viewed");
+    const ahaMomentsViewed = countDistinct("aha_viewed");
+    const unlockCtaClicks = countDistinct("unlock_cta_clicked");
     const paywallsViewed = countDistinct("paywall_viewed");
     const unlockClicks = countDistinct("unlock_clicked");
     const checkoutsStarted = countDistinct("checkout_started");
@@ -608,6 +610,8 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       visitors,
       analysesCompleted,
       resultsViewed,
+      ahaMomentsViewed,
+      unlockCtaClicks,
       paywallsViewed,
       unlockClicks,
       checkoutsStarted,

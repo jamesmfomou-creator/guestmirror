@@ -17,7 +17,7 @@ const LOCKED_ITEMS = [
 
 export function LockedTeaser({ count, analysisId }: { count: number; analysisId?: string }) {
   const ref = useInViewOnce<HTMLDivElement>(() => {
-    track("locked_recommendations_viewed", { analysisId, count });
+    track("locked_preview_viewed", { analysisId, count });
   });
 
   return (

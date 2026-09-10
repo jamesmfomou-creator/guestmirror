@@ -174,8 +174,18 @@ export default async function AdminAnalyticsPage({
                 b={data.abTest.B.analysesCompleted}
               />
               <AbRow label="Résultats vus" a={data.abTest.A.resultsViewed} b={data.abTest.B.resultsViewed} />
+              <AbRow
+                label="Aha moments vus"
+                a={data.abTest.A.ahaMomentsViewed}
+                b={data.abTest.B.ahaMomentsViewed}
+              />
+              <AbRow
+                label="CTA unlock (avant paywall)"
+                a={data.abTest.A.unlockCtaClicks}
+                b={data.abTest.B.unlockCtaClicks}
+              />
               <AbRow label="Paywalls vus" a={data.abTest.A.paywallsViewed} b={data.abTest.B.paywallsViewed} />
-              <AbRow label="Clics unlock" a={data.abTest.A.unlockClicks} b={data.abTest.B.unlockClicks} />
+              <AbRow label="Clics unlock (plan)" a={data.abTest.A.unlockClicks} b={data.abTest.B.unlockClicks} />
               <AbRow
                 label="Checkouts démarrés"
                 a={data.abTest.A.checkoutsStarted}

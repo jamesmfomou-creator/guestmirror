@@ -8,6 +8,9 @@ import { ScoreHeader } from "@/components/result/ScoreHeader";
 import { FirstHesitation } from "@/components/result/FirstHesitation";
 import { MainProblem } from "@/components/result/MainProblem";
 import { LockedTeaser } from "@/components/result/LockedTeaser";
+import { LockedPreviewB } from "@/components/result/LockedPreviewB";
+import { AhaCoverImage } from "@/components/result/AhaCoverImage";
+import { UnlockCtaGate } from "@/components/result/UnlockCtaGate";
 import { Paywall } from "@/components/result/Paywall";
 import { FullPriorities } from "@/components/result/FullPriorities";
 import { StrengthsWeaknesses } from "@/components/result/StrengthsWeaknesses";
@@ -26,6 +29,7 @@ import { ManageSubscriptionLink } from "@/components/result/ManageSubscriptionLi
 import { lockedRecommendationCount } from "@/lib/utils";
 import { BRAND_NAME } from "@/lib/brand";
 import { getSubscriptionByEmail, isPlusActive } from "@/lib/subscriptions";
+import { getAbVariantServer } from "@/lib/ab-server";
 
 export const metadata: Metadata = {
   title: `Ton ${BRAND_NAME}`,
@@ -49,6 +53,7 @@ export default async function ResultPage({
   const subscription = await getSubscriptionByEmail(analysis.email);
   const plusActive = isPlusActive(subscription);
   const unlocked = analysis.is_unlocked || plusActive;
+  const variant = await getAbVariantServer();
 
   const previous = analysis.previous_analysis_id
     ? await getAnalysis(analysis.previous_analysis_id)
@@ -74,27 +79,53 @@ export default async function ResultPage({
           }}
         />
       )}
+      {/* "Aha moment" A/B test beacons (see lib/ab.ts) -- fired for both
+          variants so the funnel steps in /admin/analytics stay comparable. */}
+      {!unlocked && <AnalyticsBeacon event="result_viewed" props={{ analysisId: id }} />}
+      {!unlocked && <AnalyticsBeacon event="aha_viewed" props={{ analysisId: id }} />}
       {!unlocked && (
         <AnalyticsBeacon
-          event="aha_score_viewed"
-          props={{ analysisId: id, overall_score: analysis.overall_score }}
+          event="score_viewed"
+          props={{
+            analysisId: id,
+            overall_score: analysis.overall_score,
+            verdict: verdictFor(analysis.overall_score).short,
+          }}
         />
       )}
-      {!unlocked && (
-        <AnalyticsBeacon
-          event="aha_verdict_viewed"
-          props={{ analysisId: id, verdict: verdictFor(analysis.overall_score).short }}
-        />
-      )}
+
+      {!unlocked && variant === "B" && <AhaCoverImage imageUrl={images[0]} />}
 
       <ScoreHeader result={analysis.result} locked={!unlocked} />
 
-      {!unlocked && (
+      {!unlocked && variant === "A" && (
         <>
           <FirstHesitation result={analysis.result} />
           <MainProblem result={analysis.result} analysisId={id} />
           <LockedTeaser count={lockedRecommendationCount(analysis.result)} analysisId={id} />
           <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} />
+          <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
+            {analysis.result.disclaimer}
+          </p>
+          <ShareCardVerdict score={analysis.overall_score} />
+        </>
+      )}
+
+      {!unlocked && variant === "B" && (
+        <>
+          <FirstHesitation result={analysis.result} />
+          <MainProblem result={analysis.result} analysisId={id} />
+          <LockedPreviewB
+            analysisId={id}
+            otherImageUrls={images.slice(1)}
+            suggestedTitle={analysis.result.title_analysis?.suggested_titles?.[0] ?? null}
+            improvedDescription={analysis.result.description_analysis?.improved_description ?? null}
+            topAction={analysis.result.action_plan?.[0] ?? null}
+            count={lockedRecommendationCount(analysis.result)}
+          />
+          <UnlockCtaGate analysisId={id}>
+            <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} />
+          </UnlockCtaGate>
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
             {analysis.result.disclaimer}
           </p>

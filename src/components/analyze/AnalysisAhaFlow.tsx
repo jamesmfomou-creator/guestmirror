@@ -29,11 +29,16 @@ const STROKE_WIDTH = 6;
 
 export function AnalysisAhaFlow({
   done,
+  imageUrl,
   onMount,
   onFinalizing,
   onTransitionEnd,
 }: {
   done: boolean;
+  /** Local preview of the uploaded screenshot, if any -- never shown for
+   * URL-only submissions, since there's no image to show client-side
+   * before the backend responds. Never fabricated. */
+  imageUrl?: string | null;
   /** Fires once on mount -- "the user is watching the enriched loader". */
   onMount?: () => void;
   /** Fires once when the loader enters the finalizing phase. */
@@ -109,43 +114,62 @@ export function AnalysisAhaFlow({
     );
   }
 
+  const ring = (
+    <svg width={RING_SIZE} height={RING_SIZE} className="-rotate-90">
+      <circle
+        cx={RING_SIZE / 2}
+        cy={RING_SIZE / 2}
+        r={radius}
+        fill="none"
+        stroke="var(--border)"
+        strokeWidth={STROKE_WIDTH}
+      />
+      <circle
+        cx={RING_SIZE / 2}
+        cy={RING_SIZE / 2}
+        r={radius}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth={STROKE_WIDTH}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        style={{ transition: "stroke-dashoffset 0.1s linear" }}
+      />
+    </svg>
+  );
+  const ringLabel = finalizing ? (
+    <Loader2 size={20} className="animate-spin text-accent" />
+  ) : (
+    <span className="text-base font-semibold tabular-nums text-foreground">{displayProgress}%</span>
+  );
+
   return (
     <div className="animate-fade-up flex min-h-[60vh] flex-col items-center justify-center px-5 text-center">
-      <div className="relative" style={{ width: RING_SIZE, height: RING_SIZE }}>
-        <svg width={RING_SIZE} height={RING_SIZE} className="-rotate-90">
-          <circle
-            cx={RING_SIZE / 2}
-            cy={RING_SIZE / 2}
-            r={radius}
-            fill="none"
-            stroke="var(--border)"
-            strokeWidth={STROKE_WIDTH}
-          />
-          <circle
-            cx={RING_SIZE / 2}
-            cy={RING_SIZE / 2}
-            r={radius}
-            fill="none"
-            stroke="var(--accent)"
-            strokeWidth={STROKE_WIDTH}
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            style={{ transition: "stroke-dashoffset 0.1s linear" }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          {finalizing ? (
-            <Loader2 size={20} className="animate-spin text-accent" />
-          ) : (
-            <span className="text-base font-semibold tabular-nums text-foreground">
-              {displayProgress}%
-            </span>
-          )}
+      {imageUrl ? (
+        <div className="relative w-full max-w-[180px]">
+          <div className="overflow-hidden rounded-2xl border border-border shadow-[0_16px_40px_-20px_rgba(28,26,23,0.3)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageUrl} alt="" className="aspect-[4/3] w-full object-cover" />
+          </div>
+          <div
+            className="absolute -bottom-4 -right-4 rounded-full bg-background p-1 shadow-[0_8px_20px_-6px_rgba(28,26,23,0.35)]"
+            style={{ width: RING_SIZE + 8, height: RING_SIZE + 8 }}
+          >
+            <div className="relative" style={{ width: RING_SIZE, height: RING_SIZE }}>
+              {ring}
+              <div className="absolute inset-0 flex items-center justify-center">{ringLabel}</div>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="relative" style={{ width: RING_SIZE, height: RING_SIZE }}>
+          {ring}
+          <div className="absolute inset-0 flex items-center justify-center">{ringLabel}</div>
+        </div>
+      )}
 
-      <p className="mt-5 max-w-xs text-lg font-medium text-foreground">
+      <p className={`max-w-xs text-lg font-medium text-foreground ${imageUrl ? "mt-8" : "mt-5"}`}>
         Je regarde ton annonce comme un voyageur…
       </p>
 

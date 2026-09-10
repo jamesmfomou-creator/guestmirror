@@ -238,6 +238,7 @@ export function AnalyzeWizard() {
       {step === "analyzing" && abVariant === "B" && (
         <AnalysisAhaFlow
           done={analysisDone}
+          imageUrl={images[0]?.previewUrl}
           onMount={handleAhaMount}
           onFinalizing={handleFinalizing}
           onTransitionEnd={handleTransitionEnd}

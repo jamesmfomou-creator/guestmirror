@@ -65,12 +65,17 @@ export const ANALYTICS_EVENTS = [
   // "Aha moment" A/B test (marketing experiment on the pre-paywall flow --
   // not to be confused with GuestMirror's own A/B photo compare product
   // feature). ab_variant is attached to every event automatically by
-  // track() below, these are the handful of genuinely new observation
-  // points variant B's enriched loader/teaser needed.
+  // track() below. Fired for both variants unless noted, so the funnel
+  // steps stay directly comparable in /admin/analytics.
   "analysis_progress_viewed",
-  "aha_score_viewed",
-  "aha_verdict_viewed",
-  "locked_recommendations_viewed",
+  "result_viewed",
+  "aha_viewed",
+  "score_viewed",
+  "locked_preview_viewed",
+  // Variant B only: the new CTA that reveals the paywall on click, before
+  // any pricing plan is chosen. Naturally 0 for variant A, which shows
+  // the paywall directly -- that's expected, not a bug.
+  "unlock_cta_clicked",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];

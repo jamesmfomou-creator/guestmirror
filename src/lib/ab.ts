@@ -3,48 +3,39 @@
  * Not to be confused with GuestMirror's product A/B compare mode
  * (src/components/compare) -- this is purely a growth experiment.
  *
- * Same storage pattern as anonymous_id/session_id in
- * lib/tracking/identity.ts: a value in localStorage, assigned once and
- * reused on every subsequent visit (localStorage has no expiry, so this
- * persists across sessions, not just within one).
+ * Cookie-based (not localStorage like anonymous_id/session_id in
+ * lib/tracking/identity.ts) because variant B now changes the actual
+ * server-rendered structure of /result/[id] (image-forward header, locked
+ * preview cards, CTA-gated paywall), not just client-side loader copy --
+ * the server needs to read the same value the client does, from the very
+ * first request, with no flash between an SSR default and a client
+ * correction. proxy.ts assigns the cookie on first visit for any
+ * non-admin/non-API page; this file just reads it.
  */
 
-const AB_VARIANT_KEY = "gm_ab_variant";
-
+export const AB_COOKIE_NAME = "gm_ab";
 export type AbVariant = "A" | "B";
 
-function safeGet(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeSet(key: string, value: string) {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // storage unavailable (private mode, quota) -- falls back to
-    // re-rolling the variant every call, degrading gracefully rather
-    // than throwing.
-  }
-}
+const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 /**
- * Reads the visitor's assigned variant, assigning one (50/50) on first
- * call and persisting it so it stays stable for this visitor. Server-side
- * (SSR) callers always get "A" -- there is no client-only rendering
- * branch gated on this in a server component, so that default is never
- * actually shown to a real user.
+ * Client-side read. In normal operation the cookie already exists (set by
+ * proxy.ts before this page ever rendered), so this is just a parse. The
+ * assign-and-persist fallback only matters if middleware didn't run for
+ * some reason -- keeps the session internally consistent even then.
  */
 export function getAbVariant(): AbVariant {
-  if (typeof window === "undefined") return "A";
+  if (typeof document === "undefined") return "A";
 
-  const existing = safeGet(AB_VARIANT_KEY);
-  if (existing === "A" || existing === "B") return existing;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${AB_COOKIE_NAME}=([^;]*)`));
+  const value = match ? decodeURIComponent(match[1]) : null;
+  if (value === "A" || value === "B") return value;
 
   const variant: AbVariant = Math.random() < 0.5 ? "A" : "B";
-  safeSet(AB_VARIANT_KEY, variant);
+  try {
+    document.cookie = `${AB_COOKIE_NAME}=${variant}; path=/; max-age=${ONE_YEAR_SECONDS}; SameSite=Lax`;
+  } catch {
+    // cookies unavailable -- degrades to re-rolling next call rather than throwing
+  }
   return variant;
 }
