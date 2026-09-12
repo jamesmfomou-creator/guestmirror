@@ -13,3 +13,5 @@ export const STRIPE_CONFIGURED = Boolean(
 );
 
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
+export const EMAIL_CONFIGURED = Boolean(process.env.RESEND_API_KEY);

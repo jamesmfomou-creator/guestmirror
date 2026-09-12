@@ -27,6 +27,32 @@ export function StepEmail({
   // headline next to a failure message.
   const isRetry = Boolean(error);
 
+  // Nudges a returning customer toward their existing unlocked report
+  // instead of unknowingly starting (and possibly paying for) a new one --
+  // added after a support case where a customer forgot she already had a
+  // paid analysis and reran the test. Best-effort only: never blocks
+  // submission, never shown until we've actually confirmed a match.
+  const [existingAnalysisId, setExistingAnalysisId] = useState<string | null>(null);
+  const [checkedEmail, setCheckedEmail] = useState<string | null>(null);
+
+  function handleChange(value: string) {
+    onChange(value);
+    if (value.trim() !== checkedEmail) setExistingAnalysisId(null);
+  }
+
+  async function checkExisting() {
+    const trimmed = email.trim();
+    if (!EMAIL_RE.test(trimmed) || trimmed === checkedEmail) return;
+    setCheckedEmail(trimmed);
+    try {
+      const res = await fetch(`/api/analyses/existing?email=${encodeURIComponent(trimmed)}`);
+      const json = await res.json();
+      setExistingAnalysisId(json.found ? json.analysisId : null);
+    } catch {
+      // best-effort nudge only, never blocks the form
+    }
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setTouched(true);
@@ -50,8 +76,11 @@ export function StepEmail({
           inputMode="email"
           autoFocus
           value={email}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={() => setTouched(true)}
+          onChange={(e) => handleChange(e.target.value)}
+          onBlur={() => {
+            setTouched(true);
+            checkExisting();
+          }}
           placeholder="ton@email.com"
           className="w-full rounded-xl border border-border bg-background px-4 py-3 text-[15px] focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         />
@@ -59,6 +88,15 @@ export function StepEmail({
           <p className="mt-2 text-sm text-score-low">Ajoute une adresse email valide pour continuer.</p>
         )}
       </div>
+
+      {existingAnalysisId && (
+        <p className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-hover">
+          Tu as déjà une analyse débloquée avec cette adresse.{" "}
+          <a href={`/result/${existingAnalysisId}`} className="font-semibold underline underline-offset-2">
+            Voir mon rapport
+          </a>
+        </p>
+      )}
 
       {error && (
         <p className="mt-4 rounded-xl bg-score-low/10 px-4 py-3 text-sm text-score-low">{error}</p>

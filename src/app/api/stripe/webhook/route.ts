@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { unlockAnalysis } from "@/lib/store";
+import { unlockAnalysis, getAnalysis } from "@/lib/store";
 import { SUPABASE_CONFIGURED } from "@/lib/env";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { upsertSubscriptionFromCheckout, updateSubscriptionByStripeId } from "@/lib/subscriptions";
+import { sendUnlockEmail } from "@/lib/email";
 import { randomUUID } from "crypto";
 import type Stripe from "stripe";
 
@@ -111,6 +112,16 @@ async function handleOneTimeCheckout(session: Stripe.Checkout.Session) {
   } catch {
     // analytics must never break payment confirmation handling
   }
+
+  try {
+    const analysis = await getAnalysis(analysisId);
+    if (analysis?.email) {
+      await sendUnlockEmail({ to: analysis.email, analysisId });
+    }
+  } catch {
+    // email must never break payment confirmation handling -- the report
+    // is unlocked regardless of whether the notification email sends
+  }
 }
 
 async function handleSubscriptionCheckout(session: Stripe.Checkout.Session) {
@@ -148,6 +159,14 @@ async function handleSubscriptionCheckout(session: Stripe.Checkout.Session) {
     });
   } catch {
     // analytics must never break subscription confirmation handling
+  }
+
+  if (analysisId) {
+    try {
+      await sendUnlockEmail({ to: email, analysisId });
+    } catch {
+      // email must never break subscription confirmation handling
+    }
   }
 }
 

@@ -145,6 +145,35 @@ export async function getAnalysis(id: string): Promise<AnalysisRecord | null> {
   return readLocalRecord(id);
 }
 
+/**
+ * Most recent *unlocked* (paid) analysis for a given email, if any. Used
+ * to nudge a returning customer toward their existing report instead of
+ * unknowingly starting (and possibly paying for) a brand new one -- see
+ * the "two emails" support case this was added for: the customer forgot
+ * she already had a paid, unlocked analysis and ran the test again.
+ * Filesystem fallback (no Supabase) has no cross-record email index, so
+ * it always returns null there -- acceptable since that path is local
+ * dev/demo only, never real customer data.
+ */
+export async function getLatestUnlockedAnalysisByEmail(
+  email: string
+): Promise<{ id: string; overall_score: number } | null> {
+  if (!SUPABASE_CONFIGURED) return null;
+  const supabase = getSupabaseAdmin()!;
+  const { data } = await supabase
+    .from("analyses")
+    .select("id, overall_score")
+    // analyses.email isn't normalized at write time (unlike subscriptions),
+    // so match case-insensitively rather than assuming lowercase storage.
+    .ilike("email", email.trim())
+    .eq("is_unlocked", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  return { id: data.id as string, overall_score: data.overall_score as number };
+}
+
 export async function unlockAnalysis(id: string, paymentStatus: PaymentStatus = "paid") {
   if (SUPABASE_CONFIGURED) {
     const supabase = getSupabaseAdmin()!;

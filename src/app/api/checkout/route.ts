@@ -116,6 +116,14 @@ export async function POST(req: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: [{ price: process.env.STRIPE_PRICE_ONE_TIME!, quantity: 1 }],
+      // Pre-fills (and locks) the email field on Stripe's hosted page --
+      // without this, a customer can type any email at checkout, which
+      // can end up different from the one their analysis/report is tied
+      // to (unlock itself is keyed by analysisId, not email, so it still
+      // works either way, but the mismatch is confusing for the customer
+      // and support). Matches the "plus" branch above, which already did
+      // this correctly.
+      customer_email: analysis.email || undefined,
       success_url: `${SITE_URL}/result/${analysisId}?unlocked=1&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${SITE_URL}/result/${analysisId}?canceled=1`,
       metadata: { analysisId, plan: "one_time" },
