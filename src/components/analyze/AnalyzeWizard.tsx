@@ -80,7 +80,6 @@ export function AnalyzeWizard() {
     const toAdd = Array.from(files).slice(0, remaining);
     setError(null);
     if (images.length === 0 && toAdd.length > 0) {
-      track("upload_started");
       track("screenshot_upload_started");
     }
     const next: PendingImage[] = toAdd.map((file) => ({
@@ -102,8 +101,7 @@ export function AnalyzeWizard() {
       return;
     }
     const method = inputMethod();
-    track("upload_completed", { image_count: images.length, hasUrl: trimmedUrl.length > 0 });
-    track("listing_submitted", { image_count: images.length, input_method: method });
+    track("listing_input_submitted", { image_count: images.length, input_method: method });
     if (trimmedUrl) track("airbnb_url_submitted", { input_method: method });
     if (images.length > 0) track("screenshot_upload_completed", { input_method: method, image_count: images.length });
     setStep("email");
@@ -142,12 +140,16 @@ export function AnalyzeWizard() {
     setStep("analyzing");
     startedAt.current = Date.now();
     attemptId.current = genId();
+    const method = inputMethod();
     track("analysis_started", {
       attemptId: attemptId.current,
       image_count: images.length,
       has_listing_url: url.trim().length > 0,
-      input_method: inputMethod(),
+      input_method: method,
     });
+    if (method === "airbnb_url") {
+      track("airbnb_url_extraction_started", { attemptId: attemptId.current });
+    }
 
     const timeoutController = new AbortController();
     const timeoutTimer = setTimeout(() => timeoutController.abort(), FETCH_TIMEOUT_MS);
@@ -196,6 +198,23 @@ export function AnalyzeWizard() {
             duration_ms: Date.now() - (startedAt.current ?? Date.now()),
           });
           setApiError(json.error || "Impossible d'analyser automatiquement ce lien Airbnb.");
+          setSubmitting(false);
+          setStep("import");
+          return;
+        }
+        if (res.status === 413 && images.length > 0) {
+          // Image(s) over the size limit, rejected before any real
+          // analysis was attempted -- same "not a real analysis failure"
+          // reasoning as the Airbnb extraction case above: track it
+          // distinctly and send the user back to swap the image, rather
+          // than double-counting as analysis_failed or offering a retry
+          // that would just fail identically.
+          track("screenshot_upload_failed", {
+            attemptId: attemptId.current,
+            error_code: "image_too_large",
+            image_count: images.length,
+          });
+          setApiError(json.error || "Une des images dépasse la taille maximale autorisée.");
           setSubmitting(false);
           setStep("import");
           return;

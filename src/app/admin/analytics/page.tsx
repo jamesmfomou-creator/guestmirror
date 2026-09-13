@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getAnalyticsDashboard, Period } from "@/lib/admin/analytics";
+import { getAnalyticsDashboard, Period, MethodStats } from "@/lib/admin/analytics";
 import { BRAND_NAME } from "@/lib/brand";
 
 export const metadata = { robots: { index: false, follow: false } };
@@ -130,22 +130,32 @@ export default async function AdminAnalyticsPage({
         </div>
       </section>
 
-      {/* Input type + Airbnb URL reliability */}
+      {/* Per-method breakdown: a screenshot submission never counts toward
+          the Airbnb-URL bucket or vice versa -- each event carries its own
+          input_method, see lib/admin/analytics.ts. */}
       <section className="mt-10">
-        <h2 className="text-lg font-semibold">Analyses par méthode d&apos;import</h2>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Kpi label="Capture d'écran" value={data.inputTypeBreakdown.screenshot} />
-          <Kpi label="Lien Airbnb" value={data.inputTypeBreakdown.airbnbUrl} />
-          <Kpi label="Capture + lien" value={data.inputTypeBreakdown.mixed} />
-        </div>
-        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">
-          Fiabilité du mode lien Airbnb
+        <h2 className="text-lg font-semibold">Méthode d&apos;import</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Lien Airbnb, capture d&apos;écran, ou les deux à la fois pour la même analyse.
         </p>
-        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Kpi label="Liens soumis" value={data.airbnbUrl.submitted} />
-          <Kpi label="Extraction réussie" value={data.airbnbUrl.extractionSucceeded} />
-          <Kpi label="Extraction échouée" value={data.airbnbUrl.extractionFailed} />
-          <Kpi label="Analyses complétées" value={data.airbnbUrl.completed} />
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Méthode</th>
+                <th className="px-4 py-2.5 font-medium">Soumissions</th>
+                <th className="px-4 py-2.5 font-medium">Analyses démarrées</th>
+                <th className="px-4 py-2.5 font-medium">Analyses complétées</th>
+                <th className="px-4 py-2.5 font-medium">Échecs</th>
+                <th className="px-4 py-2.5 font-medium">Paiements</th>
+              </tr>
+            </thead>
+            <tbody>
+              <MethodRow label="Lien Airbnb" stats={data.methodBreakdown.airbnbUrl} />
+              <MethodRow label="Capture d'écran" stats={data.methodBreakdown.screenshot} />
+              <MethodRow label="Capture + lien" stats={data.methodBreakdown.mixed} />
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -418,6 +428,19 @@ function AbRow({ label, a, b }: { label: string; a: string | number; b: string |
       <td className="px-4 py-2.5">{label}</td>
       <td className="px-4 py-2.5 font-medium tabular-nums">{a}</td>
       <td className="px-4 py-2.5 font-medium tabular-nums">{b}</td>
+    </tr>
+  );
+}
+
+function MethodRow({ label, stats }: { label: string; stats: MethodStats }) {
+  return (
+    <tr className="border-b border-border last:border-0">
+      <td className="px-4 py-2.5 font-medium">{label}</td>
+      <td className="px-4 py-2.5 tabular-nums">{stats.submissions}</td>
+      <td className="px-4 py-2.5 tabular-nums">{stats.started}</td>
+      <td className="px-4 py-2.5 tabular-nums">{stats.completed}</td>
+      <td className="px-4 py-2.5 tabular-nums">{stats.failed}</td>
+      <td className="px-4 py-2.5 tabular-nums">{stats.payments}</td>
     </tr>
   );
 }

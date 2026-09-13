@@ -30,6 +30,7 @@ import { lockedRecommendationCount } from "@/lib/utils";
 import { BRAND_NAME } from "@/lib/brand";
 import { getSubscriptionByEmail, isPlusActive } from "@/lib/subscriptions";
 import { getAbVariantServer } from "@/lib/ab-server";
+import { getInputMethodForAnalysis } from "@/lib/inputMethod";
 
 export const metadata: Metadata = {
   title: `Ton ${BRAND_NAME}`,
@@ -54,6 +55,16 @@ export default async function ResultPage({
   const plusActive = isPlusActive(subscription);
   const unlocked = analysis.is_unlocked || plusActive;
   const variant = await getAbVariantServer();
+  // Read from the analysis_completed event tracked at submission time --
+  // NOT re-derived from analysis.images, since a pure-URL submission also
+  // ends up with stored images (extracted from the listing page) that
+  // would otherwise be indistinguishable from a real "mixed" submission.
+  // Falls back to a best-effort guess only if that event can't be found
+  // (e.g. Supabase not configured locally, or a pre-instrumentation
+  // historical analysis).
+  const resultInputMethod =
+    (await getInputMethodForAnalysis(id)) ??
+    (analysis.listing_url ? (analysis.images.length > 0 ? "mixed" : "airbnb_url") : "screenshot");
 
   const previous = analysis.previous_analysis_id
     ? await getAnalysis(analysis.previous_analysis_id)
@@ -81,7 +92,12 @@ export default async function ResultPage({
       )}
       {/* "Aha moment" A/B test beacons (see lib/ab.ts) -- fired for both
           variants so the funnel steps in /admin/analytics stay comparable. */}
-      {!unlocked && <AnalyticsBeacon event="result_viewed" props={{ analysisId: id }} />}
+      {!unlocked && (
+        <AnalyticsBeacon
+          event="result_viewed"
+          props={{ analysisId: id, input_method: resultInputMethod }}
+        />
+      )}
       {!unlocked && <AnalyticsBeacon event="aha_viewed" props={{ analysisId: id }} />}
       {!unlocked && (
         <AnalyticsBeacon
@@ -103,7 +119,7 @@ export default async function ResultPage({
           <FirstHesitation result={analysis.result} />
           <MainProblem result={analysis.result} analysisId={id} />
           <LockedTeaser count={lockedRecommendationCount(analysis.result)} analysisId={id} />
-          <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} />
+          <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} />
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
             {analysis.result.disclaimer}
           </p>
@@ -124,7 +140,7 @@ export default async function ResultPage({
             count={lockedRecommendationCount(analysis.result)}
           />
           <UnlockCtaGate analysisId={id}>
-            <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} />
+            <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} />
           </UnlockCtaGate>
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
             {analysis.result.disclaimer}

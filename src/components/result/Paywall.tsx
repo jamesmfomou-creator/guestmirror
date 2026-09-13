@@ -19,16 +19,18 @@ export function Paywall({
   analysisId,
   canceled,
   overallScore,
+  inputMethod,
 }: {
   analysisId: string;
   canceled?: boolean;
   overallScore?: number;
+  inputMethod?: "airbnb_url" | "screenshot" | "mixed";
 }) {
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const ref = useInViewOnce<HTMLDivElement>(() => {
-    track("paywall_viewed", { analysisId });
+    track("paywall_viewed", { analysisId, input_method: inputMethod });
     track("pricing_viewed", { analysisId });
   });
 
@@ -53,7 +55,7 @@ export function Paywall({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Le paiement n'a pas pu être initié.");
 
-      track("checkout_started", { analysisId, plan, price, currency: "EUR" });
+      track("checkout_started", { analysisId, plan, price, currency: "EUR", input_method: inputMethod });
       track(plan === "one_time" ? "one_time_checkout_started" : "subscription_checkout_started", {
         analysisId,
         price,

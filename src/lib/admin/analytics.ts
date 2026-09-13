@@ -6,13 +6,13 @@ export type Period = "today" | "7d" | "30d";
 // upload_started/upload_completed used to sit here, but upload_completed
 // fired for URL-only submissions too (no screenshot involved), which is
 // what produced impossible numbers like "completed" outnumbering
-// "started". listing_submitted fires exactly once per method (see
+// "started". listing_input_submitted fires exactly once per method (see
 // AnalyzeWizard.goToEmail) and replaces both as the funnel step -- the
 // old events still fire unchanged elsewhere, just not used here anymore.
 export const FUNNEL_STEPS: { key: string; label: string }[] = [
   { key: "landing_view", label: "Landing views" },
   { key: "cta_test_clicked", label: "CTA clicks" },
-  { key: "listing_submitted", label: "Annonce soumise" },
+  { key: "listing_input_submitted", label: "Annonce soumise" },
   { key: "email_submitted", label: "Emails soumis" },
   { key: "analysis_started", label: "Analyses démarrées" },
   { key: "analysis_completed", label: "Analyses complétées" },
@@ -125,17 +125,24 @@ export interface AnalysisPerformanceStats {
   abandonedDuringFinalizing: number;
 }
 
-export interface InputTypeBreakdown {
-  screenshot: number;
-  airbnbUrl: number;
-  mixed: number;
+// Per-method (lien Airbnb / capture / capture+lien) breakdown. Every
+// relevant event carries its own input_method field (see
+// AnalyzeWizard.inputMethod() and its propagation into payment_completed
+// via the Stripe webhook's trackServerEvent), so each metric below is a
+// direct group-by on that field -- no cross-referencing between event
+// types needed.
+export interface MethodStats {
+  submissions: number;
+  started: number;
+  completed: number;
+  failed: number;
+  payments: number;
 }
 
-export interface AirbnbUrlStats {
-  submitted: number;
-  extractionSucceeded: number;
-  extractionFailed: number;
-  completed: number;
+export interface MethodBreakdown {
+  airbnbUrl: MethodStats;
+  screenshot: MethodStats;
+  mixed: MethodStats;
 }
 
 // "Aha moment" pre-paywall A/B test (marketing experiment -- distinct from
@@ -181,8 +188,7 @@ export interface AnalyticsDashboard {
   users: UserRow[];
   pricing: PricingStats;
   analysisPerformance: AnalysisPerformanceStats;
-  inputTypeBreakdown: InputTypeBreakdown;
-  airbnbUrl: AirbnbUrlStats;
+  methodBreakdown: MethodBreakdown;
   abTest: AbTestStats;
   repeatUsage: {
     uniqueAnalysisUsers: number;
@@ -191,6 +197,32 @@ export interface AnalyticsDashboard {
     usersWith2Plus: number;
     usersWith3Plus: number;
   };
+}
+
+const PAGE_SIZE = 1000;
+
+/**
+ * Supabase/PostgREST caps every response at a fixed max-rows setting
+ * (1000 by default) regardless of any `.limit()` requested in code, and
+ * truncates silently rather than erroring. analytics_events routinely
+ * exceeds that within a 7d/30d window, so without pagination the
+ * unordered/oldest-first truncation was silently dropping the most
+ * recent rows -- including same-day unlock_clicked/checkout_started/
+ * payment_completed events -- from every metric computed below.
+ */
+async function fetchAllRows<T>(
+  query: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>
+): Promise<T[]> {
+  const all: T[] = [];
+  let from = 0;
+  for (;;) {
+    const { data } = await query(from, from + PAGE_SIZE - 1);
+    const page = (data as T[] | null) ?? [];
+    all.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return all;
 }
 
 function periodSince(period: Period): Date {
@@ -229,6 +261,10 @@ function percentile(sortedAsc: number[], p: number): number | null {
 function average(values: number[]): number | null {
   if (values.length === 0) return null;
   return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function emptyMethodStats(): MethodStats {
+  return { submissions: 0, started: 0, completed: 0, failed: 0, payments: 0 };
 }
 
 function emptyAbVariantStats(): AbVariantStats {
@@ -281,8 +317,11 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       abandonedBeforeFinalizing: 0,
       abandonedDuringFinalizing: 0,
     },
-    inputTypeBreakdown: { screenshot: 0, airbnbUrl: 0, mixed: 0 },
-    airbnbUrl: { submitted: 0, extractionSucceeded: 0, extractionFailed: 0, completed: 0 },
+    methodBreakdown: {
+      airbnbUrl: emptyMethodStats(),
+      screenshot: emptyMethodStats(),
+      mixed: emptyMethodStats(),
+    },
     abTest: { A: emptyAbVariantStats(), B: emptyAbVariantStats() },
     pricing: {
       oneTimeOfferClicks: 0,
@@ -311,22 +350,29 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
   const supabase = getSupabaseAdmin()!;
   const since = periodSince(period);
 
-  const [{ data: events }, { data: analyses }, { data: activeSubs }] = await Promise.all([
-    supabase
-      .from("analytics_events")
-      .select("event_name, anonymous_id, session_id, source, metadata, created_at")
-      .gte("created_at", since.toISOString())
-      .limit(50000),
-    supabase.from("analyses").select("id, email, overall_score, created_at").limit(50000),
-    supabase
-      .from("subscriptions")
-      .select("subscription_status")
-      .in("subscription_status", ["active", "trialing"])
-      .limit(50000),
+  const [events, analyses, activeSubs] = await Promise.all([
+    fetchAllRows<EventRow>((from, to) =>
+      supabase
+        .from("analytics_events")
+        .select("event_name, anonymous_id, session_id, source, metadata, created_at")
+        .gte("created_at", since.toISOString())
+        .order("created_at", { ascending: true })
+        .range(from, to)
+    ),
+    fetchAllRows<AnalysisRow>((from, to) =>
+      supabase.from("analyses").select("id, email, overall_score, created_at").range(from, to)
+    ),
+    fetchAllRows<{ subscription_status: string }>((from, to) =>
+      supabase
+        .from("subscriptions")
+        .select("subscription_status")
+        .in("subscription_status", ["active", "trialing"])
+        .range(from, to)
+    ),
   ]);
 
-  const rows = (events as EventRow[] | null) ?? [];
-  const allAnalyses = (analyses as AnalysisRow[] | null) ?? [];
+  const rows = events as EventRow[];
+  const allAnalyses = analyses as AnalysisRow[];
 
   // ---- Funnel: distinct visitors per step, in order ----
   const visitorsByStep = new Map<string, Set<string>>();
@@ -548,49 +594,62 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     abandonedDuringFinalizing,
   };
 
-  // ---- Input type breakdown (screenshot / airbnb_url / mixed) + how
-  // reliable the Airbnb-URL-only path is in production. Derived from the
-  // same analysis_started rows (image_count + has_listing_url), first
-  // occurrence per attemptId. ----
-  const attemptFlags = new Map<string, { imageCount: number; hasListingUrl: boolean }>();
-  for (const r of startedRows) {
-    const id = metadataString(r.metadata, ["attemptId"]);
-    if (!id || attemptFlags.has(id)) continue;
-    attemptFlags.set(id, {
-      imageCount: metadataNumber(r.metadata, "image_count"),
-      hasListingUrl: r.metadata?.has_listing_url === true,
-    });
-  }
-  let screenshotCount = 0;
-  let airbnbUrlCount = 0;
-  let mixedCount = 0;
-  for (const flags of attemptFlags.values()) {
-    if (flags.hasListingUrl && flags.imageCount === 0) airbnbUrlCount++;
-    else if (flags.hasListingUrl && flags.imageCount > 0) mixedCount++;
-    else screenshotCount++;
-  }
-  const inputTypeBreakdown: InputTypeBreakdown = {
-    screenshot: screenshotCount,
-    airbnbUrl: airbnbUrlCount,
-    mixed: mixedCount,
-  };
+  // ---- Per-method breakdown (lien Airbnb / capture / capture+lien).
+  // Every event below carries its own input_method field directly (see
+  // AnalyzeWizard.inputMethod() and its propagation into payment_completed
+  // via the webhook), so this is just a group-by per event type -- no
+  // cross-referencing between event types, and no risk of a screenshot
+  // submission ever counting toward the airbnb_url bucket or vice versa. ----
+  const METHOD_KEYS = ["airbnb_url", "screenshot", "mixed"] as const;
+  type MethodKey = (typeof METHOD_KEYS)[number];
 
-  const extractionFailedRows = rows.filter((r) => r.event_name === "airbnb_url_extraction_failed");
-  const extractionFailedAttemptIds = new Set(
-    extractionFailedRows.map((r) => metadataString(r.metadata, ["attemptId"])).filter((id): id is string => !!id)
-  );
-  const completedAttemptIds = new Set(
-    completedRows.map((r) => metadataString(r.metadata, ["attemptId"])).filter((id): id is string => !!id)
-  );
-  const airbnbUrlCompleted = Array.from(attemptFlags.entries()).filter(
-    ([id, flags]) => flags.hasListingUrl && flags.imageCount === 0 && completedAttemptIds.has(id)
-  ).length;
+  function methodOf(r: EventRow): MethodKey | null {
+    const m = metadataString(r.metadata, ["input_method"]);
+    return m === "airbnb_url" || m === "screenshot" || m === "mixed" ? (m as MethodKey) : null;
+  }
+  // attemptId when present (started/completed/failed all carry one),
+  // falling back to visitor for events that don't (listing_input_submitted
+  // fires before attemptId exists).
+  function methodDedupeKey(r: EventRow): string {
+    return metadataString(r.metadata, ["attemptId"]) || distinctVisitor(r);
+  }
 
-  const airbnbUrl: AirbnbUrlStats = {
-    submitted: airbnbUrlCount,
-    extractionFailed: extractionFailedAttemptIds.size,
-    extractionSucceeded: Math.max(0, airbnbUrlCount - extractionFailedAttemptIds.size),
-    completed: airbnbUrlCompleted,
+  function countRowsByMethod(rowsForEvent: EventRow[]): Record<MethodKey, number> {
+    const result: Record<MethodKey, number> = { airbnb_url: 0, screenshot: 0, mixed: 0 };
+    for (const key of METHOD_KEYS) {
+      result[key] = new Set(
+        rowsForEvent.filter((r) => methodOf(r) === key).map(methodDedupeKey)
+      ).size;
+    }
+    return result;
+  }
+
+  const submissionRows = rows.filter((r) => r.event_name === "listing_input_submitted");
+  const paymentCompletedRows = rows.filter((r) => r.event_name === "payment_completed");
+
+  const submissionsByMethod = countRowsByMethod(submissionRows);
+  const startedByMethod = countRowsByMethod(startedRows);
+  const completedByMethod = countRowsByMethod(completedRows);
+  const failedByMethod = countRowsByMethod(failedRows);
+  const paymentsByMethod: Record<MethodKey, number> = { airbnb_url: 0, screenshot: 0, mixed: 0 };
+  for (const key of METHOD_KEYS) {
+    paymentsByMethod[key] = paymentCompletedRows.filter((r) => methodOf(r) === key).length;
+  }
+
+  function methodStatsFor(key: MethodKey): MethodStats {
+    return {
+      submissions: submissionsByMethod[key],
+      started: startedByMethod[key],
+      completed: completedByMethod[key],
+      failed: failedByMethod[key],
+      payments: paymentsByMethod[key],
+    };
+  }
+
+  const methodBreakdown: MethodBreakdown = {
+    airbnbUrl: methodStatsFor("airbnb_url"),
+    screenshot: methodStatsFor("screenshot"),
+    mixed: methodStatsFor("mixed"),
   };
 
   // ---- "Aha moment" pre-paywall A/B test ----
@@ -673,8 +732,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     users,
     pricing,
     analysisPerformance,
-    inputTypeBreakdown,
-    airbnbUrl,
+    methodBreakdown,
     abTest,
     repeatUsage: {
       uniqueAnalysisUsers,

@@ -17,13 +17,15 @@ export const ANALYTICS_EVENTS = [
   // screenshot involved), which is what made the old funnel numbers
   // incoherent (uploads "completed" outnumbering uploads "started"). Old
   // events are left firing unchanged for continuity; the funnel table in
-  // /admin/analytics now uses listing_submitted instead.
-  "listing_submitted",
+  // /admin/analytics now uses listing_input_submitted instead.
+  "listing_input_submitted",
   "airbnb_url_started",
   "airbnb_url_submitted",
+  "airbnb_url_extraction_started",
   "airbnb_url_extraction_success",
   "screenshot_upload_started",
   "screenshot_upload_completed",
+  "screenshot_upload_failed",
   "email_submitted",
   "analysis_started",
   // Fires once per attempt, when the loader visually enters the
