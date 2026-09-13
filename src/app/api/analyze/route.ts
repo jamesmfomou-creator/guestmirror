@@ -6,6 +6,7 @@ import { storeImage } from "@/lib/images";
 import { DEMO_MODE } from "@/lib/env";
 import { DEMO_IMAGES, DEMO_RESULT, DEMO_RESULT_AFTER } from "@/lib/demo-data";
 import { extractAirbnbListing, downloadImageAsBase64 } from "@/lib/airbnbExtract";
+import { optimizeImages } from "@/lib/imageOptimize";
 
 const AIRBNB_EXTRACTION_FAILED_MESSAGE =
   "Impossible d'analyser automatiquement ce lien Airbnb. Importe une capture d'écran de ton annonce pour continuer.";
@@ -58,6 +59,7 @@ export async function POST(req: NextRequest) {
   let extractedListingText: { title: string | null; description: string | null } | null = null;
   let effectiveCity = data.city || null;
   let effectiveGuestCapacity = data.guest_capacity || null;
+  let urlExtractionDurationMs: number | null = null;
 
   // Listing URL, no user-provided images: the URL used to be passed to the
   // model as bare text, which the model correctly had nothing to analyze
@@ -68,6 +70,7 @@ export async function POST(req: NextRequest) {
   // upload. If that isn't possible, fail out to a dedicated fallback
   // *before* ever calling the AI or creating an analysis record.
   if (!DEMO_MODE && data.images.length === 0 && data.listing_url) {
+    const urlExtractionStartedAt = Date.now();
     console.log(`[airbnb] airbnb_url_received`);
     const extraction = await extractAirbnbListing(data.listing_url);
     if (!extraction.ok) {
@@ -96,6 +99,7 @@ export async function POST(req: NextRequest) {
     extractedListingText = { title: extraction.data.title, description: extraction.data.description };
     effectiveCity = extraction.data.city ?? effectiveCity;
     effectiveGuestCapacity = extraction.data.guestCapacity ?? effectiveGuestCapacity;
+    urlExtractionDurationMs = Date.now() - urlExtractionStartedAt;
     console.log(`[airbnb] analysis_started_from_url image_count=${usable.length}`);
   }
 
@@ -125,14 +129,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ id: record.id, overall_score: record.overall_score });
     }
 
+    const preprocessStartedAt = Date.now();
+    effectiveImages = await optimizeImages(effectiveImages);
+    const imagePreprocessingDurationMs = Date.now() - preprocessStartedAt;
+    console.log(
+      `[analyze] image preprocessing duration_ms=${imagePreprocessingDurationMs} count=${effectiveImages.length}`
+    );
+
+    const aiStartedAt = Date.now();
     const result = await analyzeListing({ images: effectiveImages, input, extractedListingText });
+    const aiCallDurationMs = Date.now() - aiStartedAt;
 
     const storageStartedAt = Date.now();
     const tempId = crypto.randomUUID();
     const storedImages = await Promise.all(
       effectiveImages.map((img, i) => storeImage(tempId, i, img.base64, img.mediaType))
     );
-    console.log(`[analyze] image storage duration_ms=${Date.now() - storageStartedAt} count=${storedImages.length}`);
+    const imageStorageDurationMs = Date.now() - storageStartedAt;
+    console.log(`[analyze] image storage duration_ms=${imageStorageDurationMs} count=${storedImages.length}`);
 
     const dbStartedAt = Date.now();
     const record = await createAnalysis({
@@ -142,10 +156,28 @@ export async function POST(req: NextRequest) {
       result,
       previousAnalysisId: data.previous_analysis_id || null,
     });
-    console.log(`[analyze] db write duration_ms=${Date.now() - dbStartedAt}`);
-    console.log(`[analyze] total duration_ms=${Date.now() - requestStartedAt} id=${record.id}`);
+    const databaseDurationMs = Date.now() - dbStartedAt;
+    console.log(`[analyze] db write duration_ms=${databaseDurationMs}`);
+    const totalDurationMs = Date.now() - requestStartedAt;
+    console.log(`[analyze] total duration_ms=${totalDurationMs} id=${record.id}`);
 
-    return NextResponse.json({ id: record.id, overall_score: record.overall_score });
+    return NextResponse.json({
+      id: record.id,
+      overall_score: record.overall_score,
+      timings: {
+        url_extraction_duration_ms: urlExtractionDurationMs,
+        image_preprocessing_duration_ms: imagePreprocessingDurationMs,
+        ai_call_duration_ms: aiCallDurationMs,
+        image_storage_duration_ms: imageStorageDurationMs,
+        database_duration_ms: databaseDurationMs,
+        // Everything after the AI call resolves: storing images, writing
+        // the DB row. Kept as its own field to match what the loader's
+        // 90%-cap progress bar covers ("finalizing") even though it's
+        // consistently small compared to the AI call itself.
+        finalization_duration_ms: imageStorageDurationMs + databaseDurationMs,
+        total_duration_ms: totalDurationMs,
+      },
+    });
   } catch (err) {
     console.error(`[analyze] failed duration_ms=${Date.now() - requestStartedAt}:`, err);
     if (err instanceof AnalysisError) {

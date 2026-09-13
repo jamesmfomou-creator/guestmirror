@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getAnalyticsDashboard, Period, MethodStats } from "@/lib/admin/analytics";
+import { getAnalyticsDashboard, Period, MethodStats, StepTimingStats } from "@/lib/admin/analytics";
 import { BRAND_NAME } from "@/lib/brand";
 
 export const metadata = { robots: { index: false, follow: false } };
@@ -127,6 +127,41 @@ export default async function AdminAnalyticsPage({
         <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-2">
           <Kpi label="Avant la finalisation (< 90%)" value={data.analysisPerformance.abandonedBeforeFinalizing} />
           <Kpi label="Pendant la finalisation (90%+)" value={data.analysisPerformance.abandonedDuringFinalizing} />
+        </div>
+      </section>
+
+      {/* Server-side step breakdown: where the total analysis time is
+          actually spent, independent of the client-side 90%-cap progress
+          bar above. Only analyses run since this instrumentation shipped
+          carry these fields (see each row's "n" sample size). */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Répartition du temps par étape</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Mesuré côté serveur pour chaque analyse complétée. &quot;n&quot; = nombre d&apos;analyses
+          couvertes par cette instrumentation dans la période sélectionnée.
+        </p>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Étape</th>
+                <th className="px-4 py-2.5 font-medium">Moyenne</th>
+                <th className="px-4 py-2.5 font-medium">Médiane</th>
+                <th className="px-4 py-2.5 font-medium">p75</th>
+                <th className="px-4 py-2.5 font-medium">p90</th>
+                <th className="px-4 py-2.5 font-medium">n</th>
+              </tr>
+            </thead>
+            <tbody>
+              <StepTimingRow label="Extraction URL Airbnb" stats={data.stepTimings.urlExtraction} />
+              <StepTimingRow label="Préparation des images" stats={data.stepTimings.imagePreprocessing} />
+              <StepTimingRow label="Appel IA" stats={data.stepTimings.aiCall} />
+              <StepTimingRow label="Stockage des images" stats={data.stepTimings.imageStorage} />
+              <StepTimingRow label="Écriture base de données" stats={data.stepTimings.database} />
+              <StepTimingRow label="Finalisation (stockage + DB)" stats={data.stepTimings.finalization} />
+              <StepTimingRow label="Total serveur" stats={data.stepTimings.total} />
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -428,6 +463,19 @@ function AbRow({ label, a, b }: { label: string; a: string | number; b: string |
       <td className="px-4 py-2.5">{label}</td>
       <td className="px-4 py-2.5 font-medium tabular-nums">{a}</td>
       <td className="px-4 py-2.5 font-medium tabular-nums">{b}</td>
+    </tr>
+  );
+}
+
+function StepTimingRow({ label, stats }: { label: string; stats: StepTimingStats }) {
+  return (
+    <tr className="border-b border-border last:border-0">
+      <td className="px-4 py-2.5 font-medium">{label}</td>
+      <td className="px-4 py-2.5 tabular-nums">{seconds(stats.avgS)}</td>
+      <td className="px-4 py-2.5 tabular-nums">{seconds(stats.medianS)}</td>
+      <td className="px-4 py-2.5 tabular-nums">{seconds(stats.p75S)}</td>
+      <td className="px-4 py-2.5 tabular-nums">{seconds(stats.p90S)}</td>
+      <td className="px-4 py-2.5 tabular-nums text-muted-2">{stats.sampleSize}</td>
     </tr>
   );
 }

@@ -54,7 +54,9 @@ export function AnalyzeWizard() {
   // Assigned once per visitor (persisted, see lib/ab.ts) and read once per
   // mount -- never re-rolled mid-session.
   const [abVariant] = useState(() => getAbVariant());
-  const pendingResult = useRef<{ id?: string; overall_score?: number } | null>(null);
+  const pendingResult = useRef<{ id?: string; overall_score?: number; timings?: Record<string, number | null> } | null>(
+    null
+  );
 
   const previousAnalysisId = searchParams.get("previous");
   const urlStartedTracked = useRef(false);
@@ -107,7 +109,7 @@ export function AnalyzeWizard() {
     setStep("email");
   }
 
-  function finishAndRedirect(json: { id?: string; overall_score?: number }) {
+  function finishAndRedirect(json: { id?: string; overall_score?: number; timings?: Record<string, number | null> }) {
     const method = inputMethod();
     track("analysis_completed", {
       attemptId: attemptId.current,
@@ -118,6 +120,7 @@ export function AnalyzeWizard() {
       has_listing_url: url.trim().length > 0,
       input_method: method,
       duration_ms: Date.now() - (startedAt.current ?? Date.now()),
+      ...json.timings,
     });
     // Reaching here on a pure-URL submission (no screenshot) means the
     // backend fetched and used the real listing content -- if extraction
@@ -178,7 +181,13 @@ export function AnalyzeWizard() {
         signal: timeoutController.signal,
       });
 
-      let json: { id?: string; overall_score?: number; error?: string; error_code?: string };
+      let json: {
+        id?: string;
+        overall_score?: number;
+        error?: string;
+        error_code?: string;
+        timings?: Record<string, number | null>;
+      };
       try {
         json = await res.json();
       } catch {

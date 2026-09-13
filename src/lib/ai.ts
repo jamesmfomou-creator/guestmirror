@@ -39,8 +39,14 @@ CE QUE TU N'ES PAS : tu n'es pas un outil de SEO Airbnb, ni un expert de l'algor
 - "first_hesitation" est UNE phrase à la première personne qui exprime le doute ou l'hésitation précise que ressentirait un voyageur juste après avoir vu l'annonce (ex: "Le logement a l'air agréable, mais je ne vois pas encore pourquoi je choisirais celui-ci plutôt que les autres."). Distincte de "summary" : summary décrit ce qui est compris, first_hesitation décrit ce qui freine.
 - "five_second_scores" est un test de première impression indépendant de "scores" : note en 5 secondes l'impact visuel (attire-t-il l'œil ?), la différenciation (se démarque-t-il des autres annonces ?), la clarté (comprend-on vite ce qui est montré ?), la valeur perçue (a-t-on l'impression que ça vaut le prix ?), la confiance (donne-t-il envie de faire confiance à l'hôte ?), l'envie (donne-t-il envie de cliquer ?).
 - "guest_questions" liste 3 à 5 questions concrètes qu'un voyageur se poserait encore après avoir vu l'annonce, faute d'informations claires (formulées à la première personne, ex: "Est-ce que la terrasse est privée ?").
-- "top_priorities[0]" doit être LE problème le plus impactant, formulé dans "current_issue" comme une observation directe et concrète (ex: "Ta terrasse semble être ton meilleur atout, mais elle n'apparaît qu'en photo n°6."), pas un principe général.
-- Le champ "disclaimer" doit toujours contenir : "${BRAND_NAME} est une estimation produite à partir des éléments visibles de l'annonce. Il ne prédit ni ne garantit les clics ou les réservations."`;
+- "top_priorities[0]" doit être LE problème le plus impactant, formulé dans "current_issue" comme une observation directe et concrète (ex: "Ta terrasse semble être ton meilleur atout, mais elle n'apparaît qu'en photo n°6."), pas un principe général.`;
+
+// Always the same fixed sentence (see the schema's old "disclaimer" field
+// and the system prompt instruction that used to ask the model to
+// reproduce it verbatim) -- generating it via the model added output
+// tokens for zero benefit and a small risk of paraphrase drift. Set here
+// instead, byte-for-byte guaranteed correct every time.
+export const DISCLAIMER = `${BRAND_NAME} est une estimation produite à partir des éléments visibles de l'annonce. Il ne prédit ni ne garantit les clics ou les réservations.`;
 
 const RESULT_SCHEMA = {
   type: "object",
@@ -152,7 +158,6 @@ const RESULT_SCHEMA = {
     },
     recommended_photo_order: { type: "array", items: { type: "integer" } },
     action_plan: { type: "array", items: { type: "string" } },
-    disclaimer: { type: "string" },
   },
   required: [
     "overall_score",
@@ -169,7 +174,6 @@ const RESULT_SCHEMA = {
     "photo_analysis",
     "recommended_photo_order",
     "action_plan",
-    "disclaimer",
   ],
 };
 
@@ -287,5 +291,18 @@ export async function analyzeListing(params: {
     );
   }
 
-  return toolUse.input as AnalysisResult;
+  const input = toolUse.input as Partial<AnalysisResult>;
+  // "required" in the tool schema steers the model but isn't a hard
+  // guarantee -- without this check, a response missing overall_score
+  // (observed in testing, likely tied to hitting the tool schema's edges
+  // on an unusual input) surfaced 60+ seconds later as a raw Postgres
+  // not-null violation instead of the existing, fast "réessaie" retry path.
+  if (typeof input.overall_score !== "number" || !input.summary) {
+    console.error(`[ai] incomplete tool response duration_ms=${Date.now() - aiStartedAt}`);
+    throw new AnalysisError(
+      "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants."
+    );
+  }
+
+  return { ...(input as AnalysisResult), disclaimer: DISCLAIMER };
 }

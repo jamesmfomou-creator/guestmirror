@@ -125,6 +125,30 @@ export interface AnalysisPerformanceStats {
   abandonedDuringFinalizing: number;
 }
 
+// Server-side step breakdown of a single analysis, read from the timings
+// object /api/analyze returns and the client forwards onto its own
+// analysis_completed event (see AnalyzeWizard.finishAndRedirect). Only
+// analyses run after this instrumentation shipped carry these fields --
+// older completed rows are simply excluded from each step's sample
+// (sampleSize reflects that) rather than skewing the stats with zeros.
+export interface StepTimingStats {
+  avgS: number | null;
+  medianS: number | null;
+  p75S: number | null;
+  p90S: number | null;
+  sampleSize: number;
+}
+
+export interface StepTimings {
+  urlExtraction: StepTimingStats;
+  imagePreprocessing: StepTimingStats;
+  aiCall: StepTimingStats;
+  imageStorage: StepTimingStats;
+  database: StepTimingStats;
+  finalization: StepTimingStats;
+  total: StepTimingStats;
+}
+
 // Per-method (lien Airbnb / capture / capture+lien) breakdown. Every
 // relevant event carries its own input_method field (see
 // AnalyzeWizard.inputMethod() and its propagation into payment_completed
@@ -188,6 +212,7 @@ export interface AnalyticsDashboard {
   users: UserRow[];
   pricing: PricingStats;
   analysisPerformance: AnalysisPerformanceStats;
+  stepTimings: StepTimings;
   methodBreakdown: MethodBreakdown;
   abTest: AbTestStats;
   repeatUsage: {
@@ -267,6 +292,25 @@ function emptyMethodStats(): MethodStats {
   return { submissions: 0, started: 0, completed: 0, failed: 0, payments: 0 };
 }
 
+function emptyStepTimingStats(): StepTimingStats {
+  return { avgS: null, medianS: null, p75S: null, p90S: null, sampleSize: 0 };
+}
+
+function stepTimingStatsFor(rowsForEvent: EventRow[], field: string): StepTimingStats {
+  const valuesS = rowsForEvent
+    .map((r) => metadataNumber(r.metadata, field))
+    .filter((ms) => ms > 0)
+    .map((ms) => ms / 1000)
+    .sort((a, b) => a - b);
+  return {
+    avgS: average(valuesS),
+    medianS: percentile(valuesS, 0.5),
+    p75S: percentile(valuesS, 0.75),
+    p90S: percentile(valuesS, 0.9),
+    sampleSize: valuesS.length,
+  };
+}
+
 function emptyAbVariantStats(): AbVariantStats {
   return {
     visitors: 0,
@@ -316,6 +360,15 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       avgFinalizingS: null,
       abandonedBeforeFinalizing: 0,
       abandonedDuringFinalizing: 0,
+    },
+    stepTimings: {
+      urlExtraction: emptyStepTimingStats(),
+      imagePreprocessing: emptyStepTimingStats(),
+      aiCall: emptyStepTimingStats(),
+      imageStorage: emptyStepTimingStats(),
+      database: emptyStepTimingStats(),
+      finalization: emptyStepTimingStats(),
+      total: emptyStepTimingStats(),
     },
     methodBreakdown: {
       airbnbUrl: emptyMethodStats(),
@@ -594,6 +647,20 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     abandonedDuringFinalizing,
   };
 
+  // ---- Server-side step breakdown (see /api/analyze's `timings` return
+  // value, forwarded into analysis_completed's metadata) -- where the
+  // total analysis time is actually spent, independent of the client-side
+  // 90%-cap progress bar used above. ----
+  const stepTimings: StepTimings = {
+    urlExtraction: stepTimingStatsFor(completedRows, "url_extraction_duration_ms"),
+    imagePreprocessing: stepTimingStatsFor(completedRows, "image_preprocessing_duration_ms"),
+    aiCall: stepTimingStatsFor(completedRows, "ai_call_duration_ms"),
+    imageStorage: stepTimingStatsFor(completedRows, "image_storage_duration_ms"),
+    database: stepTimingStatsFor(completedRows, "database_duration_ms"),
+    finalization: stepTimingStatsFor(completedRows, "finalization_duration_ms"),
+    total: stepTimingStatsFor(completedRows, "total_duration_ms"),
+  };
+
   // ---- Per-method breakdown (lien Airbnb / capture / capture+lien).
   // Every event below carries its own input_method field directly (see
   // AnalyzeWizard.inputMethod() and its propagation into payment_completed
@@ -732,6 +799,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     users,
     pricing,
     analysisPerformance,
+    stepTimings,
     methodBreakdown,
     abTest,
     repeatUsage: {
