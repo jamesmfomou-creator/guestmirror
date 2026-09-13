@@ -72,6 +72,10 @@ async function trackServerEvent(params: {
       // from the earliest client-side event tracked against this analysis
       // (e.g. aha_moment_viewed / free_result_viewed on first page view).
       ab_variant: priorMetadata?.ab_variant ?? null,
+      // Same idea for airbnb_url vs screenshot vs mixed (see
+      // AnalyzeWizard's inputMethod()) -- lets /admin/analytics compare
+      // payment_completed by method without a second lookup.
+      input_method: priorMetadata?.input_method ?? null,
     },
   });
 }

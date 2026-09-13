@@ -9,6 +9,7 @@ import { AnalysisAhaFlow } from "./AnalysisAhaFlow";
 import { PendingImage, fileToBase64 } from "@/lib/files";
 import { track } from "@/lib/analytics";
 import { getAbVariant } from "@/lib/ab";
+import { isAirbnbUrl } from "@/lib/airbnbUrl";
 import { takePendingFiles } from "@/lib/pendingUpload";
 import { BRAND_NAME } from "@/lib/brand";
 import { verdictFor } from "@/lib/utils";
@@ -56,12 +57,32 @@ export function AnalyzeWizard() {
   const pendingResult = useRef<{ id?: string; overall_score?: number } | null>(null);
 
   const previousAnalysisId = searchParams.get("previous");
+  const urlStartedTracked = useRef(false);
+
+  function inputMethod(): "airbnb_url" | "screenshot" | "mixed" {
+    const hasUrl = url.trim().length > 0;
+    const hasImages = images.length > 0;
+    if (hasUrl && hasImages) return "mixed";
+    return hasUrl ? "airbnb_url" : "screenshot";
+  }
+
+  function handleUrlChange(value: string) {
+    if (!urlStartedTracked.current && url.trim().length === 0 && value.trim().length > 0) {
+      urlStartedTracked.current = true;
+      track("airbnb_url_started");
+    }
+    setError(null);
+    setUrl(value);
+  }
 
   function handleAddFiles(files: FileList) {
     const remaining = MAX_IMAGES - images.length;
     const toAdd = Array.from(files).slice(0, remaining);
     setError(null);
-    if (images.length === 0 && toAdd.length > 0) track("upload_started");
+    if (images.length === 0 && toAdd.length > 0) {
+      track("upload_started");
+      track("screenshot_upload_started");
+    }
     const next: PendingImage[] = toAdd.map((file) => ({
       id: genId(),
       file,
@@ -75,11 +96,21 @@ export function AnalyzeWizard() {
   }
 
   function goToEmail() {
-    track("upload_completed", { image_count: images.length, hasUrl: url.trim().length > 0 });
+    const trimmedUrl = url.trim();
+    if (trimmedUrl && images.length === 0 && !isAirbnbUrl(trimmedUrl)) {
+      setError("Ce lien Airbnb ne semble pas valide.");
+      return;
+    }
+    const method = inputMethod();
+    track("upload_completed", { image_count: images.length, hasUrl: trimmedUrl.length > 0 });
+    track("listing_submitted", { image_count: images.length, input_method: method });
+    if (trimmedUrl) track("airbnb_url_submitted", { input_method: method });
+    if (images.length > 0) track("screenshot_upload_completed", { input_method: method, image_count: images.length });
     setStep("email");
   }
 
   function finishAndRedirect(json: { id?: string; overall_score?: number }) {
+    const method = inputMethod();
     track("analysis_completed", {
       attemptId: attemptId.current,
       analysisId: json.id,
@@ -87,8 +118,16 @@ export function AnalyzeWizard() {
       verdict: json.overall_score != null ? verdictFor(json.overall_score).short : undefined,
       image_count: images.length,
       has_listing_url: url.trim().length > 0,
+      input_method: method,
       duration_ms: Date.now() - (startedAt.current ?? Date.now()),
     });
+    // Reaching here on a pure-URL submission (no screenshot) means the
+    // backend fetched and used the real listing content -- if extraction
+    // had failed, the catch block below would have redirected back to
+    // "import" instead of ever reaching this success path.
+    if (method === "airbnb_url") {
+      track("airbnb_url_extraction_success", { analysisId: json.id });
+    }
     if (previousAnalysisId) track("rescan_completed");
     router.push(`/result/${json.id}`);
   }
@@ -107,6 +146,7 @@ export function AnalyzeWizard() {
       attemptId: attemptId.current,
       image_count: images.length,
       has_listing_url: url.trim().length > 0,
+      input_method: inputMethod(),
     });
 
     const timeoutController = new AbortController();
@@ -217,7 +257,7 @@ export function AnalyzeWizard() {
       {step === "import" && (
         <StepImport
           url={url}
-          onUrlChange={setUrl}
+          onUrlChange={handleUrlChange}
           images={images}
           onAddFiles={handleAddFiles}
           onRemoveImage={handleRemoveImage}

@@ -3,11 +3,16 @@ import { SUPABASE_CONFIGURED } from "@/lib/env";
 
 export type Period = "today" | "7d" | "30d";
 
+// upload_started/upload_completed used to sit here, but upload_completed
+// fired for URL-only submissions too (no screenshot involved), which is
+// what produced impossible numbers like "completed" outnumbering
+// "started". listing_submitted fires exactly once per method (see
+// AnalyzeWizard.goToEmail) and replaces both as the funnel step -- the
+// old events still fire unchanged elsewhere, just not used here anymore.
 export const FUNNEL_STEPS: { key: string; label: string }[] = [
   { key: "landing_view", label: "Landing views" },
   { key: "cta_test_clicked", label: "CTA clicks" },
-  { key: "upload_started", label: "Upload démarré" },
-  { key: "upload_completed", label: "Uploads complétés" },
+  { key: "listing_submitted", label: "Annonce soumise" },
   { key: "email_submitted", label: "Emails soumis" },
   { key: "analysis_started", label: "Analyses démarrées" },
   { key: "analysis_completed", label: "Analyses complétées" },

@@ -44,13 +44,29 @@ export function StepImport({
 
       <div className="card mt-8 p-6 sm:p-7">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-medium text-foreground">
-            Importe tes captures d&apos;annonce
-          </p>
+          <p className="text-sm font-medium text-foreground">Colle le lien de ton annonce</p>
           <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-hover">
             Recommandé
           </span>
         </div>
+        <input
+          type="text"
+          inputMode="url"
+          value={url}
+          onChange={(e) => onUrlChange(e.target.value)}
+          placeholder="https://www.airbnb..."
+          className="mt-4 w-full rounded-xl border border-border bg-background px-4 py-3 text-[15px] focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+        />
+      </div>
+
+      <div className="relative my-6 h-px bg-border">
+        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-2">
+          Ou
+        </span>
+      </div>
+
+      <div className="card p-6 sm:p-7">
+        <p className="text-sm font-medium text-foreground">Importe tes captures d&apos;annonce</p>
         <p className="mt-1.5 text-[11px] text-muted-2">{HINTS.join(" • ")}</p>
 
         {images.length === 0 && (
@@ -94,25 +110,6 @@ export function StepImport({
           multiple
           onChange={handleFileChange}
           className="hidden"
-        />
-      </div>
-
-      <div className="relative my-6 h-px bg-border">
-        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-2">
-          Ou
-        </span>
-      </div>
-
-      <div className="card p-6 sm:p-7">
-        <p className="text-sm font-medium text-foreground">Colle le lien de ton annonce</p>
-        <p className="mt-1.5 text-[11px] text-muted-2">Fonctionne aussi bien qu&apos;une capture d&apos;écran</p>
-        <input
-          type="text"
-          inputMode="url"
-          value={url}
-          onChange={(e) => onUrlChange(e.target.value)}
-          placeholder="https://www.airbnb..."
-          className="mt-4 w-full rounded-xl border border-border bg-background px-4 py-3 text-[15px] focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         />
       </div>
 

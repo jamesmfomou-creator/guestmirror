@@ -1,4 +1,5 @@
 import { MAX_IMAGE_BYTES } from "@/lib/validation";
+import { isAirbnbUrl } from "@/lib/airbnbUrl";
 
 // Fetches the public Airbnb listing page and reads the same structured data
 // Airbnb itself publishes for search engines / link previews (schema.org
@@ -28,16 +29,6 @@ const FETCH_TIMEOUT_MS = 8_000;
 const MAX_EXTRACTED_IMAGES = 5;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
-
-function isAirbnbUrl(rawUrl: string): boolean {
-  try {
-    const url = new URL(rawUrl);
-    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
-    return /(^|\.)airbnb\.[a-z.]+$/i.test(url.hostname) || /(^|\.)abnb\.me$/i.test(url.hostname);
-  } catch {
-    return false;
-  }
-}
 
 function decodeHtmlEntities(s: string): string {
   return s
