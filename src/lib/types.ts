@@ -81,6 +81,9 @@ export interface AnalysisResult {
 
 export type PaymentStatus = "none" | "pending" | "paid";
 
+export type UserType = "host" | "concierge" | "cohost" | "other";
+export type PropertyCountRange = "1" | "2-5" | "6-20" | "21+";
+
 export interface AnalysisInput {
   listing_url: string | null;
   city: string | null;
@@ -104,6 +107,8 @@ export interface AnalysisRecord {
   is_unlocked: boolean;
   payment_status: PaymentStatus;
   previous_analysis_id: string | null;
+  user_type: UserType | null;
+  property_count_range: PropertyCountRange | null;
   created_at: string;
   updated_at: string;
 }

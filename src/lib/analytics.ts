@@ -59,6 +59,19 @@ export const ANALYTICS_EVENTS = [
   "subscription_started",
   "subscription_cancelled",
   "subscription_payment_failed",
+  // GuestMirror Lifetime (mode=payment, see STRIPE_PRICE_LIFETIME): a
+  // third, limited-launch offer alongside one_time/plus above. Same
+  // *_offer_clicked / *_checkout_started naming convention.
+  "lifetime_offer_clicked",
+  "lifetime_checkout_started",
+  "lifetime_payment_completed",
+  // Short profile question ("how many listings do you manage?"), asked
+  // once right after import (see StepProfile) -- purely for segmentation,
+  // never blocks the flow.
+  "profile_submitted",
+  // Post-purchase, optional, never blocks access to the report.
+  "feedback_submitted",
+  "testimonial_submitted",
   // Compare mode.
   "compare_viewed",
   "compare_upload_a_completed",

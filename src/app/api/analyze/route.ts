@@ -125,6 +125,8 @@ export async function POST(req: NextRequest) {
         images: DEMO_IMAGES,
         result,
         previousAnalysisId: data.previous_analysis_id || null,
+        userType: data.user_type || null,
+        propertyCountRange: data.property_count_range || null,
       });
       return NextResponse.json({ id: record.id, overall_score: record.overall_score });
     }
@@ -155,6 +157,8 @@ export async function POST(req: NextRequest) {
       images: storedImages,
       result,
       previousAnalysisId: data.previous_analysis_id || null,
+      userType: data.user_type || null,
+      propertyCountRange: data.property_count_range || null,
     });
     const databaseDurationMs = Date.now() - dbStartedAt;
     console.log(`[analyze] db write duration_ms=${databaseDurationMs}`);

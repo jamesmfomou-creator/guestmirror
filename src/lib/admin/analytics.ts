@@ -199,6 +199,30 @@ export interface AbTestStats {
   B: AbVariantStats;
 }
 
+// Cross-tab for the "Profil des utilisateurs" admin block: how many
+// biens/quel profil converts into which plan. Built entirely from
+// analytics_events' own metadata (paywall_viewed / {plan}_offer_clicked /
+// payment_completed already carry user_type + property_count_range, see
+// StepProfile + Paywall.tsx + the webhook's trackServerEvent propagation)
+// -- no join against the analyses table needed.
+export interface ProfileSegmentStats {
+  analysesCompleted: number;
+  paywallsViewed: number;
+  oneTimeChosen: number;
+  plusChosen: number;
+  lifetimeChosen: number;
+  payments: number;
+  revenue: number;
+}
+
+export type PropertyCountKey = "1" | "2-5" | "6-20" | "21+";
+export type UserTypeKey = "host" | "concierge" | "cohost" | "other";
+
+export interface UserProfileStats {
+  byPropertyCount: Record<PropertyCountKey, ProfileSegmentStats>;
+  byUserType: Record<UserTypeKey, ProfileSegmentStats>;
+}
+
 export interface AnalyticsDashboard {
   configured: boolean;
   period: Period;
@@ -214,6 +238,7 @@ export interface AnalyticsDashboard {
   analysisPerformance: AnalysisPerformanceStats;
   stepTimings: StepTimings;
   methodBreakdown: MethodBreakdown;
+  userProfile: UserProfileStats;
   abTest: AbTestStats;
   repeatUsage: {
     uniqueAnalysisUsers: number;
@@ -290,6 +315,10 @@ function average(values: number[]): number | null {
 
 function emptyMethodStats(): MethodStats {
   return { submissions: 0, started: 0, completed: 0, failed: 0, payments: 0 };
+}
+
+function emptyProfileSegmentStats(): ProfileSegmentStats {
+  return { analysesCompleted: 0, paywallsViewed: 0, oneTimeChosen: 0, plusChosen: 0, lifetimeChosen: 0, payments: 0, revenue: 0 };
 }
 
 function emptyStepTimingStats(): StepTimingStats {
@@ -374,6 +403,20 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       airbnbUrl: emptyMethodStats(),
       screenshot: emptyMethodStats(),
       mixed: emptyMethodStats(),
+    },
+    userProfile: {
+      byPropertyCount: {
+        "1": emptyProfileSegmentStats(),
+        "2-5": emptyProfileSegmentStats(),
+        "6-20": emptyProfileSegmentStats(),
+        "21+": emptyProfileSegmentStats(),
+      },
+      byUserType: {
+        host: emptyProfileSegmentStats(),
+        concierge: emptyProfileSegmentStats(),
+        cohost: emptyProfileSegmentStats(),
+        other: emptyProfileSegmentStats(),
+      },
     },
     abTest: { A: emptyAbVariantStats(), B: emptyAbVariantStats() },
     pricing: {
@@ -719,6 +762,113 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     mixed: methodStatsFor("mixed"),
   };
 
+  // ---- User profile cross-tab (nombre de biens / type d'utilisateur x
+  // analyses / paywalls / plan choisi / paiements). Every event below
+  // already carries user_type + property_count_range directly in its
+  // metadata (see StepProfile, Paywall.tsx, and the webhook's
+  // trackServerEvent propagation for payment_completed) -- same
+  // attemptId-or-visitor dedupe as methodDedupeKey above for analyses/
+  // paywalls; clicks and payments are counted as raw events since each is
+  // already a single discrete action. ----
+  const PROPERTY_COUNT_KEYS = ["1", "2-5", "6-20", "21+"] as const;
+  const USER_TYPE_KEYS = ["host", "concierge", "cohost", "other"] as const;
+
+  function propertyCountOf(r: EventRow): PropertyCountKey | null {
+    const v = metadataString(r.metadata, ["property_count_range"]);
+    return (PROPERTY_COUNT_KEYS as readonly string[]).includes(v ?? "") ? (v as PropertyCountKey) : null;
+  }
+  function userTypeOf(r: EventRow): UserTypeKey | null {
+    const v = metadataString(r.metadata, ["user_type"]);
+    return (USER_TYPE_KEYS as readonly string[]).includes(v ?? "") ? (v as UserTypeKey) : null;
+  }
+
+  const paywallRows = rows.filter((r) => r.event_name === "paywall_viewed");
+  const oneTimeClickRows = rows.filter((r) => r.event_name === "one_time_offer_clicked");
+  const plusClickRows = rows.filter((r) => r.event_name === "plus_offer_clicked");
+  const lifetimeClickRows = rows.filter((r) => r.event_name === "lifetime_offer_clicked");
+
+  function distinctCountBySegment<K extends string>(
+    rowsForEvent: EventRow[],
+    segmentOf: (r: EventRow) => K | null,
+    keys: readonly K[],
+    dedupeKeyFn: (r: EventRow) => string
+  ): Record<K, number> {
+    const result = {} as Record<K, number>;
+    const seen = {} as Record<K, Set<string>>;
+    for (const k of keys) {
+      result[k] = 0;
+      seen[k] = new Set();
+    }
+    for (const r of rowsForEvent) {
+      const seg = segmentOf(r);
+      if (!seg) continue;
+      const dk = dedupeKeyFn(r);
+      if (seen[seg].has(dk)) continue;
+      seen[seg].add(dk);
+      result[seg]++;
+    }
+    return result;
+  }
+
+  function rawCountBySegment<K extends string>(
+    rowsForEvent: EventRow[],
+    segmentOf: (r: EventRow) => K | null,
+    keys: readonly K[]
+  ): Record<K, number> {
+    const result = {} as Record<K, number>;
+    for (const k of keys) result[k] = 0;
+    for (const r of rowsForEvent) {
+      const seg = segmentOf(r);
+      if (seg) result[seg]++;
+    }
+    return result;
+  }
+
+  function revenueBySegment<K extends string>(
+    rowsForEvent: EventRow[],
+    segmentOf: (r: EventRow) => K | null,
+    keys: readonly K[]
+  ): Record<K, number> {
+    const result = {} as Record<K, number>;
+    for (const k of keys) result[k] = 0;
+    for (const r of rowsForEvent) {
+      const seg = segmentOf(r);
+      if (seg) result[seg] += metadataNumber(r.metadata, "amount") / 100;
+    }
+    return result;
+  }
+
+  function buildUserProfileDimension<K extends string>(
+    segmentOf: (r: EventRow) => K | null,
+    keys: readonly K[]
+  ): Record<K, ProfileSegmentStats> {
+    const completed = distinctCountBySegment(completedRows, segmentOf, keys, methodDedupeKey);
+    const paywalls = distinctCountBySegment(paywallRows, segmentOf, keys, distinctVisitor);
+    const oneTime = rawCountBySegment(oneTimeClickRows, segmentOf, keys);
+    const plus = rawCountBySegment(plusClickRows, segmentOf, keys);
+    const lifetime = rawCountBySegment(lifetimeClickRows, segmentOf, keys);
+    const payments = rawCountBySegment(paymentCompletedRows, segmentOf, keys);
+    const revenue = revenueBySegment(paymentCompletedRows, segmentOf, keys);
+    const result = {} as Record<K, ProfileSegmentStats>;
+    for (const k of keys) {
+      result[k] = {
+        analysesCompleted: completed[k],
+        paywallsViewed: paywalls[k],
+        oneTimeChosen: oneTime[k],
+        plusChosen: plus[k],
+        lifetimeChosen: lifetime[k],
+        payments: payments[k],
+        revenue: revenue[k],
+      };
+    }
+    return result;
+  }
+
+  const userProfile: UserProfileStats = {
+    byPropertyCount: buildUserProfileDimension(propertyCountOf, PROPERTY_COUNT_KEYS),
+    byUserType: buildUserProfileDimension(userTypeOf, USER_TYPE_KEYS),
+  };
+
   // ---- "Aha moment" pre-paywall A/B test ----
   function computeAbVariantStats(variant: "A" | "B"): AbVariantStats {
     const variantRows = rows.filter((r) => r.metadata?.ab_variant === variant);
@@ -801,6 +951,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     analysisPerformance,
     stepTimings,
     methodBreakdown,
+    userProfile,
     abTest,
     repeatUsage: {
       uniqueAnalysisUsers,

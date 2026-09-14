@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getLatestUnlockedAnalysisByEmail } from "@/lib/store";
-import { getSubscriptionByEmail, isPlusActive } from "@/lib/subscriptions";
+import { getSubscriptionByEmail, isPlusActive, isLifetimeActive } from "@/lib/subscriptions";
 
 const querySchema = z.object({ email: z.string().trim().email() });
 
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   const { email } = parsed.data;
 
   const subscription = await getSubscriptionByEmail(email);
-  if (isPlusActive(subscription)) {
+  if (isPlusActive(subscription) || isLifetimeActive(subscription)) {
     const latest = await getLatestUnlockedAnalysisByEmail(email);
     if (latest) return NextResponse.json({ found: true, analysisId: latest.id });
     // Active Plus but no unlocked analysis on file yet (edge case, e.g.

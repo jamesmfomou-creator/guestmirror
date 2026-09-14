@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { getAnalyticsDashboard, Period, MethodStats, StepTimingStats } from "@/lib/admin/analytics";
+import { getAnalyticsDashboard, Period, MethodStats, StepTimingStats, ProfileSegmentStats } from "@/lib/admin/analytics";
+import { listFeedback } from "@/lib/feedback";
 import { BRAND_NAME } from "@/lib/brand";
 
 export const metadata = { robots: { index: false, follow: false } };
@@ -9,6 +10,19 @@ const PERIOD_LABELS: Record<Period, string> = {
   today: "Aujourd'hui",
   "7d": "7 jours",
   "30d": "30 jours",
+};
+
+const USER_TYPE_LABELS: Record<string, string> = {
+  host: "Hôte",
+  concierge: "Conciergerie",
+  cohost: "Co-hôte",
+  other: "Autre",
+};
+
+const PLAN_LABELS: Record<string, string> = {
+  one_time: "Analyse unique",
+  plus: "Plus",
+  lifetime: "Lifetime",
 };
 
 function pct(n: number | null): string {
@@ -38,6 +52,12 @@ export default async function AdminAnalyticsPage({
   const sp = await searchParams;
   const period: Period = sp.period === "today" || sp.period === "30d" ? sp.period : "7d";
   const data = await getAnalyticsDashboard(period);
+  // Not period-scoped (all-time) -- feedback volume is low enough that a
+  // rolling funnel window isn't useful here, unlike the rest of this page.
+  const feedback = await listFeedback();
+  const feedbackPositive = feedback.filter((f) => f.feedbackRating === "positive").length;
+  const feedbackNegative = feedback.filter((f) => f.feedbackRating === "negative").length;
+  const feedbackRated = feedbackPositive + feedbackNegative;
 
   return (
     <div className="mx-auto max-w-5xl px-5 py-12">
@@ -189,6 +209,66 @@ export default async function AdminAnalyticsPage({
               <MethodRow label="Lien Airbnb" stats={data.methodBreakdown.airbnbUrl} />
               <MethodRow label="Capture d'écran" stats={data.methodBreakdown.screenshot} />
               <MethodRow label="Capture + lien" stats={data.methodBreakdown.mixed} />
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Profil des utilisateurs: nombre de biens / type x conversion.
+          See lib/admin/analytics.ts's userProfile -- built entirely from
+          analytics_events metadata (StepProfile answers propagated
+          through paywall_viewed / {plan}_offer_clicked / payment_completed). */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Profil des utilisateurs</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Basé sur la question posée après l&apos;import (facultative) — les analyses
+          antérieures à sa mise en place n&apos;y figurent pas.
+        </p>
+
+        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">Par nombre de biens</p>
+        <div className="mt-2 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[680px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Biens</th>
+                <th className="px-4 py-2.5 font-medium">Analyses</th>
+                <th className="px-4 py-2.5 font-medium">Paywalls vus</th>
+                <th className="px-4 py-2.5 font-medium">Analyse unique</th>
+                <th className="px-4 py-2.5 font-medium">Plus</th>
+                <th className="px-4 py-2.5 font-medium">Lifetime</th>
+                <th className="px-4 py-2.5 font-medium">Paiements</th>
+                <th className="px-4 py-2.5 font-medium">Revenu</th>
+              </tr>
+            </thead>
+            <tbody>
+              <ProfileRow label="1 logement" stats={data.userProfile.byPropertyCount["1"]} />
+              <ProfileRow label="2 à 5" stats={data.userProfile.byPropertyCount["2-5"]} />
+              <ProfileRow label="6 à 20" stats={data.userProfile.byPropertyCount["6-20"]} />
+              <ProfileRow label="21 et +" stats={data.userProfile.byPropertyCount["21+"]} />
+            </tbody>
+          </table>
+        </div>
+
+        <p className="mt-6 text-xs font-medium uppercase tracking-wide text-muted-2">Par type</p>
+        <div className="mt-2 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[680px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Type</th>
+                <th className="px-4 py-2.5 font-medium">Analyses</th>
+                <th className="px-4 py-2.5 font-medium">Paywalls vus</th>
+                <th className="px-4 py-2.5 font-medium">Analyse unique</th>
+                <th className="px-4 py-2.5 font-medium">Plus</th>
+                <th className="px-4 py-2.5 font-medium">Lifetime</th>
+                <th className="px-4 py-2.5 font-medium">Paiements</th>
+                <th className="px-4 py-2.5 font-medium">Revenu</th>
+              </tr>
+            </thead>
+            <tbody>
+              <ProfileRow label="Hôte" stats={data.userProfile.byUserType.host} />
+              <ProfileRow label="Conciergerie" stats={data.userProfile.byUserType.concierge} />
+              <ProfileRow label="Co-hôte" stats={data.userProfile.byUserType.cohost} />
+              <ProfileRow label="Autre" stats={data.userProfile.byUserType.other} />
             </tbody>
           </table>
         </div>
@@ -404,7 +484,7 @@ export default async function AdminAnalyticsPage({
       </section>
 
       {/* User list (all-time) */}
-      <section className="mt-10 mb-10">
+      <section className="mt-10">
         <h2 className="text-lg font-semibold">Utilisateurs (depuis le début)</h2>
         <p className="mt-1 text-sm text-muted-2">
           Classés par nombre d&apos;analyses, du plus actif au moins actif.
@@ -444,6 +524,65 @@ export default async function AdminAnalyticsPage({
           </div>
         )}
       </section>
+
+      {/* Feedback utilisateurs (all-time) -- see PostPurchaseFeedback +
+          /api/feedback. Never auto-published: testimonial_permission is
+          the explicit consent checkbox, shown here as its own column so
+          it's easy to tell which testimonials are actually usable
+          publicly (see TestimonialsSection, which only reads permission=true). */}
+      <section className="mt-10 mb-10">
+        <h2 className="text-lg font-semibold">Feedback utilisateurs</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Recueilli après achat (facultatif) — voir la case à cocher pour le consentement de
+          témoignage.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Kpi label="Réponses" value={feedback.length} />
+          <Kpi label="% positif" value={feedbackRated > 0 ? `${Math.round((feedbackPositive / feedbackRated) * 100)}%` : "—"} />
+          <Kpi label="% négatif" value={feedbackRated > 0 ? `${Math.round((feedbackNegative / feedbackRated) * 100)}%` : "—"} />
+          <Kpi label="Témoignages exploitables" value={feedback.filter((f) => f.testimonialPermission).length} />
+        </div>
+        {feedback.length === 0 ? (
+          <p className="mt-4 text-sm text-muted-2">Aucun retour pour l&apos;instant.</p>
+        ) : (
+          <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead>
+                <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                  <th className="px-4 py-2.5 font-medium">Date</th>
+                  <th className="px-4 py-2.5 font-medium">Avis</th>
+                  <th className="px-4 py-2.5 font-medium">Commentaire</th>
+                  <th className="px-4 py-2.5 font-medium">Témoignage</th>
+                  <th className="px-4 py-2.5 font-medium">Autorisé</th>
+                  <th className="px-4 py-2.5 font-medium">Type</th>
+                  <th className="px-4 py-2.5 font-medium">Biens</th>
+                  <th className="px-4 py-2.5 font-medium">Plan</th>
+                  <th className="px-4 py-2.5 font-medium">Email</th>
+                </tr>
+              </thead>
+              <tbody>
+                {feedback.map((f) => (
+                  <tr key={f.id} className="border-b border-border last:border-0 align-top">
+                    <td className="whitespace-nowrap px-4 py-2.5 text-muted-2">
+                      {new Date(f.createdAt).toLocaleDateString("fr-FR")}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {f.feedbackRating === "positive" ? "👍" : f.feedbackRating === "negative" ? "👎" : "—"}
+                    </td>
+                    <td className="max-w-[220px] px-4 py-2.5 text-muted">{f.feedbackText || "—"}</td>
+                    <td className="max-w-[220px] px-4 py-2.5 text-muted">{f.testimonialText || "—"}</td>
+                    <td className="px-4 py-2.5">{f.testimonialPermission ? "Oui" : "Non"}</td>
+                    <td className="px-4 py-2.5 text-muted-2">{USER_TYPE_LABELS[f.userType ?? ""] ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-muted-2">{f.propertyCountRange ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-muted-2">{PLAN_LABELS[f.plan ?? ""] ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-muted-2">{f.email ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -476,6 +615,21 @@ function StepTimingRow({ label, stats }: { label: string; stats: StepTimingStats
       <td className="px-4 py-2.5 tabular-nums">{seconds(stats.p75S)}</td>
       <td className="px-4 py-2.5 tabular-nums">{seconds(stats.p90S)}</td>
       <td className="px-4 py-2.5 tabular-nums text-muted-2">{stats.sampleSize}</td>
+    </tr>
+  );
+}
+
+function ProfileRow({ label, stats }: { label: string; stats: ProfileSegmentStats }) {
+  return (
+    <tr className="border-b border-border last:border-0">
+      <td className="px-4 py-2.5 font-medium">{label}</td>
+      <td className="px-4 py-2.5 tabular-nums">{stats.analysesCompleted}</td>
+      <td className="px-4 py-2.5 tabular-nums">{stats.paywallsViewed}</td>
+      <td className="px-4 py-2.5 tabular-nums">{stats.oneTimeChosen}</td>
+      <td className="px-4 py-2.5 tabular-nums">{stats.plusChosen}</td>
+      <td className="px-4 py-2.5 tabular-nums">{stats.lifetimeChosen}</td>
+      <td className="px-4 py-2.5 tabular-nums">{stats.payments}</td>
+      <td className="px-4 py-2.5 tabular-nums">{money(stats.revenue)}</td>
     </tr>
   );
 }

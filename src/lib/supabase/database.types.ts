@@ -22,6 +22,8 @@ export interface Database {
           is_unlocked: boolean;
           payment_status: string;
           previous_analysis_id: string | null;
+          user_type: string | null;
+          property_count_range: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -39,6 +41,8 @@ export interface Database {
           is_unlocked?: boolean;
           payment_status?: string;
           previous_analysis_id?: string | null;
+          user_type?: string | null;
+          property_count_range?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -127,6 +131,36 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["subscriptions"]["Insert"]>;
+        Relationships: [];
+      };
+      feedback: {
+        Row: {
+          id: string;
+          analysis_id: string | null;
+          email: string | null;
+          feedback_rating: string | null;
+          feedback_text: string | null;
+          testimonial_text: string | null;
+          testimonial_permission: boolean;
+          plan: string | null;
+          user_type: string | null;
+          property_count_range: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          analysis_id?: string | null;
+          email?: string | null;
+          feedback_rating?: string | null;
+          feedback_text?: string | null;
+          testimonial_text?: string | null;
+          testimonial_permission?: boolean;
+          plan?: string | null;
+          user_type?: string | null;
+          property_count_range?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["feedback"]["Insert"]>;
         Relationships: [];
       };
     };

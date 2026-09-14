@@ -3,7 +3,11 @@ import { getStripe } from "@/lib/stripe";
 import { unlockAnalysis, getAnalysis } from "@/lib/store";
 import { SUPABASE_CONFIGURED } from "@/lib/env";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { upsertSubscriptionFromCheckout, updateSubscriptionByStripeId } from "@/lib/subscriptions";
+import {
+  upsertSubscriptionFromCheckout,
+  upsertLifetimeFromCheckout,
+  updateSubscriptionByStripeId,
+} from "@/lib/subscriptions";
 import { sendUnlockEmail } from "@/lib/email";
 import { randomUUID } from "crypto";
 import type Stripe from "stripe";
@@ -76,6 +80,11 @@ async function trackServerEvent(params: {
       // AnalyzeWizard's inputMethod()) -- lets /admin/analytics compare
       // payment_completed by method without a second lookup.
       input_method: priorMetadata?.input_method ?? null,
+      // Same idea again for the profile question (see StepProfile) --
+      // lets /admin/analytics cross plan choice x payments with property
+      // count / user type without a second lookup.
+      user_type: priorMetadata?.user_type ?? null,
+      property_count_range: priorMetadata?.property_count_range ?? null,
     },
   });
 }
@@ -83,8 +92,21 @@ async function trackServerEvent(params: {
 async function handleOneTimeCheckout(session: Stripe.Checkout.Session) {
   const analysisId = session.metadata?.analysisId;
   if (!analysisId) return;
+  // Lifetime is also mode=payment (see api/checkout/route.ts), so it lands
+  // in this same webhook branch as the regular one-time unlock -- the only
+  // signal distinguishing them is this metadata field.
+  const isLifetime = session.metadata?.plan === "lifetime";
+  const plan = isLifetime ? "lifetime" : "one_time";
 
   await unlockAnalysis(analysisId, "paid");
+
+  if (isLifetime) {
+    const email = session.customer_details?.email || session.customer_email;
+    const customerId = typeof session.customer === "string" ? session.customer : (session.customer?.id ?? null);
+    if (email) {
+      await upsertLifetimeFromCheckout({ email, stripeCustomerId: customerId });
+    }
+  }
 
   if (!SUPABASE_CONFIGURED) return;
   const supabase = getSupabaseAdmin()!;
@@ -101,7 +123,7 @@ async function handleOneTimeCheckout(session: Stripe.Checkout.Session) {
     const dedupeKey = { field: "stripe_session_id", value: session.id };
     const metadata = {
       analysis_id: analysisId,
-      plan: "one_time",
+      plan,
       amount: session.amount_total ?? null,
       currency: "EUR",
       payment_status: "paid",
@@ -109,10 +131,15 @@ async function handleOneTimeCheckout(session: Stripe.Checkout.Session) {
       stripe_payment_intent_id: (session.payment_intent as string) ?? null,
     };
     // Keep firing the original generic event so the existing funnel table
-    // in /admin/analytics keeps working unchanged, plus the new plan-
-    // specific event for the one-time-vs-plus comparison.
+    // in /admin/analytics keeps working unchanged, plus the plan-specific
+    // event for the one-time-vs-plus-vs-lifetime comparison.
     await trackServerEvent({ eventName: "payment_completed", analysisId, dedupeKey, metadata });
-    await trackServerEvent({ eventName: "one_time_payment_completed", analysisId, dedupeKey, metadata });
+    await trackServerEvent({
+      eventName: isLifetime ? "lifetime_payment_completed" : "one_time_payment_completed",
+      analysisId,
+      dedupeKey,
+      metadata,
+    });
   } catch {
     // analytics must never break payment confirmation handling
   }

@@ -1,50 +1,58 @@
 "use client";
 
 import { useState } from "react";
-import { Check } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { PricingCards } from "@/components/pricing/PricingCards";
 import { track } from "@/lib/analytics";
 import { useInViewOnce } from "@/lib/tracking/useInViewOnce";
+import { UserType, PropertyCountRange } from "@/lib/types";
 
-const ONE_TIME_PRICE = 4.9;
-const PLUS_PRICE = 6.9;
+const PLAN_PRICES: Record<Plan, number | null> = { one_time: 4.9, plus: 6.9, lifetime: null };
 
-const ONE_TIME_FEATURES = ["Analyse complète", "Recommandations prioritaires", "Titres et description", "1 re-test après correction"];
+type Plan = "one_time" | "plus" | "lifetime";
 
-const PLUS_FEATURES = ["Plusieurs analyses", "Comparaisons A/B", "Re-tests", "Historique", "Plusieurs annonces"];
-
-type Plan = "one_time" | "plus";
+const MULTI_PROPERTY_RANGES: PropertyCountRange[] = ["2-5", "6-20", "21+"];
 
 export function Paywall({
   analysisId,
   canceled,
   overallScore,
   inputMethod,
+  lifetimePriceLabel,
+  userType,
+  propertyCountRange,
 }: {
   analysisId: string;
   canceled?: boolean;
   overallScore?: number;
   inputMethod?: "airbnb_url" | "screenshot" | "mixed";
+  lifetimePriceLabel?: string | null;
+  userType?: UserType | null;
+  propertyCountRange?: PropertyCountRange | null;
 }) {
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const ref = useInViewOnce<HTMLDivElement>(() => {
-    track("paywall_viewed", { analysisId, input_method: inputMethod });
+    track("paywall_viewed", { analysisId, input_method: inputMethod, user_type: userType, property_count_range: propertyCountRange });
     track("pricing_viewed", { analysisId });
   });
+
+  // UX nudge only (see lib/pricing.ts's PLUS_PLAN.concierge for the
+  // always-on static mention) -- never hides or blocks the other plans.
+  const showConciergeBanner =
+    userType === "concierge" || (propertyCountRange != null && MULTI_PROPERTY_RANGES.includes(propertyCountRange));
 
   async function handleSelect(plan: Plan) {
     setLoadingPlan(plan);
     setError(null);
-    const price = plan === "one_time" ? ONE_TIME_PRICE : PLUS_PRICE;
+    const price = PLAN_PRICES[plan];
 
-    track("unlock_clicked", { analysisId, plan, price, overall_score: overallScore });
-    track(plan === "one_time" ? "one_time_offer_clicked" : "plus_offer_clicked", {
-      analysisId,
-      price,
-      overall_score: overallScore,
-    });
+    track("unlock_clicked", { analysisId, plan, price, overall_score: overallScore, user_type: userType, property_count_range: propertyCountRange });
+    track(
+      plan === "one_time" ? "one_time_offer_clicked" : plan === "plus" ? "plus_offer_clicked" : "lifetime_offer_clicked",
+      { analysisId, price, overall_score: overallScore, user_type: userType, property_count_range: propertyCountRange }
+    );
 
     try {
       const res = await fetch("/api/checkout", {
@@ -55,12 +63,11 @@ export function Paywall({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Le paiement n'a pas pu être initié.");
 
-      track("checkout_started", { analysisId, plan, price, currency: "EUR", input_method: inputMethod });
-      track(plan === "one_time" ? "one_time_checkout_started" : "subscription_checkout_started", {
-        analysisId,
-        price,
-        currency: "EUR",
-      });
+      track("checkout_started", { analysisId, plan, price, currency: "EUR", input_method: inputMethod, user_type: userType, property_count_range: propertyCountRange });
+      track(
+        plan === "one_time" ? "one_time_checkout_started" : plan === "plus" ? "subscription_checkout_started" : "lifetime_checkout_started",
+        { analysisId, price, currency: "EUR" }
+      );
 
       window.location.href = json.url;
     } catch (err) {
@@ -92,54 +99,11 @@ export function Paywall({
         </p>
       )}
 
-      <div className="mx-auto mt-7 grid max-w-3xl gap-5 sm:grid-cols-2">
-        {/* GuestMirror Plus -- shown first on mobile, second (right) on desktop */}
-        <div className="order-1 sm:order-2">
-          <div className="card relative h-full overflow-hidden border-2 border-accent p-6 text-center shadow-[0_20px_50px_-24px_rgba(217,103,63,0.35)] sm:p-7">
-            <span className="inline-flex items-center rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-foreground">
-              Recommandé
-            </span>
-            <h3 className="mt-4 text-lg font-semibold tracking-tight">GuestMirror Plus</h3>
-            <p className="mt-1.5 text-sm text-muted">
-              Pour tester, comparer et améliorer régulièrement.
-            </p>
-            <p className="mt-4 text-4xl font-semibold tracking-tight">
-              6,90&nbsp;€<span className="text-base font-medium text-muted"> / mois</span>
-            </p>
-            <ul className="mx-auto mt-5 max-w-[220px] space-y-2.5 text-left">
-              {PLUS_FEATURES.map((f) => (
-                <li key={f} className="flex items-start gap-3 text-sm text-foreground">
-                  <Check size={16} className="mt-0.5 shrink-0 text-score-high" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <Button
-              size="lg"
-              className="mt-6 w-full"
-              onClick={() => handleSelect("plus")}
-              disabled={loadingPlan !== null}
-            >
-              {loadingPlan === "plus" ? "Redirection…" : "Passer à GuestMirror Plus — 6,90 €/mois"}
-            </Button>
-            <p className="mt-3 text-xs text-muted-2">Annulable à tout moment</p>
-          </div>
-        </div>
-
-        {/* Analyse unique -- shown second on mobile, first (left) on desktop */}
-        <div className="order-2 sm:order-1">
-          <div className="card h-full p-6 text-center sm:p-7">
-            <h3 className="text-lg font-semibold tracking-tight">Analyse unique</h3>
-            <p className="mt-1.5 text-sm text-muted">Pour optimiser une annonce maintenant.</p>
-            <p className="mt-4 text-4xl font-semibold tracking-tight">4,90&nbsp;€</p>
-            <ul className="mx-auto mt-5 max-w-[220px] space-y-2.5 text-left">
-              {ONE_TIME_FEATURES.map((f) => (
-                <li key={f} className="flex items-start gap-3 text-sm text-foreground">
-                  <Check size={16} className="mt-0.5 shrink-0 text-score-high" />
-                  {f}
-                </li>
-              ))}
-            </ul>
+      <div className="mt-7">
+        <PricingCards
+          lifetimePriceLabel={lifetimePriceLabel ?? null}
+          showConciergeBanner={showConciergeBanner}
+          oneTimeAction={
             <Button
               size="lg"
               variant="outline"
@@ -149,9 +113,29 @@ export function Paywall({
             >
               {loadingPlan === "one_time" ? "Redirection…" : "Débloquer mon analyse — 4,90 €"}
             </Button>
-            <p className="mt-3 text-xs text-muted-2">Paiement unique</p>
-          </div>
-        </div>
+          }
+          plusAction={
+            <Button
+              size="lg"
+              className="mt-6 w-full"
+              onClick={() => handleSelect("plus")}
+              disabled={loadingPlan !== null}
+            >
+              {loadingPlan === "plus" ? "Redirection…" : "Passer à GuestMirror Plus — 6,90 €/mois"}
+            </Button>
+          }
+          lifetimeAction={
+            <Button
+              size="lg"
+              variant="outline"
+              className="mt-6 w-full"
+              onClick={() => handleSelect("lifetime")}
+              disabled={loadingPlan !== null}
+            >
+              {loadingPlan === "lifetime" ? "Redirection…" : "Débloquer l'accès à vie"}
+            </Button>
+          }
+        />
       </div>
     </div>
   );

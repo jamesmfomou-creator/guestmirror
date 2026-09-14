@@ -8,6 +8,8 @@ export const analyzeRequestSchema = z.object({
   guest_capacity: z.string().trim().max(20).nullable().optional(),
   nightly_price: z.string().trim().max(20).nullable().optional(),
   previous_analysis_id: z.string().uuid().nullable().optional(),
+  user_type: z.enum(["host", "concierge", "cohost", "other"]).nullable().optional(),
+  property_count_range: z.enum(["1", "2-5", "6-20", "21+"]).nullable().optional(),
   images: z
     .array(
       z.object({

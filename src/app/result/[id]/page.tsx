@@ -28,9 +28,11 @@ import { OptionalInfoCard } from "@/components/result/OptionalInfoCard";
 import { ManageSubscriptionLink } from "@/components/result/ManageSubscriptionLink";
 import { lockedRecommendationCount } from "@/lib/utils";
 import { BRAND_NAME } from "@/lib/brand";
-import { getSubscriptionByEmail, isPlusActive } from "@/lib/subscriptions";
+import { getSubscriptionByEmail, isPlusActive, isLifetimeActive } from "@/lib/subscriptions";
 import { getAbVariantServer } from "@/lib/ab-server";
 import { getInputMethodForAnalysis } from "@/lib/inputMethod";
+import { getLifetimePriceLabel } from "@/lib/lifetimePrice";
+import { PostPurchaseFeedback } from "@/components/result/PostPurchaseFeedback";
 
 export const metadata: Metadata = {
   title: `Ton ${BRAND_NAME}`,
@@ -42,7 +44,7 @@ export default async function ResultPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ canceled?: string; unlocked?: string }>;
+  searchParams: Promise<{ canceled?: string; unlocked?: string; plus?: string; lifetime?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -53,7 +55,8 @@ export default async function ResultPage({
   const images = await resolveImageUrls(analysis.images);
   const subscription = await getSubscriptionByEmail(analysis.email);
   const plusActive = isPlusActive(subscription);
-  const unlocked = analysis.is_unlocked || plusActive;
+  const lifetimeActive = isLifetimeActive(subscription);
+  const unlocked = analysis.is_unlocked || plusActive || lifetimeActive;
   const variant = await getAbVariantServer();
   // Read from the analysis_completed event tracked at submission time --
   // NOT re-derived from analysis.images, since a pure-URL submission also
@@ -65,6 +68,7 @@ export default async function ResultPage({
   const resultInputMethod =
     (await getInputMethodForAnalysis(id)) ??
     (analysis.listing_url ? (analysis.images.length > 0 ? "mixed" : "airbnb_url") : "screenshot");
+  const lifetimePriceLabel = await getLifetimePriceLabel();
 
   const previous = analysis.previous_analysis_id
     ? await getAnalysis(analysis.previous_analysis_id)
@@ -74,6 +78,14 @@ export default async function ResultPage({
     <div className="px-5 pb-24 pt-12 sm:pt-16">
       {unlocked && sp.unlocked === "1" && (
         <AnalyticsBeacon event="purchase_completed" props={{ analysisId: id }} />
+      )}
+      {unlocked && sp.unlocked === "1" && (
+        <PostPurchaseFeedback
+          analysisId={id}
+          plan={sp.lifetime === "1" ? "lifetime" : sp.plus === "1" ? "plus" : "one_time"}
+          userType={analysis.user_type}
+          propertyCountRange={analysis.property_count_range}
+        />
       )}
       {unlocked && <AnalyticsBeacon event="full_analysis_viewed" props={{ analysisId: id }} />}
       {unlocked && previous && (
@@ -119,7 +131,7 @@ export default async function ResultPage({
           <FirstHesitation result={analysis.result} />
           <MainProblem result={analysis.result} analysisId={id} />
           <LockedTeaser count={lockedRecommendationCount(analysis.result)} analysisId={id} />
-          <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} />
+          <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
             {analysis.result.disclaimer}
           </p>
@@ -140,7 +152,7 @@ export default async function ResultPage({
             count={lockedRecommendationCount(analysis.result)}
           />
           <UnlockCtaGate analysisId={id}>
-            <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} />
+            <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />
           </UnlockCtaGate>
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
             {analysis.result.disclaimer}
@@ -175,6 +187,13 @@ export default async function ResultPage({
             GuestMirror Plus actif
           </span>
           <ManageSubscriptionLink email={analysis.email} />
+        </p>
+      )}
+      {unlocked && lifetimeActive && (
+        <p className="mx-auto mt-10 flex max-w-xl items-center justify-center gap-2 text-xs text-muted-2">
+          <span className="inline-flex items-center rounded-full bg-accent-soft px-2.5 py-1 font-medium text-accent-hover">
+            GuestMirror Lifetime actif
+          </span>
         </p>
       )}
 

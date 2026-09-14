@@ -9,29 +9,29 @@ import { LandingCompareTeaser } from "@/components/landing/LandingCompareTeaser"
 import { WhatWeSee } from "@/components/landing/WhatWeSee";
 import { ReportMockup } from "@/components/landing/ReportMockup";
 import { SimpleBand } from "@/components/landing/SimpleBand";
+import { SocialProof } from "@/components/landing/SocialProof";
+import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
+import { PricingCards } from "@/components/pricing/PricingCards";
 import { FAQAccordion } from "@/components/landing/FAQAccordion";
 import { Reveal } from "@/components/landing/Reveal";
 import { BRAND_NAME } from "@/lib/brand";
 import { CtaTrackedButton } from "@/components/landing/CtaTrackedButton";
+import { getLifetimePriceLabel } from "@/lib/lifetimePrice";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
+
+// Social proof count and testimonials are real DB reads (see
+// SocialProof/TestimonialsSection) -- revalidate periodically instead of
+// on every request so the landing page stays effectively static.
+export const revalidate = 3600;
 
 const CHECKS = [
   "Gratuit pour commencer",
   "Résultat en quelques instants",
   "Aucune connexion Airbnb",
 ];
-
-const ONE_TIME_FEATURES = [
-  "Analyse complète",
-  "Recommandations prioritaires",
-  "Titres et description",
-  "1 re-test après correction",
-];
-
-const PLUS_FEATURES = ["Plusieurs analyses", "Comparaisons A/B", "Re-tests", "Historique", "Plusieurs annonces"];
 
 const FAQ = [
   {
@@ -56,7 +56,9 @@ const FAQ = [
   },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const lifetimePriceLabel = await getLifetimePriceLabel();
+
   return (
     <>
       <AnalyticsBeacon event="landing_view" />
@@ -88,6 +90,9 @@ export default function LandingPage() {
                   {c}
                 </span>
               ))}
+            </div>
+            <div className="mt-4 flex justify-center lg:justify-start">
+              <SocialProof />
             </div>
           </div>
 
@@ -142,52 +147,10 @@ export default function LandingPage() {
             comparer tes améliorations.
           </p>
 
-          <div className="mx-auto mt-8 grid max-w-3xl gap-5 sm:grid-cols-2">
-            <div className="order-1 sm:order-2">
-              <div className="card relative h-full overflow-hidden border-2 border-accent p-6 text-center shadow-[0_20px_50px_-24px_rgba(217,103,63,0.35)] sm:p-7">
-                <span className="inline-flex items-center rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-foreground">
-                  Recommandé
-                </span>
-                <h3 className="mt-4 text-lg font-semibold tracking-tight">GuestMirror Plus</h3>
-                <p className="mt-1.5 text-sm text-muted">
-                  Pour tester, comparer et améliorer régulièrement.
-                </p>
-                <p className="mt-4 text-4xl font-semibold tracking-tight">
-                  6,90&nbsp;€<span className="text-base font-medium text-muted"> / mois</span>
-                </p>
-                <ul className="mx-auto mt-5 max-w-[220px] space-y-2.5 text-left">
-                  {PLUS_FEATURES.map((f) => (
-                    <li key={f} className="flex items-start gap-3 text-sm text-foreground">
-                      <Check size={16} className="mt-0.5 shrink-0 text-score-high" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <CtaTrackedButton
-                  href="/analyze"
-                  size="lg"
-                  className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
-                  ctaLocation="pricing_plus"
-                >
-                  Passer à GuestMirror Plus — 6,90&nbsp;€/mois
-                </CtaTrackedButton>
-                <p className="mt-3 text-xs text-muted-2">Annulable à tout moment</p>
-              </div>
-            </div>
-
-            <div className="order-2 sm:order-1">
-              <div className="card h-full p-6 text-center sm:p-7">
-                <h3 className="text-lg font-semibold tracking-tight">Analyse unique</h3>
-                <p className="mt-1.5 text-sm text-muted">Pour optimiser une annonce maintenant.</p>
-                <p className="mt-4 text-4xl font-semibold tracking-tight">4,90&nbsp;€</p>
-                <ul className="mx-auto mt-5 max-w-[220px] space-y-2.5 text-left">
-                  {ONE_TIME_FEATURES.map((f) => (
-                    <li key={f} className="flex items-start gap-3 text-sm text-foreground">
-                      <Check size={16} className="mt-0.5 shrink-0 text-score-high" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
+          <div className="mt-8">
+            <PricingCards
+              lifetimePriceLabel={lifetimePriceLabel}
+              oneTimeAction={
                 <CtaTrackedButton
                   href="/analyze"
                   size="lg"
@@ -197,12 +160,34 @@ export default function LandingPage() {
                 >
                   Débloquer mon analyse — 4,90&nbsp;€
                 </CtaTrackedButton>
-                <p className="mt-3 text-xs text-muted-2">Paiement unique</p>
-              </div>
-            </div>
+              }
+              plusAction={
+                <CtaTrackedButton
+                  href="/analyze"
+                  size="lg"
+                  className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
+                  ctaLocation="pricing_plus"
+                >
+                  Passer à GuestMirror Plus — 6,90&nbsp;€/mois
+                </CtaTrackedButton>
+              }
+              lifetimeAction={
+                <CtaTrackedButton
+                  href="/analyze"
+                  size="lg"
+                  variant="outline"
+                  className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
+                  ctaLocation="pricing_lifetime"
+                >
+                  Débloquer l&apos;accès à vie
+                </CtaTrackedButton>
+              }
+            />
           </div>
         </Reveal>
       </section>
+
+      <TestimonialsSection />
 
       {/* FAQ */}
       <section className="border-t border-border/70 py-20 sm:py-28">

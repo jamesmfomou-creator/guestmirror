@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { StepImport } from "./StepImport";
+import { StepProfile } from "./StepProfile";
 import { StepEmail } from "./StepEmail";
 import { StepAnalyzing } from "./StepAnalyzing";
 import { AnalysisAhaFlow } from "./AnalysisAhaFlow";
@@ -13,8 +14,9 @@ import { isAirbnbUrl } from "@/lib/airbnbUrl";
 import { takePendingFiles } from "@/lib/pendingUpload";
 import { BRAND_NAME } from "@/lib/brand";
 import { verdictFor } from "@/lib/utils";
+import { UserType, PropertyCountRange } from "@/lib/types";
 
-type Step = "import" | "email" | "analyzing";
+type Step = "import" | "profile" | "email" | "analyzing";
 
 const MAX_IMAGES = 10;
 const MIN_ANIMATION_MS = 3400;
@@ -45,6 +47,8 @@ export function AnalyzeWizard() {
     }));
   });
   const [email, setEmail] = useState("");
+  const [userType, setUserType] = useState<UserType | null>(null);
+  const [propertyCountRange, setPropertyCountRange] = useState<PropertyCountRange | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -96,16 +100,24 @@ export function AnalyzeWizard() {
     setImages((prev) => prev.filter((i) => i.id !== id));
   }
 
-  function goToEmail() {
+  function goToProfile() {
     const trimmedUrl = url.trim();
     if (trimmedUrl && images.length === 0 && !isAirbnbUrl(trimmedUrl)) {
       setError("Ce lien Airbnb ne semble pas valide.");
       return;
     }
+    setStep("profile");
+  }
+
+  function goToEmail() {
+    const trimmedUrl = url.trim();
     const method = inputMethod();
     track("listing_input_submitted", { image_count: images.length, input_method: method });
     if (trimmedUrl) track("airbnb_url_submitted", { input_method: method });
     if (images.length > 0) track("screenshot_upload_completed", { input_method: method, image_count: images.length });
+    if (userType || propertyCountRange) {
+      track("profile_submitted", { user_type: userType, property_count_range: propertyCountRange });
+    }
     setStep("email");
   }
 
@@ -120,14 +132,30 @@ export function AnalyzeWizard() {
       has_listing_url: url.trim().length > 0,
       input_method: method,
       duration_ms: Date.now() - (startedAt.current ?? Date.now()),
+      user_type: userType,
+      property_count_range: propertyCountRange,
       ...json.timings,
     });
     // Reaching here on a pure-URL submission (no screenshot) means the
     // backend fetched and used the real listing content -- if extraction
     // had failed, the catch block below would have redirected back to
     // "import" instead of ever reaching this success path.
+    //
+    // Carries the same input_method/user_type/property_count_range as
+    // analysis_completed above (not just analysisId): both calls fire
+    // within milliseconds of each other and race over the network, so
+    // whichever one Supabase inserts first becomes the "earliest event"
+    // the Stripe webhook later propagates ab_variant/input_method/profile
+    // fields from (see trackServerEvent in api/stripe/webhook/route.ts).
+    // Without this, payment_completed for a URL-based purchase could
+    // silently lose those fields depending on which request won the race.
     if (method === "airbnb_url") {
-      track("airbnb_url_extraction_success", { analysisId: json.id });
+      track("airbnb_url_extraction_success", {
+        analysisId: json.id,
+        input_method: method,
+        user_type: userType,
+        property_count_range: propertyCountRange,
+      });
     }
     if (previousAnalysisId) track("rescan_completed");
     router.push(`/result/${json.id}`);
@@ -177,6 +205,8 @@ export function AnalyzeWizard() {
           nightly_price: null,
           images: encodedImages,
           previous_analysis_id: previousAnalysisId || null,
+          user_type: userType,
+          property_count_range: propertyCountRange,
         }),
         signal: timeoutController.signal,
       });
@@ -289,9 +319,18 @@ export function AnalyzeWizard() {
           images={images}
           onAddFiles={handleAddFiles}
           onRemoveImage={handleRemoveImage}
-          onContinue={goToEmail}
+          onContinue={goToProfile}
           canContinue={url.trim().length > 0 || images.length > 0}
           error={error || apiError}
+        />
+      )}
+      {step === "profile" && (
+        <StepProfile
+          propertyCountRange={propertyCountRange}
+          userType={userType}
+          onSelectPropertyCountRange={setPropertyCountRange}
+          onSelectUserType={setUserType}
+          onContinue={goToEmail}
         />
       )}
       {step === "email" && (

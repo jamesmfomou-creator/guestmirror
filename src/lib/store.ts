@@ -2,7 +2,14 @@ import { randomUUID } from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { AnalysisInput, AnalysisRecord, AnalysisResult, PaymentStatus } from "@/lib/types";
+import {
+  AnalysisInput,
+  AnalysisRecord,
+  AnalysisResult,
+  PaymentStatus,
+  PropertyCountRange,
+  UserType,
+} from "@/lib/types";
 import { SUPABASE_CONFIGURED } from "@/lib/env";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { BRAND_SLUG } from "@/lib/brand";
@@ -54,6 +61,8 @@ export async function createAnalysis(params: {
   userId?: string | null;
   previousAnalysisId?: string | null;
   isUnlocked?: boolean;
+  userType?: UserType | null;
+  propertyCountRange?: PropertyCountRange | null;
 }): Promise<AnalysisRecord> {
   const record: AnalysisRecord = {
     id: randomUUID(),
@@ -70,6 +79,8 @@ export async function createAnalysis(params: {
     is_unlocked: params.isUnlocked ?? false,
     payment_status: "none",
     previous_analysis_id: params.previousAnalysisId ?? null,
+    user_type: params.userType ?? null,
+    property_count_range: params.propertyCountRange ?? null,
     created_at: nowIso(),
     updated_at: nowIso(),
   };
@@ -90,6 +101,8 @@ export async function createAnalysis(params: {
       is_unlocked: record.is_unlocked,
       payment_status: record.payment_status,
       previous_analysis_id: record.previous_analysis_id,
+      user_type: record.user_type,
+      property_count_range: record.property_count_range,
     });
     if (error) throw new Error(`Supabase insert failed: ${error.message}`);
 
@@ -137,12 +150,29 @@ export async function getAnalysis(id: string): Promise<AnalysisRecord | null> {
       is_unlocked: row.is_unlocked as boolean,
       payment_status: row.payment_status as PaymentStatus,
       previous_analysis_id: (row.previous_analysis_id as string) ?? null,
+      user_type: (row.user_type as UserType) ?? null,
+      property_count_range: (row.property_count_range as PropertyCountRange) ?? null,
       created_at: row.created_at as string,
       updated_at: row.updated_at as string,
     };
   }
 
   return readLocalRecord(id);
+}
+
+/**
+ * Real, non-invented number for the landing page's social proof line (see
+ * AGENTS.md-adjacent instruction: never fabricate a number). Total count
+ * of analyses ever created, free or paid -- the closest existing metric to
+ * "annonces analysées". Falls back to null (component renders nothing)
+ * when Supabase isn't configured rather than guessing.
+ */
+export async function getTotalAnalysesCount(): Promise<number | null> {
+  if (!SUPABASE_CONFIGURED) return null;
+  const supabase = getSupabaseAdmin()!;
+  const { count, error } = await supabase.from("analyses").select("*", { count: "exact", head: true });
+  if (error) return null;
+  return count ?? null;
 }
 
 /**
