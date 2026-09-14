@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
+import { LoadingShowcase } from "./LoadingShowcase";
 
 // Messages are staged on elapsed time, not on real backend state (the
 // analysis is a single request with no incremental progress to report).
@@ -131,6 +132,7 @@ export function StepAnalyzing({
           })
         )}
       </div>
+      <LoadingShowcase className="mt-10 w-full max-w-sm" />
     </div>
   );
 }

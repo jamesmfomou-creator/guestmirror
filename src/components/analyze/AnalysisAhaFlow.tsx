@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
+import { LoadingShowcase } from "./LoadingShowcase";
 
 // Variant B of the pre-paywall "Aha moment" A/B test (see lib/ab.ts).
 // Deliberately a separate component from StepAnalyzing rather than a
@@ -199,6 +200,7 @@ export function AnalysisAhaFlow({
           )}
         </div>
       )}
+      <LoadingShowcase className="mt-10 w-full max-w-sm" />
     </div>
   );
 }

@@ -11,6 +11,8 @@ import { ReportMockup } from "@/components/landing/ReportMockup";
 import { SimpleBand } from "@/components/landing/SimpleBand";
 import { SocialProof } from "@/components/landing/SocialProof";
 import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
+import { ScrollingShowcase } from "@/components/landing/ScrollingShowcase";
+import { getShowcaseItems } from "@/lib/showcase";
 import { PricingCards } from "@/components/pricing/PricingCards";
 import { FAQAccordion } from "@/components/landing/FAQAccordion";
 import { Reveal } from "@/components/landing/Reveal";
@@ -58,6 +60,7 @@ const FAQ = [
 
 export default async function LandingPage() {
   const lifetimePriceLabel = await getLifetimePriceLabel();
+  const showcaseItems = await getShowcaseItems();
 
   return (
     <>
@@ -105,6 +108,8 @@ export default async function LandingPage() {
           </div>
         </div>
       </section>
+
+      <ScrollingShowcase items={showcaseItems} className="border-y border-border/70 bg-background-alt/50 py-4" />
 
       <div id="comment-ca-marche">
         <StepsShowcase />
