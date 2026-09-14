@@ -3,6 +3,7 @@ import { AnalysisInput, AnalysisResult } from "@/lib/types";
 import { DEMO_MODE } from "@/lib/env";
 import { DEMO_RESULT } from "@/lib/demo-data";
 import { BRAND_NAME } from "@/lib/brand";
+import { AIRBNB_TITLE_MAX_LENGTH, sanitizeAirbnbTitles, titleCharCount } from "@/lib/titles";
 
 export class AnalysisError extends Error {
   constructor(message: string) {
@@ -39,7 +40,8 @@ CE QUE TU N'ES PAS : tu n'es pas un outil de SEO Airbnb, ni un expert de l'algor
 - "first_hesitation" est UNE phrase à la première personne qui exprime le doute ou l'hésitation précise que ressentirait un voyageur juste après avoir vu l'annonce (ex: "Le logement a l'air agréable, mais je ne vois pas encore pourquoi je choisirais celui-ci plutôt que les autres."). Distincte de "summary" : summary décrit ce qui est compris, first_hesitation décrit ce qui freine.
 - "five_second_scores" est un test de première impression indépendant de "scores" : note en 5 secondes l'impact visuel (attire-t-il l'œil ?), la différenciation (se démarque-t-il des autres annonces ?), la clarté (comprend-on vite ce qui est montré ?), la valeur perçue (a-t-on l'impression que ça vaut le prix ?), la confiance (donne-t-il envie de faire confiance à l'hôte ?), l'envie (donne-t-il envie de cliquer ?).
 - "guest_questions" liste 3 à 5 questions concrètes qu'un voyageur se poserait encore après avoir vu l'annonce, faute d'informations claires (formulées à la première personne, ex: "Est-ce que la terrasse est privée ?").
-- "top_priorities[0]" doit être LE problème le plus impactant, formulé dans "current_issue" comme une observation directe et concrète (ex: "Ta terrasse semble être ton meilleur atout, mais elle n'apparaît qu'en photo n°6."), pas un principe général.`;
+- "top_priorities[0]" doit être LE problème le plus impactant, formulé dans "current_issue" comme une observation directe et concrète (ex: "Ta terrasse semble être ton meilleur atout, mais elle n'apparaît qu'en photo n°6."), pas un principe général.
+- "title_analysis.suggested_titles" : propose plusieurs titres Airbnb directement utilisables, courts, naturels et spécifiques à CE logement (jamais une formulation générique interchangeable d'une annonce à l'autre, jamais de bourrage de mots-clés). Chaque titre doit faire au maximum ${AIRBNB_TITLE_MAX_LENGTH} caractères, espaces compris — c'est une contrainte stricte d'Airbnb, pas une suggestion. En priorité, fais tenir l'atout principal du logement et l'élément différenciant dans cette limite plutôt que d'énumérer plusieurs qualités.`;
 
 // Always the same fixed sentence (see the schema's old "disclaimer" field
 // and the system prompt instruction that used to ask the model to
@@ -129,7 +131,7 @@ const RESULT_SCHEMA = {
       properties: {
         current_title: { type: "string" },
         issues: { type: "array", items: { type: "string" } },
-        suggested_titles: { type: "array", items: { type: "string" } },
+        suggested_titles: { type: "array", items: { type: "string", maxLength: AIRBNB_TITLE_MAX_LENGTH } },
       },
       required: ["current_title", "issues", "suggested_titles"],
     },
@@ -304,5 +306,26 @@ export async function analyzeListing(params: {
     );
   }
 
-  return { ...(input as AnalysisResult), disclaimer: DISCLAIMER };
+  // The schema's maxLength/the prompt's instruction steer the model but
+  // aren't a hard guarantee (same reasoning as the overall_score check
+  // above) -- re-validate every suggested title here and clean up any
+  // that overshoot, rather than trusting the model's count. Never a
+  // mid-word substring cut: sanitizeAirbnbTitle only drops whole trailing
+  // words, and drops the title entirely (never shows a mangled one) if
+  // even a single word is already over the limit.
+  const rawTitles = input.title_analysis?.suggested_titles ?? [];
+  const cleanTitles = sanitizeAirbnbTitles(rawTitles);
+  console.log(
+    `[ai] generated_title_length raw=${JSON.stringify(rawTitles.map(titleCharCount))} final=${JSON.stringify(cleanTitles.map(titleCharCount))} dropped=${rawTitles.length - cleanTitles.length}`
+  );
+
+  return {
+    ...(input as AnalysisResult),
+    disclaimer: DISCLAIMER,
+    title_analysis: {
+      current_title: input.title_analysis?.current_title ?? "",
+      issues: input.title_analysis?.issues ?? [],
+      suggested_titles: cleanTitles,
+    },
+  };
 }

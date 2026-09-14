@@ -2,9 +2,15 @@ import { AnalysisResult } from "@/lib/types";
 import { BRAND_NAME } from "@/lib/brand";
 import { Section } from "./Section";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { AIRBNB_TITLE_MAX_LENGTH, sanitizeAirbnbTitles, titleCharCount } from "@/lib/titles";
 
 export function TitleSection({ result }: { result: AnalysisResult }) {
   const { title_analysis } = result;
+  // Re-sanitized here too (not just at generation time in lib/ai.ts): a
+  // no-op for new analyses (already clean when stored), but guarantees an
+  // analysis stored before this limit existed still never renders a
+  // title over AIRBNB_TITLE_MAX_LENGTH.
+  const suggestedTitles = sanitizeAirbnbTitles(title_analysis.suggested_titles);
   return (
     <Section title="Ton titre">
       <div className="card p-6">
@@ -31,9 +37,14 @@ export function TitleSection({ result }: { result: AnalysisResult }) {
           Propositions {BRAND_NAME}
         </p>
         <div className="mt-3 space-y-3">
-          {title_analysis.suggested_titles.map((t) => (
+          {suggestedTitles.map((t) => (
             <div key={t} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
-              <span className="text-sm text-foreground">{t}</span>
+              <div>
+                <span className="text-sm text-foreground">{t}</span>
+                <p className="mt-1 text-xs text-muted-2">
+                  {titleCharCount(t)} / {AIRBNB_TITLE_MAX_LENGTH} caractères
+                </p>
+              </div>
               <CopyButton text={t} />
             </div>
           ))}

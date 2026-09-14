@@ -142,9 +142,9 @@ export const DEMO_RESULT: AnalysisResult = {
       "Ne mentionne pas l'atout principal du logement (la terrasse avec vue)",
     ],
     suggested_titles: [
-      "Appartement lumineux avec terrasse et vue, proche du Vieux-Port",
-      "T2 calme avec terrasse panoramique, à 5 min du Vieux-Port",
-      "Terrasse avec vue, appartement rénové au cœur de Marseille",
+      "Appartement lumineux, terrasse vue Vieux-Port",
+      "T2 calme, terrasse panoramique près Vieux-Port",
+      "Terrasse avec vue, appartement rénové à Marseille",
     ],
   },
   description_analysis: {
