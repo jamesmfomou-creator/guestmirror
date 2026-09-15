@@ -40,6 +40,29 @@ async function sendEmail(params: { to: string; subject: string; html: string }):
   }
 }
 
+/**
+ * One-off feedback request to users who completed an analysis but never
+ * paid (see scripts/send-feedback-campaign.ts) -- deliberately plain,
+ * no button, no branding-heavy layout, no link: the sole purpose is a
+ * reply with feedback, not a click.
+ */
+export async function sendFeedbackRequestEmail(params: { to: string }): Promise<void> {
+  await sendEmail({
+    to: params.to,
+    subject: "Ton avis sur GuestMirror",
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; color: #1c1a17; font-size: 15px; line-height: 1.6;">
+        <p>Bonjour,</p>
+        <p>Merci d'avoir testé GuestMirror 🙏</p>
+        <p>Je suis en train d'améliorer l'outil et j'aimerais beaucoup avoir ton retour.</p>
+        <p>Qu'est-ce que tu as aimé ?<br>Et s'il y avait une chose à améliorer ou à ajouter, ce serait quoi ?</p>
+        <p>Même quelques mots me suffisent.</p>
+        <p>Merci beaucoup,<br>James<br>${BRAND_NAME}</p>
+      </div>
+    `,
+  });
+}
+
 export async function sendUnlockEmail(params: {
   to: string;
   analysisId: string;

@@ -163,6 +163,30 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["feedback"]["Insert"]>;
         Relationships: [];
       };
+      email_campaign_sends: {
+        Row: {
+          id: string;
+          email: string;
+          campaign_key: string;
+          sent_at: string | null;
+          delivered_at: string | null;
+          opened_at: string | null;
+          clicked_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          campaign_key: string;
+          sent_at?: string | null;
+          delivered_at?: string | null;
+          opened_at?: string | null;
+          clicked_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["email_campaign_sends"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
