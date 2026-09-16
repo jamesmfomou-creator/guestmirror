@@ -22,8 +22,25 @@
  *   batched), so a crash mid-run leaves an accurate picture of exactly
  *   who was actually sent to.
  */
+import fs from "fs";
+import path from "path";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../src/lib/supabase/database.types";
+
+// This is a standalone script, not run through Next.js -- .env.local
+// isn't auto-loaded the way it is for `next dev`/`next build`. Minimal
+// manual load rather than adding a dotenv dependency for one script.
+function loadEnvLocal() {
+  const envPath = path.join(__dirname, "..", ".env.local");
+  if (!fs.existsSync(envPath)) return;
+  for (const line of fs.readFileSync(envPath, "utf-8").split("\n")) {
+    const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (!match) continue;
+    const [, key, value] = match;
+    if (!(key in process.env)) process.env[key] = value;
+  }
+}
+loadEnvLocal();
 
 const CAMPAIGN_KEY = "feedback_non_buyers_v1";
 const SEND_DELAY_MS = 500;
