@@ -63,6 +63,27 @@ export async function sendFeedbackRequestEmail(params: { to: string }): Promise<
   });
 }
 
+/**
+ * Follow-up to sendFeedbackRequestEmail for anyone who hasn't replied to
+ * the first request (see scripts/send-feedback-campaign-reminder.ts) --
+ * shorter, acknowledges it's a reminder, same plain/no-button spirit.
+ */
+export async function sendFeedbackReminderEmail(params: { to: string }): Promise<void> {
+  await sendEmail({
+    to: params.to,
+    subject: "Petit rappel — ton avis sur GuestMirror",
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; color: #1c1a17; font-size: 15px; line-height: 1.6;">
+        <p>Bonjour,</p>
+        <p>Je me permets de revenir vers toi — je n'ai pas eu de retour de ta part et ton avis compte vraiment pour moi.</p>
+        <p>Qu'est-ce qui t'a plu dans GuestMirror ? Et si tu changeais une seule chose, ce serait quoi ?</p>
+        <p>Même deux mots suffisent 🙏</p>
+        <p>Merci beaucoup,<br>James<br>${BRAND_NAME}</p>
+      </div>
+    `,
+  });
+}
+
 export async function sendUnlockEmail(params: {
   to: string;
   analysisId: string;
