@@ -10,6 +10,7 @@ export const analyzeRequestSchema = z.object({
   previous_analysis_id: z.string().uuid().nullable().optional(),
   user_type: z.enum(["host", "concierge", "cohost", "other"]).nullable().optional(),
   property_count_range: z.enum(["1", "2-5", "6-20", "21+"]).nullable().optional(),
+  promo_code: z.string().trim().max(64).nullable().optional(),
   images: z
     .array(
       z.object({

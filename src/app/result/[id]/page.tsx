@@ -197,6 +197,27 @@ export default async function ResultPage({
         </p>
       )}
 
+      {/* Free-trial link (/analyze?promo=<code>, see api/analyze/route.ts):
+          unlocked for free, no payment -- once they've seen the full
+          report, propose Lifetime as the natural next step. Never shown
+          to a real Plus/Lifetime subscriber (nothing to upsell there). */}
+      {unlocked && analysis.promo_code && !plusActive && !lifetimeActive && (
+        <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-accent/30 bg-accent-soft px-5 py-4 text-center">
+          <p className="text-sm font-medium text-accent-hover">
+            🎁 Cette analyse t&apos;a été offerte par {BRAND_NAME}.
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            Envie d&apos;un accès illimité et à vie à toutes tes prochaines analyses ?
+          </p>
+          <a
+            href="/pricing"
+            className="mt-3 inline-block text-sm font-semibold text-accent-hover underline underline-offset-2"
+          >
+            Découvrir {BRAND_NAME} Lifetime →
+          </a>
+        </div>
+      )}
+
       {unlocked && (
         <p className="mx-auto mt-14 max-w-xl text-center text-xs leading-relaxed text-muted-2">
           {analysis.result.disclaimer}

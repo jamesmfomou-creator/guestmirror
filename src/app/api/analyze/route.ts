@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeRequestSchema, MAX_IMAGE_BYTES } from "@/lib/validation";
 import { analyzeListing, AnalysisError } from "@/lib/ai";
-import { createAnalysis, getAnalysis } from "@/lib/store";
+import { createAnalysis, getAnalysis, getPromoCodeStatus } from "@/lib/store";
 import { storeImage } from "@/lib/images";
 import { DEMO_MODE } from "@/lib/env";
 import { DEMO_IMAGES, DEMO_RESULT, DEMO_RESULT_AFTER } from "@/lib/demo-data";
@@ -117,6 +117,21 @@ export async function POST(req: NextRequest) {
       previousAnalysis = await getAnalysis(data.previous_analysis_id);
     }
 
+    // Free-trial link (/analyze?promo=<code>, see StepImport/AnalyzeWizard):
+    // grants a real unlock, no payment, only for the first
+    // max_free_unlocks analyses submitted with a given code. An unknown,
+    // typo'd, or exhausted code is silently treated as "no code" rather
+    // than an error -- it must never block a normal submission. Once the
+    // quota is used up, further analyses with the same code are entirely
+    // normal (the existing paywall, including Lifetime, applies as-is).
+    let promoCodeToRecord: string | null = null;
+    if (data.promo_code) {
+      const status = await getPromoCodeStatus(data.promo_code);
+      if (status && status.usedCount < status.maxFreeUnlocks) {
+        promoCodeToRecord = data.promo_code;
+      }
+    }
+
     if (DEMO_MODE) {
       const result = previousAnalysis ? DEMO_RESULT_AFTER : DEMO_RESULT;
       const record = await createAnalysis({
@@ -127,6 +142,8 @@ export async function POST(req: NextRequest) {
         previousAnalysisId: data.previous_analysis_id || null,
         userType: data.user_type || null,
         propertyCountRange: data.property_count_range || null,
+        isUnlocked: Boolean(promoCodeToRecord),
+        promoCode: promoCodeToRecord,
       });
       return NextResponse.json({ id: record.id, overall_score: record.overall_score });
     }
@@ -159,6 +176,8 @@ export async function POST(req: NextRequest) {
       previousAnalysisId: data.previous_analysis_id || null,
       userType: data.user_type || null,
       propertyCountRange: data.property_count_range || null,
+      isUnlocked: Boolean(promoCodeToRecord),
+      promoCode: promoCodeToRecord,
     });
     const databaseDurationMs = Date.now() - dbStartedAt;
     console.log(`[analyze] db write duration_ms=${databaseDurationMs}`);

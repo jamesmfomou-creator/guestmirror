@@ -24,6 +24,7 @@ export interface Database {
           previous_analysis_id: string | null;
           user_type: string | null;
           property_count_range: string | null;
+          promo_code: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -43,6 +44,7 @@ export interface Database {
           previous_analysis_id?: string | null;
           user_type?: string | null;
           property_count_range?: string | null;
+          promo_code?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -185,6 +187,24 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["email_campaign_sends"]["Insert"]>;
+        Relationships: [];
+      };
+      promo_codes: {
+        Row: {
+          id: string;
+          code: string;
+          label: string | null;
+          max_free_unlocks: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          code: string;
+          label?: string | null;
+          max_free_unlocks?: number;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["promo_codes"]["Insert"]>;
         Relationships: [];
       };
     };

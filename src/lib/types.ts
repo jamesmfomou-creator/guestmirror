@@ -109,6 +109,7 @@ export interface AnalysisRecord {
   previous_analysis_id: string | null;
   user_type: UserType | null;
   property_count_range: PropertyCountRange | null;
+  promo_code: string | null;
   created_at: string;
   updated_at: string;
 }

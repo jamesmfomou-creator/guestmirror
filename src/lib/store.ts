@@ -63,6 +63,7 @@ export async function createAnalysis(params: {
   isUnlocked?: boolean;
   userType?: UserType | null;
   propertyCountRange?: PropertyCountRange | null;
+  promoCode?: string | null;
 }): Promise<AnalysisRecord> {
   const record: AnalysisRecord = {
     id: randomUUID(),
@@ -81,6 +82,7 @@ export async function createAnalysis(params: {
     previous_analysis_id: params.previousAnalysisId ?? null,
     user_type: params.userType ?? null,
     property_count_range: params.propertyCountRange ?? null,
+    promo_code: params.promoCode ?? null,
     created_at: nowIso(),
     updated_at: nowIso(),
   };
@@ -103,6 +105,7 @@ export async function createAnalysis(params: {
       previous_analysis_id: record.previous_analysis_id,
       user_type: record.user_type,
       property_count_range: record.property_count_range,
+      promo_code: record.promo_code,
     });
     if (error) throw new Error(`Supabase insert failed: ${error.message}`);
 
@@ -152,6 +155,7 @@ export async function getAnalysis(id: string): Promise<AnalysisRecord | null> {
       previous_analysis_id: (row.previous_analysis_id as string) ?? null,
       user_type: (row.user_type as UserType) ?? null,
       property_count_range: (row.property_count_range as PropertyCountRange) ?? null,
+      promo_code: (row.promo_code as string) ?? null,
       created_at: row.created_at as string,
       updated_at: row.updated_at as string,
     };
@@ -173,6 +177,31 @@ export async function getTotalAnalysesCount(): Promise<number | null> {
   const { count, error } = await supabase.from("analyses").select("*", { count: "exact", head: true });
   if (error) return null;
   return count ?? null;
+}
+
+/**
+ * Free-trial links (/analyze?promo=<code>): grants the first
+ * max_free_unlocks analyses submitted with a given code a real unlock,
+ * no payment. Returns null for an unknown code -- the caller treats that
+ * exactly like "no code was given" rather than erroring, so a typo'd or
+ * expired link never breaks the analyze flow.
+ */
+export async function getPromoCodeStatus(
+  code: string
+): Promise<{ maxFreeUnlocks: number; usedCount: number } | null> {
+  if (!SUPABASE_CONFIGURED) return null;
+  const supabase = getSupabaseAdmin()!;
+  const { data: promo } = await supabase
+    .from("promo_codes")
+    .select("code, max_free_unlocks")
+    .eq("code", code)
+    .maybeSingle();
+  if (!promo) return null;
+  const { count } = await supabase
+    .from("analyses")
+    .select("*", { count: "exact", head: true })
+    .eq("promo_code", code);
+  return { maxFreeUnlocks: promo.max_free_unlocks, usedCount: count ?? 0 };
 }
 
 /**

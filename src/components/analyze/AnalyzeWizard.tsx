@@ -63,6 +63,9 @@ export function AnalyzeWizard() {
   );
 
   const previousAnalysisId = searchParams.get("previous");
+  // Free-trial link (see api/analyze/route.ts) -- read once, never
+  // re-checked against searchParams again, same as previousAnalysisId.
+  const promoCode = searchParams.get("promo");
   const urlStartedTracked = useRef(false);
 
   function inputMethod(): "airbnb_url" | "screenshot" | "mixed" {
@@ -207,6 +210,7 @@ export function AnalyzeWizard() {
           previous_analysis_id: previousAnalysisId || null,
           user_type: userType,
           property_count_range: propertyCountRange,
+          promo_code: promoCode || null,
         }),
         signal: timeoutController.signal,
       });
