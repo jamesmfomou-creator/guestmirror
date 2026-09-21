@@ -118,11 +118,38 @@ export interface AnalysisPerformanceStats {
   p75DurationS: number | null;
   p90DurationS: number | null;
   avgTimeBefore90S: number | null;
+  // "Finalizing" = gap between the client's cosmetic 90%-cap progress-bar
+  // checkpoint (analysis_progress_90, a fixed client-side timer -- see
+  // AnalyzeWizard -- NOT a real backend phase boundary) and the attempt's
+  // actual resolution. avgFinalizingS blends successful AND failed
+  // attempts, which skews it well above avgDurationS (successes only)
+  // because failures are bimodal: some fail almost instantly, others run
+  // close to the AI timeout -- see avgFinalizingSuccessS/FailedS for the
+  // split that explains the gap instead of hiding it.
   avgFinalizingS: number | null;
+  avgFinalizingSuccessS: number | null;
+  avgFinalizingFailedS: number | null;
   // Of the abandoned attempts, how many never reached the "finalizing"
   // (~90%) phase vs. abandoned while already finalizing.
   abandonedBeforeFinalizing: number;
   abandonedDuringFinalizing: number;
+}
+
+export interface ErrorBreakdownRow {
+  code: string;
+  count: number;
+}
+
+// Generic sample stats (avg/median/p75/p90/N), unitless -- used both for
+// step durations (seconds, via stepTimingStatsFor) and for raw counts like
+// AI token usage (via tokenStatsFor) where dividing by 1000 wouldn't make
+// sense.
+export interface NumberStats {
+  avg: number | null;
+  median: number | null;
+  p75: number | null;
+  p90: number | null;
+  sampleSize: number;
 }
 
 // Server-side step breakdown of a single analysis, read from the timings
@@ -143,10 +170,13 @@ export interface StepTimings {
   urlExtraction: StepTimingStats;
   imagePreprocessing: StepTimingStats;
   aiCall: StepTimingStats;
+  parsing: StepTimingStats;
   imageStorage: StepTimingStats;
   database: StepTimingStats;
   finalization: StepTimingStats;
   total: StepTimingStats;
+  aiInputTokens: NumberStats;
+  aiOutputTokens: NumberStats;
 }
 
 // Per-method (lien Airbnb / capture / capture+lien) breakdown. Every
@@ -236,6 +266,7 @@ export interface AnalyticsDashboard {
   users: UserRow[];
   pricing: PricingStats;
   analysisPerformance: AnalysisPerformanceStats;
+  errorBreakdown: ErrorBreakdownRow[];
   stepTimings: StepTimings;
   methodBreakdown: MethodBreakdown;
   userProfile: UserProfileStats;
@@ -325,6 +356,10 @@ function emptyStepTimingStats(): StepTimingStats {
   return { avgS: null, medianS: null, p75S: null, p90S: null, sampleSize: 0 };
 }
 
+function emptyNumberStats(): NumberStats {
+  return { avg: null, median: null, p75: null, p90: null, sampleSize: 0 };
+}
+
 function stepTimingStatsFor(rowsForEvent: EventRow[], field: string): StepTimingStats {
   const valuesS = rowsForEvent
     .map((r) => metadataNumber(r.metadata, field))
@@ -337,6 +372,20 @@ function stepTimingStatsFor(rowsForEvent: EventRow[], field: string): StepTiming
     p75S: percentile(valuesS, 0.75),
     p90S: percentile(valuesS, 0.9),
     sampleSize: valuesS.length,
+  };
+}
+
+function numberStatsFor(rowsForEvent: EventRow[], field: string): NumberStats {
+  const values = rowsForEvent
+    .map((r) => metadataNumber(r.metadata, field))
+    .filter((v) => v > 0)
+    .sort((a, b) => a - b);
+  return {
+    avg: average(values),
+    median: percentile(values, 0.5),
+    p75: percentile(values, 0.75),
+    p90: percentile(values, 0.9),
+    sampleSize: values.length,
   };
 }
 
@@ -387,17 +436,23 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       p90DurationS: null,
       avgTimeBefore90S: null,
       avgFinalizingS: null,
+      avgFinalizingSuccessS: null,
+      avgFinalizingFailedS: null,
       abandonedBeforeFinalizing: 0,
       abandonedDuringFinalizing: 0,
     },
+    errorBreakdown: [],
     stepTimings: {
       urlExtraction: emptyStepTimingStats(),
       imagePreprocessing: emptyStepTimingStats(),
       aiCall: emptyStepTimingStats(),
+      parsing: emptyStepTimingStats(),
       imageStorage: emptyStepTimingStats(),
       database: emptyStepTimingStats(),
       finalization: emptyStepTimingStats(),
       total: emptyStepTimingStats(),
+      aiInputTokens: emptyNumberStats(),
+      aiOutputTokens: emptyNumberStats(),
     },
     methodBreakdown: {
       airbnbUrl: emptyMethodStats(),
@@ -646,13 +701,39 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
   }
 
   const finalizingDurationsS: number[] = [];
+  const finalizingDurationsSuccessS: number[] = [];
+  const finalizingDurationsFailedS: number[] = [];
   for (const r of [...completedRows, ...failedRows]) {
     const id = metadataString(r.metadata, ["attemptId"]);
     const p90At = id ? progress90AtByAttempt.get(id) : undefined;
     if (p90At != null) {
-      finalizingDurationsS.push((new Date(r.created_at).getTime() - p90At) / 1000);
+      const gapS = (new Date(r.created_at).getTime() - p90At) / 1000;
+      finalizingDurationsS.push(gapS);
+      (r.event_name === "analysis_completed" ? finalizingDurationsSuccessS : finalizingDurationsFailedS).push(
+        gapS
+      );
     }
   }
+
+  // ---- Error breakdown: group failed attempts by error_code (see
+  // categorizeAnthropicError in lib/ai.ts and the codes set in
+  // api/analyze/route.ts / AnalyzeWizard.tsx). Deduplicated by attemptId
+  // the same way attemptsFailed is, so a single failed attempt only counts
+  // once even if analysis_failed somehow fired twice for it. ----
+  const errorCodeCounts = new Map<string, number>();
+  const seenFailedAttempts = new Set<string>();
+  for (const r of failedRows) {
+    const id = metadataString(r.metadata, ["attemptId"]);
+    if (id) {
+      if (seenFailedAttempts.has(id)) continue;
+      seenFailedAttempts.add(id);
+    }
+    const code = metadataString(r.metadata, ["error_code"]) || "unknown";
+    errorCodeCounts.set(code, (errorCodeCounts.get(code) ?? 0) + 1);
+  }
+  const errorBreakdown: ErrorBreakdownRow[] = Array.from(errorCodeCounts.entries())
+    .map(([code, count]) => ({ code, count }))
+    .sort((a, b) => b.count - a.count);
 
   // An attempt is "abandoned" once it started, was never resolved
   // (completed or failed), and it's been at least 5 minutes since it
@@ -686,6 +767,8 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     p90DurationS: percentile(durationsS, 0.9),
     avgTimeBefore90S: average(timeBefore90S),
     avgFinalizingS: average(finalizingDurationsS),
+    avgFinalizingSuccessS: average(finalizingDurationsSuccessS),
+    avgFinalizingFailedS: average(finalizingDurationsFailedS),
     abandonedBeforeFinalizing,
     abandonedDuringFinalizing,
   };
@@ -698,10 +781,13 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     urlExtraction: stepTimingStatsFor(completedRows, "url_extraction_duration_ms"),
     imagePreprocessing: stepTimingStatsFor(completedRows, "image_preprocessing_duration_ms"),
     aiCall: stepTimingStatsFor(completedRows, "ai_call_duration_ms"),
+    parsing: stepTimingStatsFor(completedRows, "parsing_duration_ms"),
     imageStorage: stepTimingStatsFor(completedRows, "image_storage_duration_ms"),
     database: stepTimingStatsFor(completedRows, "database_duration_ms"),
     finalization: stepTimingStatsFor(completedRows, "finalization_duration_ms"),
     total: stepTimingStatsFor(completedRows, "total_duration_ms"),
+    aiInputTokens: numberStatsFor(completedRows, "ai_input_tokens"),
+    aiOutputTokens: numberStatsFor(completedRows, "ai_output_tokens"),
   };
 
   // ---- Per-method breakdown (lien Airbnb / capture / capture+lien).
@@ -949,6 +1035,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     users,
     pricing,
     analysisPerformance,
+    errorBreakdown,
     stepTimings,
     methodBreakdown,
     userProfile,

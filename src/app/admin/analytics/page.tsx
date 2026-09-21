@@ -1,5 +1,13 @@
 import Link from "next/link";
-import { getAnalyticsDashboard, Period, MethodStats, StepTimingStats, ProfileSegmentStats } from "@/lib/admin/analytics";
+import {
+  getAnalyticsDashboard,
+  Period,
+  MethodStats,
+  StepTimingStats,
+  NumberStats,
+  ProfileSegmentStats,
+  ErrorBreakdownRow,
+} from "@/lib/admin/analytics";
 import { listFeedback } from "@/lib/feedback";
 import { BRAND_NAME } from "@/lib/brand";
 
@@ -23,6 +31,28 @@ const PLAN_LABELS: Record<string, string> = {
   one_time: "Analyse unique",
   plus: "Plus",
   lifetime: "Lifetime",
+};
+
+// See categorizeAnthropicError in lib/ai.ts and the codes set in
+// api/analyze/route.ts / AnalyzeWizard.tsx for where each code originates.
+const ERROR_CODE_LABELS: Record<string, string> = {
+  ai_timeout: "IA — délai dépassé",
+  ai_rate_limited: "IA — limite de débit",
+  ai_invalid_request: "IA — requête invalide",
+  ai_auth_error: "IA — erreur d'authentification",
+  ai_overloaded: "IA — surchargée",
+  ai_connection_error: "IA — erreur de connexion",
+  ai_invalid_response: "IA — réponse invalide",
+  ai_error: "IA — erreur générique",
+  api_error: "Erreur générique (avant catégorisation détaillée)",
+  insufficient_input: "Pas assez d'informations fournies",
+  image_processing_failed: "Traitement des images échoué",
+  image_too_large: "Image trop volumineuse",
+  database_failed: "Écriture base de données échouée",
+  airbnb_url_extraction_failed: "Extraction du lien Airbnb échouée",
+  response_parse_failed: "Réponse serveur illisible",
+  timeout: "Délai dépassé (client)",
+  unknown: "Inconnu",
 };
 
 function pct(n: number | null): string {
@@ -98,7 +128,15 @@ export default async function AdminAnalyticsPage({
 
       {/* Funnel table */}
       <section className="mt-10">
-        <h2 className="text-lg font-semibold">Funnel</h2>
+        <h2 className="text-lg font-semibold">Funnel — utilisateurs uniques</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          <strong>Définition :</strong> chaque étape compte des <strong>visiteurs uniques</strong>{" "}
+          (anonymous_id / session_id), un par personne quel que soit le nombre de fois où elle
+          déclenche l&apos;événement. À comparer avec le bloc <strong>« Performance des analyses
+          »</strong> ci-dessous, qui compte des tentatives techniques (une même personne peut
+          générer plusieurs tentatives si elle relance ou réessaie une analyse) — c&apos;est
+          pourquoi les deux blocs affichent des totaux différents pour une période identique.
+        </p>
         <div className="mt-3 overflow-x-auto rounded-xl border border-border">
           <table className="w-full min-w-[480px] text-sm">
             <thead>
@@ -123,30 +161,92 @@ export default async function AdminAnalyticsPage({
 
       {/* Analysis loading performance */}
       <section className="mt-10">
-        <h2 className="text-lg font-semibold">Performance des analyses</h2>
+        <h2 className="text-lg font-semibold">Performance des analyses — tentatives techniques</h2>
         <p className="mt-1 text-sm text-muted-2">
-          Basé sur les tentatives d&apos;analyse (attemptId) depuis la mise en place de ce
-          tracking — les événements antérieurs n&apos;y figurent pas.
+          <strong>Définition :</strong> chaque nombre ci-dessous compte des{" "}
+          <strong>tentatives d&apos;analyse</strong> (attemptId, un identifiant généré à chaque
+          clic sur « Analyser »), pas des visiteurs uniques — une même personne qui relance ou
+          réessaie une analyse génère plusieurs tentatives. C&apos;est pourquoi « Analyses
+          démarrées » ici ne correspond pas à « Analyses démarrées » dans le Funnel ci-dessus.
+          Basé sur les événements disponibles depuis la mise en place de ce tracking — les
+          événements antérieurs n&apos;y figurent pas.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Kpi label="Analyses démarrées" value={data.analysisPerformance.attemptsStarted} />
-          <Kpi label="Analyses complétées" value={data.analysisPerformance.attemptsCompleted} />
+          <Kpi label="Tentatives démarrées" value={data.analysisPerformance.attemptsStarted} />
+          <Kpi label="Tentatives complétées" value={data.analysisPerformance.attemptsCompleted} />
           <Kpi label="Taux de complétion" value={pct(data.analysisPerformance.completionRate)} />
           <Kpi label="Échecs" value={data.analysisPerformance.attemptsFailed} />
-          <Kpi label="Durée moyenne" value={seconds(data.analysisPerformance.avgDurationS)} />
-          <Kpi label="Durée médiane" value={seconds(data.analysisPerformance.medianDurationS)} />
-          <Kpi label="p75" value={seconds(data.analysisPerformance.p75DurationS)} />
-          <Kpi label="p90" value={seconds(data.analysisPerformance.p90DurationS)} />
+          <Kpi label="Durée moyenne (succès)" value={seconds(data.analysisPerformance.avgDurationS)} />
+          <Kpi label="Durée médiane (succès)" value={seconds(data.analysisPerformance.medianDurationS)} />
+          <Kpi label="p75 (succès)" value={seconds(data.analysisPerformance.p75DurationS)} />
+          <Kpi label="p90 (succès)" value={seconds(data.analysisPerformance.p90DurationS)} />
           <Kpi label="Temps moyen avant 90%" value={seconds(data.analysisPerformance.avgTimeBefore90S)} />
-          <Kpi label="Temps moyen en finalisation" value={seconds(data.analysisPerformance.avgFinalizingS)} />
           <Kpi label="Abandons" value={data.analysisPerformance.attemptsAbandoned} />
         </div>
+
+        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">
+          Temps de finalisation (90% cosmétique → résolution)
+        </p>
+        <p className="mt-1 text-sm text-muted-2">
+          Le repère « 90% » est un timer client fixe (barre de progression), pas une vraie étape
+          serveur — ce délai mesure donc le temps entre ce repère cosmétique et la résolution
+          réelle (succès ou échec). La moyenne globale mélange succès et échecs ; comme les échecs
+          sont bimodaux (certains instantanés, d&apos;autres proches du timeout IA de 110s), elle
+          est structurellement plus haute que la durée moyenne des seuls succès ci-dessus — ce
+          n&apos;est pas un bug de calcul.
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Kpi label="Moyenne — succès uniquement" value={seconds(data.analysisPerformance.avgFinalizingSuccessS)} />
+          <Kpi label="Moyenne — échecs uniquement" value={seconds(data.analysisPerformance.avgFinalizingFailedS)} />
+          <Kpi label="Moyenne — global (mélangé)" value={seconds(data.analysisPerformance.avgFinalizingS)} />
+        </div>
+
         <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">
           Répartition des abandons par dernière étape connue
         </p>
         <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-2">
           <Kpi label="Avant la finalisation (< 90%)" value={data.analysisPerformance.abandonedBeforeFinalizing} />
           <Kpi label="Pendant la finalisation (90%+)" value={data.analysisPerformance.abandonedDuringFinalizing} />
+        </div>
+      </section>
+
+      {/* Error breakdown: which causes actually produce the failures (see
+          categorizeAnthropicError in lib/ai.ts and the codes set in
+          api/analyze/route.ts / AnalyzeWizard.tsx). */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Répartition des erreurs</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Une ligne par code d&apos;erreur, dédupliquée par tentative (attemptId). Seules les
+          tentatives ayant échoué depuis la mise en place de la catégorisation détaillée
+          affichent un code spécifique — les échecs antérieurs apparaissent sous « Inconnu ».
+        </p>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[420px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Cause</th>
+                <th className="px-4 py-2.5 font-medium">Occurrences</th>
+                <th className="px-4 py-2.5 font-medium">% des échecs</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.errorBreakdown.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-3 text-muted-2" colSpan={3}>
+                    Aucun échec sur cette période.
+                  </td>
+                </tr>
+              ) : (
+                data.errorBreakdown.map((row) => (
+                  <ErrorBreakdownTableRow
+                    key={row.code}
+                    row={row}
+                    total={data.analysisPerformance.attemptsFailed}
+                  />
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -176,10 +276,33 @@ export default async function AdminAnalyticsPage({
               <StepTimingRow label="Extraction URL Airbnb" stats={data.stepTimings.urlExtraction} />
               <StepTimingRow label="Préparation des images" stats={data.stepTimings.imagePreprocessing} />
               <StepTimingRow label="Appel IA" stats={data.stepTimings.aiCall} />
+              <StepTimingRow label="  dont parsing / validation" stats={data.stepTimings.parsing} />
               <StepTimingRow label="Stockage des images" stats={data.stepTimings.imageStorage} />
               <StepTimingRow label="Écriture base de données" stats={data.stepTimings.database} />
               <StepTimingRow label="Finalisation (stockage + DB)" stats={data.stepTimings.finalization} />
               <StepTimingRow label="Total serveur" stats={data.stepTimings.total} />
+            </tbody>
+          </table>
+        </div>
+
+        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">
+          Volumétrie de l&apos;appel IA (tokens, par analyse complétée)
+        </p>
+        <div className="mt-2 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Mesure</th>
+                <th className="px-4 py-2.5 font-medium">Moyenne</th>
+                <th className="px-4 py-2.5 font-medium">Médiane</th>
+                <th className="px-4 py-2.5 font-medium">p75</th>
+                <th className="px-4 py-2.5 font-medium">p90</th>
+                <th className="px-4 py-2.5 font-medium">n</th>
+              </tr>
+            </thead>
+            <tbody>
+              <NumberStatsRow label="Tokens en entrée" stats={data.stepTimings.aiInputTokens} />
+              <NumberStatsRow label="Tokens en sortie" stats={data.stepTimings.aiOutputTokens} />
             </tbody>
           </table>
         </div>
@@ -615,6 +738,31 @@ function StepTimingRow({ label, stats }: { label: string; stats: StepTimingStats
       <td className="px-4 py-2.5 tabular-nums">{seconds(stats.p75S)}</td>
       <td className="px-4 py-2.5 tabular-nums">{seconds(stats.p90S)}</td>
       <td className="px-4 py-2.5 tabular-nums text-muted-2">{stats.sampleSize}</td>
+    </tr>
+  );
+}
+
+function NumberStatsRow({ label, stats }: { label: string; stats: NumberStats }) {
+  const fmt = (n: number | null) => (n === null ? "—" : Math.round(n).toLocaleString("fr-FR"));
+  return (
+    <tr className="border-b border-border last:border-0">
+      <td className="px-4 py-2.5 font-medium">{label}</td>
+      <td className="px-4 py-2.5 tabular-nums">{fmt(stats.avg)}</td>
+      <td className="px-4 py-2.5 tabular-nums">{fmt(stats.median)}</td>
+      <td className="px-4 py-2.5 tabular-nums">{fmt(stats.p75)}</td>
+      <td className="px-4 py-2.5 tabular-nums">{fmt(stats.p90)}</td>
+      <td className="px-4 py-2.5 tabular-nums text-muted-2">{stats.sampleSize}</td>
+    </tr>
+  );
+}
+
+function ErrorBreakdownTableRow({ row, total }: { row: ErrorBreakdownRow; total: number }) {
+  const share = total > 0 ? row.count / total : null;
+  return (
+    <tr className="border-b border-border last:border-0">
+      <td className="px-4 py-2.5 font-medium">{ERROR_CODE_LABELS[row.code] ?? row.code}</td>
+      <td className="px-4 py-2.5 tabular-nums">{row.count}</td>
+      <td className="px-4 py-2.5 tabular-nums text-muted-2">{pct(share)}</td>
     </tr>
   );
 }

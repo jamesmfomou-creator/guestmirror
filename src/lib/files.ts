@@ -4,9 +4,18 @@ export interface PendingImage {
   previewUrl: string;
 }
 
-const MAX_DIMENSION = 1920;
+// Matches lib/imageOptimize.ts's server-side target exactly: Claude's
+// vision encoder downscales beyond ~1568px on the long edge regardless,
+// so capping here too loses no signal the model would have used -- it
+// just means the upload itself (client -> our server) is smaller and
+// faster, and comfortably clear of any request-body-size limit on large
+// multi-image submissions (see the analysis_failed audit: every fast,
+// same-error-code production failure had image_count at the 10-image
+// max, consistent with the pre-optimization payload size for 10 full-res
+// photos landing close to typical serverless request body limits).
+const MAX_DIMENSION = 1568;
 const RECOMPRESS_THRESHOLD_BYTES = 1_500_000;
-const JPEG_QUALITY = 0.85;
+const JPEG_QUALITY = 0.82;
 
 async function resizeImage(file: File): Promise<Blob> {
   if (typeof createImageBitmap === "undefined") return file;

@@ -156,29 +156,51 @@ export async function POST(req: NextRequest) {
     );
 
     const aiStartedAt = Date.now();
-    const result = await analyzeListing({ images: effectiveImages, input, extractedListingText });
+    const { result, aiInputTokens, aiOutputTokens, parsingDurationMs } = await analyzeListing({
+      images: effectiveImages,
+      input,
+      extractedListingText,
+    });
     const aiCallDurationMs = Date.now() - aiStartedAt;
 
     const storageStartedAt = Date.now();
     const tempId = crypto.randomUUID();
-    const storedImages = await Promise.all(
-      effectiveImages.map((img, i) => storeImage(tempId, i, img.base64, img.mediaType))
-    );
+    let storedImages: string[];
+    try {
+      storedImages = await Promise.all(
+        effectiveImages.map((img, i) => storeImage(tempId, i, img.base64, img.mediaType))
+      );
+    } catch (err) {
+      throw new AnalysisError(
+        "Une erreur inattendue est survenue. Merci de réessayer dans quelques instants.",
+        "image_processing_failed",
+        err
+      );
+    }
     const imageStorageDurationMs = Date.now() - storageStartedAt;
     console.log(`[analyze] image storage duration_ms=${imageStorageDurationMs} count=${storedImages.length}`);
 
     const dbStartedAt = Date.now();
-    const record = await createAnalysis({
-      input,
-      email: data.email,
-      images: storedImages,
-      result,
-      previousAnalysisId: data.previous_analysis_id || null,
-      userType: data.user_type || null,
-      propertyCountRange: data.property_count_range || null,
-      isUnlocked: Boolean(promoCodeToRecord),
-      promoCode: promoCodeToRecord,
-    });
+    let record;
+    try {
+      record = await createAnalysis({
+        input,
+        email: data.email,
+        images: storedImages,
+        result,
+        previousAnalysisId: data.previous_analysis_id || null,
+        userType: data.user_type || null,
+        propertyCountRange: data.property_count_range || null,
+        isUnlocked: Boolean(promoCodeToRecord),
+        promoCode: promoCodeToRecord,
+      });
+    } catch (err) {
+      throw new AnalysisError(
+        "Une erreur inattendue est survenue. Merci de réessayer dans quelques instants.",
+        "database_failed",
+        err
+      );
+    }
     const databaseDurationMs = Date.now() - dbStartedAt;
     console.log(`[analyze] db write duration_ms=${databaseDurationMs}`);
     const totalDurationMs = Date.now() - requestStartedAt;
@@ -191,6 +213,13 @@ export async function POST(req: NextRequest) {
         url_extraction_duration_ms: urlExtractionDurationMs,
         image_preprocessing_duration_ms: imagePreprocessingDurationMs,
         ai_call_duration_ms: aiCallDurationMs,
+        // Already included inside ai_call_duration_ms (it's the tail end of
+        // the same call: validating/sanitizing the model's tool response) --
+        // reported separately only so the admin dashboard can show it as its
+        // own "Parsing" column per the audit spec, not as extra wall-clock.
+        parsing_duration_ms: parsingDurationMs,
+        ai_input_tokens: aiInputTokens,
+        ai_output_tokens: aiOutputTokens,
         image_storage_duration_ms: imageStorageDurationMs,
         database_duration_ms: databaseDurationMs,
         // Everything after the AI call resolves: storing images, writing
@@ -204,10 +233,13 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error(`[analyze] failed duration_ms=${Date.now() - requestStartedAt}:`, err);
     if (err instanceof AnalysisError) {
-      return NextResponse.json({ error: err.message }, { status: 422 });
+      return NextResponse.json({ error: err.message, error_code: err.code }, { status: 422 });
     }
     return NextResponse.json(
-      { error: "Une erreur inattendue est survenue. Merci de réessayer dans quelques instants." },
+      {
+        error: "Une erreur inattendue est survenue. Merci de réessayer dans quelques instants.",
+        error_code: "unknown",
+      },
       { status: 500 }
     );
   }

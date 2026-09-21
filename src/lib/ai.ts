@@ -1,4 +1,12 @@
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic, {
+  APIConnectionError,
+  APIConnectionTimeoutError,
+  AuthenticationError,
+  BadRequestError,
+  InternalServerError,
+  PermissionDeniedError,
+  RateLimitError,
+} from "@anthropic-ai/sdk";
 import { AnalysisInput, AnalysisResult } from "@/lib/types";
 import { DEMO_MODE } from "@/lib/env";
 import { DEMO_RESULT } from "@/lib/demo-data";
@@ -6,10 +14,28 @@ import { BRAND_NAME } from "@/lib/brand";
 import { AIRBNB_TITLE_MAX_LENGTH, sanitizeAirbnbTitles, titleCharCount } from "@/lib/titles";
 
 export class AnalysisError extends Error {
-  constructor(message: string) {
-    super(message);
+  code: string;
+  constructor(message: string, code: string = "ai_error", cause?: unknown) {
+    super(message, cause !== undefined ? { cause } : undefined);
     this.name = "AnalysisError";
+    this.code = code;
   }
+}
+
+// Maps the Anthropic SDK's error class hierarchy to the error_code taxonomy
+// tracked in analysis_failed events (see admin/analytics.ts's error
+// breakdown) -- lets the admin dashboard distinguish "the model timed out",
+// "we're rate limited", "our request was malformed", etc. instead of a
+// single generic "ai_error" bucket that hides which cause actually produces
+// the failures.
+function categorizeAnthropicError(err: unknown): string {
+  if (err instanceof APIConnectionTimeoutError) return "ai_timeout";
+  if (err instanceof RateLimitError) return "ai_rate_limited";
+  if (err instanceof BadRequestError) return "ai_invalid_request";
+  if (err instanceof AuthenticationError || err instanceof PermissionDeniedError) return "ai_auth_error";
+  if (err instanceof InternalServerError) return "ai_overloaded";
+  if (err instanceof APIConnectionError) return "ai_connection_error";
+  return "ai_error";
 }
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
@@ -219,14 +245,20 @@ export async function analyzeListing(params: {
   // Not persisted anywhere; used only to build the prompt's context text
   // below, the same way city/property_type already are.
   extractedListingText?: { title: string | null; description: string | null } | null;
-}): Promise<AnalysisResult> {
+}): Promise<{
+  result: AnalysisResult;
+  aiInputTokens: number | null;
+  aiOutputTokens: number | null;
+  parsingDurationMs: number;
+}> {
   if (DEMO_MODE) {
-    return { ...DEMO_RESULT };
+    return { result: { ...DEMO_RESULT }, aiInputTokens: null, aiOutputTokens: null, parsingDurationMs: 0 };
   }
 
   if (params.images.length === 0 && !params.input.listing_url) {
     throw new AnalysisError(
-      "Nous n'avons pas assez d'informations pour analyser correctement cette annonce. Ajoute 2 ou 3 captures supplémentaires."
+      "Nous n'avons pas assez d'informations pour analyser correctement cette annonce. Ajoute 2 ou 3 captures supplémentaires.",
+      "insufficient_input"
     );
   }
 
@@ -276,20 +308,27 @@ export async function analyzeListing(params: {
       tool_choice: { type: "tool", name: "submit_guestmirror_analysis" },
       messages: [{ role: "user", content }],
     });
-    console.log(`[ai] messages.create ok duration_ms=${Date.now() - aiStartedAt} images=${params.images.length}`);
+    console.log(
+      `[ai] messages.create ok duration_ms=${Date.now() - aiStartedAt} images=${params.images.length} ` +
+        `input_tokens=${response.usage.input_tokens} output_tokens=${response.usage.output_tokens}`
+    );
   } catch (err) {
-    console.error(`[ai] messages.create failed duration_ms=${Date.now() - aiStartedAt}:`, err);
+    const code = categorizeAnthropicError(err);
+    console.error(`[ai] messages.create failed duration_ms=${Date.now() - aiStartedAt} code=${code}:`, err);
     throw new AnalysisError(
-      "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants."
+      "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants.",
+      code
     );
   }
 
+  const parsingStartedAt = Date.now();
   const toolUse = response.content.find(
     (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
   );
   if (!toolUse) {
     throw new AnalysisError(
-      "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants."
+      "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants.",
+      "ai_invalid_response"
     );
   }
 
@@ -302,7 +341,8 @@ export async function analyzeListing(params: {
   if (typeof input.overall_score !== "number" || !input.summary) {
     console.error(`[ai] incomplete tool response duration_ms=${Date.now() - aiStartedAt}`);
     throw new AnalysisError(
-      "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants."
+      "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants.",
+      "ai_invalid_response"
     );
   }
 
@@ -319,13 +359,20 @@ export async function analyzeListing(params: {
     `[ai] generated_title_length raw=${JSON.stringify(rawTitles.map(titleCharCount))} final=${JSON.stringify(cleanTitles.map(titleCharCount))} dropped=${rawTitles.length - cleanTitles.length}`
   );
 
+  const parsingDurationMs = Date.now() - parsingStartedAt;
+
   return {
-    ...(input as AnalysisResult),
-    disclaimer: DISCLAIMER,
-    title_analysis: {
-      current_title: input.title_analysis?.current_title ?? "",
-      issues: input.title_analysis?.issues ?? [],
-      suggested_titles: cleanTitles,
+    result: {
+      ...(input as AnalysisResult),
+      disclaimer: DISCLAIMER,
+      title_analysis: {
+        current_title: input.title_analysis?.current_title ?? "",
+        issues: input.title_analysis?.issues ?? [],
+        suggested_titles: cleanTitles,
+      },
     },
+    aiInputTokens: response.usage.input_tokens ?? null,
+    aiOutputTokens: response.usage.output_tokens ?? null,
+    parsingDurationMs,
   };
 }

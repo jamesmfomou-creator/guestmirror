@@ -46,8 +46,8 @@ export async function POST(req: NextRequest) {
     const [resultA, resultB] = DEMO_MODE
       ? [DEMO_COMPARE_A, DEMO_COMPARE_B]
       : await Promise.all([
-          analyzeListing({ images: a, input: emptyInput }),
-          analyzeListing({ images: b, input: emptyInput }),
+          analyzeListing({ images: a, input: emptyInput }).then((r) => r.result),
+          analyzeListing({ images: b, input: emptyInput }).then((r) => r.result),
         ]);
 
     const comparison = buildComparison(resultA, resultB);
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[/api/compare] unexpected error:", err);
     if (err instanceof AnalysisError) {
-      return NextResponse.json({ error: err.message }, { status: 422 });
+      return NextResponse.json({ error: err.message, error_code: err.code }, { status: 422 });
     }
     return NextResponse.json(
       { error: "Une erreur inattendue est survenue. Merci de réessayer dans quelques instants." },

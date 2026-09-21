@@ -226,7 +226,8 @@ export function AnalyzeWizard() {
         json = await res.json();
       } catch {
         throw new Error(
-          "Une erreur est survenue. Essaie avec des captures moins nombreuses ou plus légères."
+          "Une erreur est survenue. Essaie avec des captures moins nombreuses ou plus légères.",
+          { cause: "response_parse_failed" }
         );
       }
       if (!res.ok) {
@@ -262,7 +263,9 @@ export function AnalyzeWizard() {
           setStep("import");
           return;
         }
-        throw new Error(json.error || "Une erreur est survenue. Merci de réessayer.");
+        throw new Error(json.error || "Une erreur est survenue. Merci de réessayer.", {
+          cause: json.error_code,
+        });
       }
 
       setAnalysisDone(true);
@@ -282,9 +285,14 @@ export function AnalyzeWizard() {
         : err instanceof Error
           ? err.message
           : "Une erreur est survenue.";
+      // `cause` carries the server's specific error_code (see api/analyze/route.ts
+      // and lib/ai.ts's categorizeAnthropicError) so admin/analytics can break
+      // failures down by real cause instead of a generic "api_error" bucket.
+      const serverErrorCode =
+        !isTimeout && err instanceof Error && typeof err.cause === "string" ? err.cause : null;
       track("analysis_failed", {
         attemptId: attemptId.current,
-        error_code: isTimeout ? "timeout" : "api_error",
+        error_code: isTimeout ? "timeout" : serverErrorCode || "api_error",
         duration_ms: Date.now() - (startedAt.current ?? Date.now()),
         image_count: images.length,
       });
