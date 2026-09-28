@@ -42,7 +42,13 @@ const ERROR_CODE_LABELS: Record<string, string> = {
   ai_auth_error: "IA — erreur d'authentification",
   ai_overloaded: "IA — surchargée",
   ai_connection_error: "IA — erreur de connexion",
-  ai_invalid_response: "IA — réponse invalide",
+  ai_invalid_response: "IA — réponse invalide (cause non précisée)",
+  ai_tool_missing: "IA — tool-use absent de la réponse",
+  ai_schema_mismatch: "IA — réponse hors schéma (champ requis manquant)",
+  ai_truncated_response: "IA — réponse tronquée (max_tokens atteint)",
+  ai_empty_response: "IA — réponse vide",
+  ai_refused: "IA — refus du modèle",
+  ai_context_exceeded: "IA — fenêtre de contexte dépassée",
   ai_error: "IA — erreur générique",
   api_error: "Erreur générique (avant catégorisation détaillée)",
   insufficient_input: "Pas assez d'informations fournies",
@@ -303,6 +309,12 @@ export default async function AdminAnalyticsPage({
             <tbody>
               <NumberStatsRow label="Tokens en entrée" stats={data.stepTimings.aiInputTokens} />
               <NumberStatsRow label="Tokens en sortie" stats={data.stepTimings.aiOutputTokens} />
+              <tr className="border-b border-border last:border-0">
+                <td className="px-4 py-2.5 font-medium">Analyses ayant nécessité 1 retry IA</td>
+                <td className="px-4 py-2.5 tabular-nums" colSpan={4}>
+                  {data.stepTimings.aiRetryCount.sampleSize}
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -490,8 +502,13 @@ export default async function AdminAnalyticsPage({
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Pricing — Analyse unique vs Plus</h2>
         <p className="mt-1 text-sm text-muted-2">
-          Abonnements actifs et MRR sont un instantané actuel (pas filtré par période). Le reste
-          correspond à la période sélectionnée.
+          <strong>Abonnements Plus actifs</strong> et <strong>MRR</strong> sont un instantané
+          actuel de l&apos;état réel des abonnements (indépendant de la période sélectionnée) — un
+          abonnement toujours actif y reste compté même si son événement de départ date de plus de
+          7/30 jours. Tout le reste (nouveaux abonnements, paiements, revenue) correspond
+          uniquement à la période sélectionnée. Le revenu encaissé sur la période (analyse unique +
+          nouveaux abonnements) n&apos;est jamais mélangé au MRR, qui reflète le taux mensuel
+          récurrent actuel, pas une somme encaissée.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Kpi label="Abonnements Plus actifs" value={data.pricing.activePlusSubscriptions} />
@@ -499,8 +516,9 @@ export default async function AdminAnalyticsPage({
           <Kpi label="Nouveaux abonnements" value={data.pricing.newSubscriptions} />
           <Kpi label="Annulations" value={data.pricing.cancellations} />
           <Kpi label="Paiements analyse unique" value={data.pricing.oneTimePayments} />
-          <Kpi label="Revenue analyse unique" value={eur(data.pricing.oneTimeRevenue)} />
-          <Kpi label="Revenue total" value={eur(data.pricing.revenueTotal)} />
+          <Kpi label="Revenue analyse unique (période)" value={eur(data.pricing.oneTimeRevenue)} />
+          <Kpi label="Revenue abonnement (période)" value={eur(data.pricing.newSubscriptionRevenue)} />
+          <Kpi label="Revenue total (période)" value={eur(data.pricing.revenueTotal)} />
           <Kpi label="Échecs de paiement abo." value={data.pricing.paymentFailures} />
         </div>
 

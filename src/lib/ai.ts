@@ -38,6 +38,85 @@ function categorizeAnthropicError(err: unknown): string {
   return "ai_error";
 }
 
+// A *successful* API call (no exception) can still fail to produce a usable
+// analysis in several structurally different ways -- collapsing all of them
+// into one "ai_invalid_response" code (as a previous pass did) hides which
+// one actually happens. This inspects the real response shape, in priority
+// order of how diagnostic each signal is:
+//  1. stop_reason tells us definitively if the model was cut off (max_tokens),
+//     refused (refusal), or hit the context window -- these are causes, and
+//     take priority over whatever downstream symptom they produce.
+//  2. an empty content array or a missing tool_use block are structural
+//     failures of forced tool_choice, not a data-shape problem.
+//  3. only once we have a real tool_use with parsed input do we check
+//     whether the required fields are actually present.
+type ResponseValidation =
+  | { ok: true; input: Partial<AnalysisResult> }
+  | { ok: false; code: string; reason: string };
+
+function validateAiResponse(response: Anthropic.Message): ResponseValidation {
+  if (response.stop_reason === "max_tokens") {
+    return { ok: false, code: "ai_truncated_response", reason: "stop_reason=max_tokens" };
+  }
+  if (response.stop_reason === "refusal") {
+    return { ok: false, code: "ai_refused", reason: "stop_reason=refusal" };
+  }
+  if (response.stop_reason === "model_context_window_exceeded") {
+    return { ok: false, code: "ai_context_exceeded", reason: "stop_reason=model_context_window_exceeded" };
+  }
+  if (!response.content || response.content.length === 0) {
+    return { ok: false, code: "ai_empty_response", reason: "empty content array" };
+  }
+  const toolUse = response.content.find(
+    (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
+  );
+  if (!toolUse) {
+    return { ok: false, code: "ai_tool_missing", reason: "no tool_use block despite forced tool_choice" };
+  }
+  const input = toolUse.input as Partial<AnalysisResult>;
+  // "required" in the tool schema steers the model but isn't a hard
+  // guarantee -- without this check, a response missing overall_score
+  // (observed in testing, likely tied to hitting the tool schema's edges
+  // on an unusual input) surfaced 60+ seconds later as a raw Postgres
+  // not-null violation instead of the existing, fast "réessaie" retry path.
+  if (typeof input.overall_score !== "number" || !input.summary) {
+    return { ok: false, code: "ai_schema_mismatch", reason: "missing overall_score/summary" };
+  }
+  return { ok: true, input };
+}
+
+// Safe-to-log summary of an invalid response's *shape* only -- block types,
+// key names, array lengths, never actual string/number content -- so a
+// production log line is enough to diagnose why validation failed without
+// ever writing listing details or guest-facing text to logs.
+function redactedResponseShape(response: Anthropic.Message): Record<string, unknown> {
+  const toolUse = response.content.find(
+    (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
+  );
+  const inputKeys =
+    toolUse && typeof toolUse.input === "object" && toolUse.input !== null
+      ? Object.keys(toolUse.input as object)
+      : null;
+  return {
+    stop_reason: response.stop_reason,
+    content_block_types: response.content.map((b) => b.type),
+    tool_use_present: Boolean(toolUse),
+    tool_use_input_keys: inputKeys,
+  };
+}
+
+// Only genuinely stochastic response-shape hiccups are worth one same-prompt
+// retry -- a fresh sample has a real chance of coming back clean. Truncation
+// (ai_truncated_response) is NOT included: the same input at the same
+// max_tokens ceiling would very likely truncate again, so retrying it would
+// just double the cost/latency for no expected gain -- see MAX_OUTPUT_TOKENS
+// below for how truncation is actually addressed. Refusals and context-window
+// overflows are structural, not stochastic, so retrying those is equally
+// pointless. SDK-level errors (timeout/rate-limit/etc.) already get one
+// retry from the SDK itself (AI_MAX_RETRIES) and are deliberately not
+// retried again at this layer.
+const RETRYABLE_VALIDATION_CODES = new Set(["ai_tool_missing", "ai_schema_mismatch", "ai_empty_response"]);
+
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
 
 const SYSTEM_PROMPT = `Tu es un consultant expert en optimisation d'annonces de location courte durée (type Airbnb). Tu analyses la PRÉSENTATION d'une annonce (photos, titre, description) du point de vue d'un voyageur qui la découvre pour la première fois, et tu produis un diagnostic structuré appelé "${BRAND_NAME}".
@@ -223,6 +302,23 @@ const RESULT_SCHEMA = {
 const AI_TIMEOUT_MS = 110_000;
 const AI_MAX_RETRIES = 1;
 
+// One same-prompt retry for a narrow set of recoverable response-shape
+// failures (see RETRYABLE_VALIDATION_CODES) -- never for truncation, auth,
+// invalid-request, or SDK-level network errors, and never more than once,
+// so a single analysis can never trigger more than 2 real model calls.
+const APP_MAX_RETRIES = 1;
+
+// Raised from 8000 -- real production data (analysis_failed audit,
+// 2026-09) shows several long-running (~40-60s, i.e. a full generation,
+// not a fast rejection) "ai_invalid_response" failures on submissions with
+// 6+ images, consistent with the model running out of output budget before
+// finishing the required JSON (more images -> more required photo_analysis
+// entries -> more output tokens needed). This is a bounded, minimal-risk
+// increase (+25%) targeted at exactly that failure mode, not an unchecked
+// bump -- stop_reason is now captured on every call (see validateAiResponse)
+// so truncation frequency stays measurable after this change.
+const MAX_OUTPUT_TOKENS = 10_000;
+
 let anthropicClient: Anthropic | null = null;
 function getClient() {
   if (!anthropicClient) {
@@ -245,14 +341,27 @@ export async function analyzeListing(params: {
   // Not persisted anywhere; used only to build the prompt's context text
   // below, the same way city/property_type already are.
   extractedListingText?: { title: string | null; description: string | null } | null;
+  // Client-generated correlation id (see AnalyzeWizard.tsx) -- purely for
+  // log correlation between a specific user-visible attempt and the raw
+  // model call(s) it triggered. Never persisted, never sent to Anthropic.
+  attemptId?: string | null;
 }): Promise<{
   result: AnalysisResult;
   aiInputTokens: number | null;
   aiOutputTokens: number | null;
   parsingDurationMs: number;
+  retryCount: number;
+  stopReason: string | null;
 }> {
   if (DEMO_MODE) {
-    return { result: { ...DEMO_RESULT }, aiInputTokens: null, aiOutputTokens: null, parsingDurationMs: 0 };
+    return {
+      result: { ...DEMO_RESULT },
+      aiInputTokens: null,
+      aiOutputTokens: null,
+      parsingDurationMs: 0,
+      retryCount: 0,
+      stopReason: null,
+    };
   }
 
   if (params.images.length === 0 && !params.input.listing_url) {
@@ -291,88 +400,112 @@ export async function analyzeListing(params: {
     ),
   ];
 
-  let response;
-  const aiStartedAt = Date.now();
-  try {
-    response = await getClient().messages.create({
-      model: MODEL,
-      max_tokens: 8000,
-      system: SYSTEM_PROMPT,
-      tools: [
-        {
-          name: "submit_guestmirror_analysis",
-          description: `Soumet le résultat structuré de l'analyse ${BRAND_NAME}.`,
-          input_schema: RESULT_SCHEMA as Anthropic.Tool["input_schema"],
-        },
-      ],
-      tool_choice: { type: "tool", name: "submit_guestmirror_analysis" },
-      messages: [{ role: "user", content }],
-    });
+  const logTag = `attempt_id=${params.attemptId ?? "none"}`;
+
+  for (let attempt = 0; attempt <= APP_MAX_RETRIES; attempt++) {
+    const aiStartedAt = Date.now();
+    let response: Anthropic.Message;
+    try {
+      response = await getClient().messages.create({
+        model: MODEL,
+        max_tokens: MAX_OUTPUT_TOKENS,
+        system: SYSTEM_PROMPT,
+        tools: [
+          {
+            name: "submit_guestmirror_analysis",
+            description: `Soumet le résultat structuré de l'analyse ${BRAND_NAME}.`,
+            input_schema: RESULT_SCHEMA as Anthropic.Tool["input_schema"],
+          },
+        ],
+        tool_choice: { type: "tool", name: "submit_guestmirror_analysis" },
+        messages: [{ role: "user", content }],
+      });
+    } catch (err) {
+      // SDK-level failures (network/5xx/timeout/auth/rate-limit) already
+      // got the SDK's own AI_MAX_RETRIES retry internally -- never retried
+      // again here, regardless of which loop iteration this is.
+      const code = categorizeAnthropicError(err);
+      console.error(
+        `[ai] messages.create failed ${logTag} retry_count=${attempt} duration_ms=${Date.now() - aiStartedAt} code=${code}:`,
+        err
+      );
+      throw new AnalysisError(
+        "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants.",
+        code
+      );
+    }
+
+    const parsingStartedAt = Date.now();
+    const validation = validateAiResponse(response);
+    const parsingDurationMs = Date.now() - parsingStartedAt;
+    const toolUsePresent = response.content.some((b) => b.type === "tool_use");
+
+    // Section 2's required per-attempt diagnostic line -- model, token
+    // usage, stop_reason, tool_use presence, response size, parse/validation
+    // outcome, error code, duration -- all in one grep-able log line, no
+    // listing content or guest-facing text included.
     console.log(
-      `[ai] messages.create ok duration_ms=${Date.now() - aiStartedAt} images=${params.images.length} ` +
-        `input_tokens=${response.usage.input_tokens} output_tokens=${response.usage.output_tokens}`
+      `[ai] response ${logTag} retry_count=${attempt} model=${MODEL} ` +
+        `input_tokens=${response.usage.input_tokens} output_tokens=${response.usage.output_tokens} ` +
+        `stop_reason=${response.stop_reason} tool_use_present=${toolUsePresent} ` +
+        `response_length=${JSON.stringify(response.content).length} parse_success=${validation.ok} ` +
+        `validation_success=${validation.ok} error_code=${validation.ok ? "" : validation.code} ` +
+        `duration_ms=${Date.now() - aiStartedAt}`
     );
-  } catch (err) {
-    const code = categorizeAnthropicError(err);
-    console.error(`[ai] messages.create failed duration_ms=${Date.now() - aiStartedAt} code=${code}:`, err);
-    throw new AnalysisError(
-      "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants.",
-      code
+
+    if (!validation.ok) {
+      console.error(
+        `[ai] invalid response ${logTag} retry_count=${attempt} code=${validation.code} reason=${validation.reason} ` +
+          `shape=${JSON.stringify(redactedResponseShape(response))}`
+      );
+
+      const canRetry = attempt < APP_MAX_RETRIES && RETRYABLE_VALIDATION_CODES.has(validation.code);
+      if (canRetry) continue;
+
+      throw new AnalysisError(
+        "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants.",
+        validation.code
+      );
+    }
+
+    const input = validation.input;
+
+    // The schema's maxLength/the prompt's instruction steer the model but
+    // aren't a hard guarantee (same reasoning as the overall_score check
+    // above) -- re-validate every suggested title here and clean up any
+    // that overshoot, rather than trusting the model's count. Never a
+    // mid-word substring cut: sanitizeAirbnbTitle only drops whole trailing
+    // words, and drops the title entirely (never shows a mangled one) if
+    // even a single word is already over the limit.
+    const rawTitles = input.title_analysis?.suggested_titles ?? [];
+    const cleanTitles = sanitizeAirbnbTitles(rawTitles);
+    console.log(
+      `[ai] generated_title_length raw=${JSON.stringify(rawTitles.map(titleCharCount))} final=${JSON.stringify(cleanTitles.map(titleCharCount))} dropped=${rawTitles.length - cleanTitles.length}`
     );
-  }
 
-  const parsingStartedAt = Date.now();
-  const toolUse = response.content.find(
-    (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
-  );
-  if (!toolUse) {
-    throw new AnalysisError(
-      "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants.",
-      "ai_invalid_response"
-    );
-  }
-
-  const input = toolUse.input as Partial<AnalysisResult>;
-  // "required" in the tool schema steers the model but isn't a hard
-  // guarantee -- without this check, a response missing overall_score
-  // (observed in testing, likely tied to hitting the tool schema's edges
-  // on an unusual input) surfaced 60+ seconds later as a raw Postgres
-  // not-null violation instead of the existing, fast "réessaie" retry path.
-  if (typeof input.overall_score !== "number" || !input.summary) {
-    console.error(`[ai] incomplete tool response duration_ms=${Date.now() - aiStartedAt}`);
-    throw new AnalysisError(
-      "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants.",
-      "ai_invalid_response"
-    );
-  }
-
-  // The schema's maxLength/the prompt's instruction steer the model but
-  // aren't a hard guarantee (same reasoning as the overall_score check
-  // above) -- re-validate every suggested title here and clean up any
-  // that overshoot, rather than trusting the model's count. Never a
-  // mid-word substring cut: sanitizeAirbnbTitle only drops whole trailing
-  // words, and drops the title entirely (never shows a mangled one) if
-  // even a single word is already over the limit.
-  const rawTitles = input.title_analysis?.suggested_titles ?? [];
-  const cleanTitles = sanitizeAirbnbTitles(rawTitles);
-  console.log(
-    `[ai] generated_title_length raw=${JSON.stringify(rawTitles.map(titleCharCount))} final=${JSON.stringify(cleanTitles.map(titleCharCount))} dropped=${rawTitles.length - cleanTitles.length}`
-  );
-
-  const parsingDurationMs = Date.now() - parsingStartedAt;
-
-  return {
-    result: {
-      ...(input as AnalysisResult),
-      disclaimer: DISCLAIMER,
-      title_analysis: {
-        current_title: input.title_analysis?.current_title ?? "",
-        issues: input.title_analysis?.issues ?? [],
-        suggested_titles: cleanTitles,
+    return {
+      result: {
+        ...(input as AnalysisResult),
+        disclaimer: DISCLAIMER,
+        title_analysis: {
+          current_title: input.title_analysis?.current_title ?? "",
+          issues: input.title_analysis?.issues ?? [],
+          suggested_titles: cleanTitles,
+        },
       },
-    },
-    aiInputTokens: response.usage.input_tokens ?? null,
-    aiOutputTokens: response.usage.output_tokens ?? null,
-    parsingDurationMs,
-  };
+      aiInputTokens: response.usage.input_tokens ?? null,
+      aiOutputTokens: response.usage.output_tokens ?? null,
+      parsingDurationMs,
+      retryCount: attempt,
+      stopReason: response.stop_reason,
+    };
+  }
+
+  // Unreachable: the loop above always either returns on success or throws
+  // once retries are exhausted. Kept only so TypeScript sees every path
+  // returning/throwing.
+  throw new AnalysisError(
+    "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants.",
+    "ai_invalid_response"
+  );
 }

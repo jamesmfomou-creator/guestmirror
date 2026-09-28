@@ -11,6 +11,11 @@ export const analyzeRequestSchema = z.object({
   user_type: z.enum(["host", "concierge", "cohost", "other"]).nullable().optional(),
   property_count_range: z.enum(["1", "2-5", "6-20", "21+"]).nullable().optional(),
   promo_code: z.string().trim().max(64).nullable().optional(),
+  // Client-generated correlation id (see AnalyzeWizard.tsx's attemptId,
+  // already sent to /api/track) -- purely for server-side log correlation
+  // between a user-visible attempt and the raw AI call(s) it triggered.
+  // Not persisted to the analyses table, never required.
+  attempt_id: z.string().max(100).nullable().optional(),
   images: z
     .array(
       z.object({

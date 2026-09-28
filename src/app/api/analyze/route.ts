@@ -156,11 +156,13 @@ export async function POST(req: NextRequest) {
     );
 
     const aiStartedAt = Date.now();
-    const { result, aiInputTokens, aiOutputTokens, parsingDurationMs } = await analyzeListing({
-      images: effectiveImages,
-      input,
-      extractedListingText,
-    });
+    const { result, aiInputTokens, aiOutputTokens, parsingDurationMs, retryCount, stopReason } =
+      await analyzeListing({
+        images: effectiveImages,
+        input,
+        extractedListingText,
+        attemptId: data.attempt_id ?? null,
+      });
     const aiCallDurationMs = Date.now() - aiStartedAt;
 
     const storageStartedAt = Date.now();
@@ -220,6 +222,7 @@ export async function POST(req: NextRequest) {
         parsing_duration_ms: parsingDurationMs,
         ai_input_tokens: aiInputTokens,
         ai_output_tokens: aiOutputTokens,
+        ai_retry_count: retryCount,
         image_storage_duration_ms: imageStorageDurationMs,
         database_duration_ms: databaseDurationMs,
         // Everything after the AI call resolves: storing images, writing
@@ -229,6 +232,10 @@ export async function POST(req: NextRequest) {
         finalization_duration_ms: imageStorageDurationMs + databaseDurationMs,
         total_duration_ms: totalDurationMs,
       },
+      // Separate from `timings` (kept numeric-only there, spread directly
+      // into the analysis_completed event's metadata) -- see lib/ai.ts's
+      // validateAiResponse for what each stop_reason value means.
+      ai_stop_reason: stopReason,
     });
   } catch (err) {
     console.error(`[analyze] failed duration_ms=${Date.now() - requestStartedAt}:`, err);

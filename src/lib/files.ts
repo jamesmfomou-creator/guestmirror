@@ -9,13 +9,30 @@ export interface PendingImage {
 // so capping here too loses no signal the model would have used -- it
 // just means the upload itself (client -> our server) is smaller and
 // faster, and comfortably clear of any request-body-size limit on large
-// multi-image submissions (see the analysis_failed audit: every fast,
-// same-error-code production failure had image_count at the 10-image
-// max, consistent with the pre-optimization payload size for 10 full-res
-// photos landing close to typical serverless request body limits).
+// multi-image submissions.
 const MAX_DIMENSION = 1568;
-const RECOMPRESS_THRESHOLD_BYTES = 1_500_000;
-const JPEG_QUALITY = 0.82;
+// Below this, a file is assumed already reasonably compressed and skips
+// the canvas pass entirely -- kept low (not the previous 1.5MB) because
+// real production failures (response_parse_failed, non-JSON platform
+// error on the way back from a request that never really reached our own
+// code -- see the 2026-09 analysis_failed audit) kept recurring on
+// 7-10-image submissions *after* the first compression pass had already
+// shipped, meaning real photos compress worse than that first pass
+// assumed. Compressing more images, more aggressively, closes that gap.
+const RECOMPRESS_THRESHOLD_BYTES = 350_000;
+// Iterative fallback for images that are still large after the first pass
+// (dense/detailed real photos compress worse than synthetic test images
+// did) -- each step targets this many bytes before giving up and sending
+// the best attempt so far. Floor of 0.55 is a deliberate, bounded quality
+// trade-off: at 1568px this is still clearly legible to a vision model
+// doing a holistic read of a listing photo, and a slightly-softer photo
+// that successfully uploads beats a guaranteed failure at higher quality.
+const TARGET_BYTES_PER_IMAGE = 320_000;
+const QUALITY_STEPS = [0.82, 0.7, 0.55];
+
+async function encodeAtQuality(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+}
 
 async function resizeImage(file: File): Promise<Blob> {
   if (typeof createImageBitmap === "undefined") return file;
@@ -46,10 +63,14 @@ async function resizeImage(file: File): Promise<Blob> {
     ctx.drawImage(bitmap, 0, 0, width, height);
     bitmap.close();
 
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY)
-    );
-    return blob ?? file;
+    let best: Blob | null = null;
+    for (const quality of QUALITY_STEPS) {
+      const blob = await encodeAtQuality(canvas, quality);
+      if (!blob) continue;
+      best = blob;
+      if (blob.size <= TARGET_BYTES_PER_IMAGE) break;
+    }
+    return best ?? file;
   } catch {
     return file;
   }

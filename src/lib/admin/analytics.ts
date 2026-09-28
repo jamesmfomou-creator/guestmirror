@@ -177,6 +177,7 @@ export interface StepTimings {
   total: StepTimingStats;
   aiInputTokens: NumberStats;
   aiOutputTokens: NumberStats;
+  aiRetryCount: NumberStats;
 }
 
 // Per-method (lien Airbnb / capture / capture+lien) breakdown. Every
@@ -333,6 +334,26 @@ function metadataNumber(meta: Record<string, unknown> | null, key: string): numb
   return typeof v === "number" ? v : 0;
 }
 
+// A subscription's first payment (subscription_started) is functionally
+// equivalent to a one-time payment_completed for "did this visitor
+// convert" purposes (funnel, revenue KPI, by-source/campaign, per-method
+// breakdown, user profile, A/B test) -- but the two events are
+// structurally different (see api/stripe/webhook/route.ts:
+// handleOneTimeCheckout fires payment_completed, handleSubscriptionCheckout
+// fires subscription_started instead) and carry different metadata shapes
+// (amount in cents vs. a flat price in EUR). Without this, a Plus
+// subscription conversion silently disappears from every one of those
+// views even though the money is real -- it only ever showed up in the
+// Pricing section's own subscription-specific counters.
+function isPaymentEvent(eventName: string): boolean {
+  return eventName === "payment_completed" || eventName === "subscription_started";
+}
+function paymentEventRevenueEur(r: EventRow): number {
+  return r.event_name === "subscription_started"
+    ? metadataNumber(r.metadata, "price")
+    : metadataNumber(r.metadata, "amount") / 100;
+}
+
 function percentile(sortedAsc: number[], p: number): number | null {
   if (sortedAsc.length === 0) return null;
   const idx = Math.min(sortedAsc.length - 1, Math.floor(p * sortedAsc.length));
@@ -453,6 +474,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       total: emptyStepTimingStats(),
       aiInputTokens: emptyNumberStats(),
       aiOutputTokens: emptyNumberStats(),
+      aiRetryCount: emptyNumberStats(),
     },
     methodBreakdown: {
       airbnbUrl: emptyMethodStats(),
@@ -535,6 +557,11 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     allVisitors.add(visitor);
     const set = visitorsByStep.get(row.event_name);
     if (set) set.add(visitor);
+    // subscription_started has no funnel step of its own -- it's the
+    // subscription equivalent of payment_completed (see isPaymentEvent).
+    if (row.event_name === "subscription_started") {
+      visitorsByStep.get("payment_completed")?.add(visitor);
+    }
   }
 
   const funnel: FunnelStepResult[] = FUNNEL_STEPS.map((step, i) => {
@@ -548,9 +575,9 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
   const paymentCount = funnel[funnel.length - 1]?.count ?? 0;
   const globalConversionRate = landingCount > 0 ? paymentCount / landingCount : null;
 
-  // ---- Revenue (from payment_completed events, amount is in cents) ----
-  const paymentRows = rows.filter((r) => r.event_name === "payment_completed");
-  const revenue = paymentRows.reduce((sum, r) => sum + metadataNumber(r.metadata, "amount") / 100, 0);
+  // ---- Revenue (payment_completed + subscription_started, see isPaymentEvent) ----
+  const paymentRows = rows.filter((r) => isPaymentEvent(r.event_name));
+  const revenue = paymentRows.reduce((sum, r) => sum + paymentEventRevenueEur(r), 0);
 
   // ---- By source ----
   const sourceMap = new Map<string, SourceRow>();
@@ -579,9 +606,9 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       seenBySource[key].add(`p:${visitor}`);
       bucket.paywalls += 1;
     }
-    if (row.event_name === "payment_completed") {
+    if (isPaymentEvent(row.event_name)) {
       bucket.payments += 1;
-      bucket.revenue += metadataNumber(row.metadata, "amount") / 100;
+      bucket.revenue += paymentEventRevenueEur(row);
     }
   }
   const bySource = Array.from(sourceMap.values()).sort((a, b) => b.revenue - a.revenue || b.views - a.views);
@@ -609,9 +636,9 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       seenByCampaign[campaign].add(`p:${visitor}`);
       bucket.paywalls += 1;
     }
-    if (row.event_name === "payment_completed") {
+    if (isPaymentEvent(row.event_name)) {
       bucket.payments += 1;
-      bucket.revenue += metadataNumber(row.metadata, "amount") / 100;
+      bucket.revenue += paymentEventRevenueEur(row);
     }
   }
   const byCampaign = Array.from(campaignMap.values())
@@ -788,6 +815,11 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     total: stepTimingStatsFor(completedRows, "total_duration_ms"),
     aiInputTokens: numberStatsFor(completedRows, "ai_input_tokens"),
     aiOutputTokens: numberStatsFor(completedRows, "ai_output_tokens"),
+    // sampleSize here is the actually useful number: how many completed
+    // analyses needed the one allowed application-level retry (see
+    // APP_MAX_RETRIES in lib/ai.ts) -- avg/median are trivially 1 since
+    // retry_count can only be 0 or 1, but the count itself is the signal.
+    aiRetryCount: numberStatsFor(completedRows, "ai_retry_count"),
   };
 
   // ---- Per-method breakdown (lien Airbnb / capture / capture+lien).
@@ -821,7 +853,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
   }
 
   const submissionRows = rows.filter((r) => r.event_name === "listing_input_submitted");
-  const paymentCompletedRows = rows.filter((r) => r.event_name === "payment_completed");
+  const paymentCompletedRows = rows.filter((r) => isPaymentEvent(r.event_name));
 
   const submissionsByMethod = countRowsByMethod(submissionRows);
   const startedByMethod = countRowsByMethod(startedRows);
@@ -919,7 +951,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     for (const k of keys) result[k] = 0;
     for (const r of rowsForEvent) {
       const seg = segmentOf(r);
-      if (seg) result[seg] += metadataNumber(r.metadata, "amount") / 100;
+      if (seg) result[seg] += paymentEventRevenueEur(r);
     }
     return result;
   }
@@ -969,9 +1001,9 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     const paywallsViewed = countDistinct("paywall_viewed");
     const unlockClicks = countDistinct("unlock_clicked");
     const checkoutsStarted = countDistinct("checkout_started");
-    const paymentRows = variantRows.filter((r) => r.event_name === "payment_completed");
+    const paymentRows = variantRows.filter((r) => isPaymentEvent(r.event_name));
     const paymentsCompleted = paymentRows.length;
-    const revenue = paymentRows.reduce((sum, r) => sum + metadataNumber(r.metadata, "amount") / 100, 0);
+    const revenue = paymentRows.reduce((sum, r) => sum + paymentEventRevenueEur(r), 0);
 
     return {
       visitors,

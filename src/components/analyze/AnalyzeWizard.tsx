@@ -58,7 +58,12 @@ export function AnalyzeWizard() {
   // Assigned once per visitor (persisted, see lib/ab.ts) and read once per
   // mount -- never re-rolled mid-session.
   const [abVariant] = useState(() => getAbVariant());
-  const pendingResult = useRef<{ id?: string; overall_score?: number; timings?: Record<string, number | null> } | null>(
+  const pendingResult = useRef<{
+    id?: string;
+    overall_score?: number;
+    timings?: Record<string, number | null>;
+    ai_stop_reason?: string | null;
+  } | null>(
     null
   );
 
@@ -124,7 +129,12 @@ export function AnalyzeWizard() {
     setStep("email");
   }
 
-  function finishAndRedirect(json: { id?: string; overall_score?: number; timings?: Record<string, number | null> }) {
+  function finishAndRedirect(json: {
+    id?: string;
+    overall_score?: number;
+    timings?: Record<string, number | null>;
+    ai_stop_reason?: string | null;
+  }) {
     const method = inputMethod();
     track("analysis_completed", {
       attemptId: attemptId.current,
@@ -137,6 +147,7 @@ export function AnalyzeWizard() {
       duration_ms: Date.now() - (startedAt.current ?? Date.now()),
       user_type: userType,
       property_count_range: propertyCountRange,
+      ai_stop_reason: json.ai_stop_reason ?? null,
       ...json.timings,
     });
     // Reaching here on a pure-URL submission (no screenshot) means the
@@ -202,6 +213,7 @@ export function AnalyzeWizard() {
         body: JSON.stringify({
           listing_url: url.trim() || null,
           email: email.trim(),
+          attempt_id: attemptId.current,
           city: null,
           property_type: null,
           guest_capacity: null,
@@ -221,6 +233,7 @@ export function AnalyzeWizard() {
         error?: string;
         error_code?: string;
         timings?: Record<string, number | null>;
+        ai_stop_reason?: string | null;
       };
       try {
         json = await res.json();
@@ -295,6 +308,7 @@ export function AnalyzeWizard() {
         error_code: isTimeout ? "timeout" : serverErrorCode || "api_error",
         duration_ms: Date.now() - (startedAt.current ?? Date.now()),
         image_count: images.length,
+        input_method: inputMethod(),
       });
       setApiError(message);
       setSubmitting(false);
