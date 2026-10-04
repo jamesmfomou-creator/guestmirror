@@ -26,7 +26,7 @@ import { GuestQuestions } from "@/components/result/GuestQuestions";
 import { DeleteAnalysis } from "@/components/result/DeleteAnalysis";
 import { OptionalInfoCard } from "@/components/result/OptionalInfoCard";
 import { ManageSubscriptionLink } from "@/components/result/ManageSubscriptionLink";
-import { lockedRecommendationCount } from "@/lib/utils";
+import { lockedRecommendationCount, previewTeaser } from "@/lib/utils";
 import { BRAND_NAME } from "@/lib/brand";
 import { getSubscriptionByEmail, isPlusActive, isLifetimeActive } from "@/lib/subscriptions";
 import { getAbVariantServer } from "@/lib/ab-server";
@@ -129,7 +129,7 @@ export default async function ResultPage({
       {!unlocked && variant === "A" && (
         <>
           <FirstHesitation result={analysis.result} />
-          <MainProblem result={analysis.result} analysisId={id} />
+          <MainProblem issue={analysis.result.top_priorities[0]?.current_issue ?? null} analysisId={id} />
           <LockedTeaser count={lockedRecommendationCount(analysis.result)} analysisId={id} />
           <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
@@ -142,13 +142,13 @@ export default async function ResultPage({
       {!unlocked && variant === "B" && (
         <>
           <FirstHesitation result={analysis.result} />
-          <MainProblem result={analysis.result} analysisId={id} />
+          <MainProblem issue={analysis.result.top_priorities[0]?.current_issue ?? null} analysisId={id} />
           <LockedPreviewB
             analysisId={id}
             otherImageUrls={images.slice(1)}
-            suggestedTitle={analysis.result.title_analysis?.suggested_titles?.[0] ?? null}
-            improvedDescription={analysis.result.description_analysis?.improved_description ?? null}
-            topAction={analysis.result.action_plan?.[0] ?? null}
+            suggestedTitle={previewTeaser(analysis.result.title_analysis?.suggested_titles?.[0], 3)}
+            improvedDescription={previewTeaser(analysis.result.description_analysis?.improved_description, 6)}
+            topAction={previewTeaser(analysis.result.action_plan?.[0], 6)}
             count={lockedRecommendationCount(analysis.result)}
           />
           <UnlockCtaGate analysisId={id}>

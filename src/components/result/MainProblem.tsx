@@ -1,22 +1,24 @@
 "use client";
 
-import { AnalysisResult } from "@/lib/types";
 import { track } from "@/lib/analytics";
 import { useInViewOnce } from "@/lib/tracking/useInViewOnce";
 
+// Takes only the one sentence it displays, not the whole AnalysisResult:
+// this is a client component, so every prop is serialized into the page
+// HTML -- passing the full result leaked paid recommendations to locked
+// (non-paying) visitors even though nothing rendered them.
 export function MainProblem({
-  result,
+  issue,
   analysisId,
 }: {
-  result: AnalysisResult;
+  issue: string | null;
   analysisId: string;
 }) {
   const ref = useInViewOnce<HTMLDivElement>(() => {
     track("main_problem_viewed", { analysisId });
   });
 
-  const problem = result.top_priorities[0];
-  if (!problem) return null;
+  if (!issue) return null;
 
   return (
     <div ref={ref} className="mx-auto mt-6 max-w-xl">
@@ -25,7 +27,7 @@ export function MainProblem({
           🔴 Problème principal
         </span>
         <p className="mx-auto mt-4 max-w-md text-xl font-semibold leading-snug text-foreground">
-          &ldquo;{problem.current_issue}&rdquo;
+          &ldquo;{issue}&rdquo;
         </p>
       </div>
     </div>

@@ -16,15 +16,20 @@ export function PricingCards({
   plusAction,
   lifetimeAction,
   showConciergeBanner,
+  plusDescription,
 }: {
   lifetimePriceLabel: string | null;
   oneTimeAction: ReactNode;
   plusAction: ReactNode;
   lifetimeAction?: ReactNode;
   showConciergeBanner?: boolean;
+  // Paywall-only copy override for the Plus card. Landing and /pricing don't
+  // pass it, so their copy stays exactly as it was.
+  plusDescription?: string;
 }) {
   const lifetimePlan: PlanContent | null =
     lifetimePriceLabel && lifetimeAction ? { ...LIFETIME_PLAN_BASE, priceLabel: lifetimePriceLabel } : null;
+  const plusPlan: PlanContent = plusDescription ? { ...PLUS_PLAN, description: plusDescription } : PLUS_PLAN;
 
   return (
     <div>
@@ -35,7 +40,7 @@ export function PricingCards({
       )}
       <div className={cn("mx-auto grid max-w-5xl gap-5", lifetimePlan ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
         <PricingCard plan={ONE_TIME_PLAN} action={oneTimeAction} />
-        <PricingCard plan={PLUS_PLAN} highlighted action={plusAction} />
+        <PricingCard plan={plusPlan} highlighted action={plusAction} />
         {lifetimePlan && (
           <PricingCard
             plan={lifetimePlan}

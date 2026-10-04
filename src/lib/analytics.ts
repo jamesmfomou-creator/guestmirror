@@ -103,6 +103,7 @@ export const ANALYTICS_EVENTS = [
   // any pricing plan is chosen. Naturally 0 for variant A, which shows
   // the paywall directly -- that's expected, not a bug.
   "unlock_cta_clicked",
+  "paywall_cta_clicked",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];

@@ -53,6 +53,16 @@ export interface Verdict {
  * Gut-reaction verdict derived from the overall score. Short forms are for
  * tight mobile/social-card layouts, long forms for the written report.
  */
+// Locked-preview teaser: only the first few words of a paid text ever reach
+// the page HTML. Enough to feel the content is real and personalized, not
+// enough to recover the paid recommendation for free.
+export function previewTeaser(text: string | null | undefined, maxWords: number): string | null {
+  if (!text) return null;
+  const words = text.trim().split(/\s+/);
+  if (words.length <= maxWords) return words.join(" ");
+  return `${words.slice(0, maxWords).join(" ")} …`;
+}
+
 export function verdictFor(score: number): Verdict {
   if (score >= 80) return { emoji: "🔥", short: "JE CLIQUE", long: "JE CLIQUERAIS" };
   if (score >= 60) return { emoji: "👀", short: "ÇA M'INTÉRESSE", long: "ÇA M'INTÉRESSE" };
