@@ -14,6 +14,15 @@ export interface AirbnbListingData {
   imageUrls: string[];
   city: string | null;
   guestCapacity: string | null;
+  // Structured counts Airbnb itself publishes (see og:title, e.g. "Villa ·
+  // Marrakech · ★5,0 · 3 chambres · 4 lits · 2 salles de bain") -- null
+  // when not present/parseable. This is the one source precise enough to
+  // ground a factual claim about sleeping capacity; the model is never
+  // supposed to guess these from photos when they're available (see
+  // lib/ai.ts's SYSTEM_PROMPT).
+  bedroomCount: number | null;
+  bedCount: number | null;
+  bathroomCount: number | null;
 }
 
 export type AirbnbExtractResult =
@@ -39,7 +48,30 @@ function decodeHtmlEntities(s: string): string {
     .replace(/&gt;/g, ">");
 }
 
+// og:title carries Airbnb's own structured summary line (both FR and EN
+// listings use this pattern, e.g. "Villa · Marrakech · ★5,0 · 3 chambres ·
+// 4 lits · 2 salles de bain et 1 toilette" or "... · 3 bedrooms · 4 beds ·
+// 2 baths"). Present regardless of which branch below (JSON-LD or OG
+// fallback) supplies title/description/images, so it's parsed separately
+// and merged into whichever data object is returned. Best-effort only --
+// any field that doesn't match stays null, and null is always treated as
+// "unknown", never as zero.
+function parseRoomCounts(html: string): { bedroomCount: number | null; bedCount: number | null; bathroomCount: number | null } {
+  const ogTitle = html.match(/<meta property="og:title" content="([^"]+)"/)?.[1];
+  if (!ogTitle) return { bedroomCount: null, bedCount: null, bathroomCount: null };
+  const decoded = decodeHtmlEntities(ogTitle);
+  const bedroomCount = decoded.match(/(\d+)\s*(?:chambres?|bedrooms?)/i)?.[1];
+  const bedCount = decoded.match(/(\d+)\s*(?:lits?|beds?)/i)?.[1];
+  const bathroomCount = decoded.match(/(\d+)\s*(?:salles? de bain|baths?|bathrooms?)/i)?.[1];
+  return {
+    bedroomCount: bedroomCount ? Number(bedroomCount) : null,
+    bedCount: bedCount ? Number(bedCount) : null,
+    bathroomCount: bathroomCount ? Number(bathroomCount) : null,
+  };
+}
+
 function parseAirbnbHtml(html: string): AirbnbListingData | null {
+  const roomCounts = parseRoomCounts(html);
   // Prefer JSON-LD: richer (full description, several photos, capacity,
   // city) than Open Graph tags, and just as public/intended-for-sharing.
   const ldBlocks = html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g);
@@ -57,6 +89,7 @@ function parseAirbnbHtml(html: string): AirbnbListingData | null {
         imageUrls,
         city: typeof parsed?.address?.addressLocality === "string" ? parsed.address.addressLocality : null,
         guestCapacity: typeof occupancy === "number" ? String(occupancy) : null,
+        ...roomCounts,
       };
     } catch {
       continue;
@@ -74,6 +107,7 @@ function parseAirbnbHtml(html: string): AirbnbListingData | null {
     imageUrls: [decodeHtmlEntities(ogImage)],
     city: null,
     guestCapacity: null,
+    ...roomCounts,
   };
 }
 

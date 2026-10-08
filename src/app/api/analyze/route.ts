@@ -56,7 +56,13 @@ export async function POST(req: NextRequest) {
   }
 
   let effectiveImages = data.images;
-  let extractedListingText: { title: string | null; description: string | null } | null = null;
+  let extractedListingText: {
+    title: string | null;
+    description: string | null;
+    bedroomCount: number | null;
+    bedCount: number | null;
+    bathroomCount: number | null;
+  } | null = null;
   let effectiveCity = data.city || null;
   let effectiveGuestCapacity = data.guest_capacity || null;
   let urlExtractionDurationMs: number | null = null;
@@ -96,7 +102,13 @@ export async function POST(req: NextRequest) {
     }
 
     effectiveImages = usable;
-    extractedListingText = { title: extraction.data.title, description: extraction.data.description };
+    extractedListingText = {
+      title: extraction.data.title,
+      description: extraction.data.description,
+      bedroomCount: extraction.data.bedroomCount,
+      bedCount: extraction.data.bedCount,
+      bathroomCount: extraction.data.bathroomCount,
+    };
     effectiveCity = extraction.data.city ?? effectiveCity;
     effectiveGuestCapacity = extraction.data.guestCapacity ?? effectiveGuestCapacity;
     urlExtractionDurationMs = Date.now() - urlExtractionStartedAt;

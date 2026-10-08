@@ -105,6 +105,95 @@ function redactedResponseShape(response: Anthropic.Message): Record<string, unkn
   };
 }
 
+// Code-level backstop for the FIABILITÉ FACTUELLE prompt rules: the prompt
+// is the primary defense, but a model can still slip. Matches a capacity
+// claim of the shape "<number> <capacity noun>" (e.g. "4 lits", "2 salles
+// de bain", "6 voyageurs") -- the exact fact-pattern the real bug report
+// this task responds to described ("incohérence... entre sa description,
+// son titre et son nombre de couchages"). Deliberately scoped to number+
+// noun pairs rather than "any inconsistency keyword near any two numbers":
+// an early version of this used a generic keyword+2-numbers heuristic and
+// it false-positived on a legitimate, well-cited visual critique that
+// happened to reference two photo indices ("la photo n°1 ... la photo
+// n°3") -- those numbers have nothing to do with capacity and should never
+// need to be "grounded" in guest/bed/room data. Pairing the number
+// directly with a capacity noun avoids that class of false positive.
+const CAPACITY_CLAIM = /(\d+)\s*(voyageurs?|personnes?|chambres?|lits?|salles?\s+de\s+bain|couchages?)/gi;
+
+function extractNumberTokens(text: string | null | undefined): string[] {
+  if (!text) return [];
+  return text.match(/\d+/g) ?? [];
+}
+
+function extractCapacityClaimNumbers(text: string): string[] {
+  return [...text.matchAll(CAPACITY_CLAIM)].map((m) => m[1]);
+}
+
+function buildSourceNumberSet(params: {
+  input: AnalysisInput;
+  extractedListingText?: {
+    title: string | null;
+    description: string | null;
+    bedroomCount?: number | null;
+    bedCount?: number | null;
+    bathroomCount?: number | null;
+  } | null;
+}): Set<string> {
+  const numbers = new Set<string>();
+  for (const n of extractNumberTokens(params.input.guest_capacity)) numbers.add(n);
+  for (const n of extractNumberTokens(params.input.nightly_price)) numbers.add(n);
+  for (const n of extractNumberTokens(params.extractedListingText?.title)) numbers.add(n);
+  for (const n of extractNumberTokens(params.extractedListingText?.description)) numbers.add(n);
+  if (params.extractedListingText?.bedroomCount != null) numbers.add(String(params.extractedListingText.bedroomCount));
+  if (params.extractedListingText?.bedCount != null) numbers.add(String(params.extractedListingText.bedCount));
+  if (params.extractedListingText?.bathroomCount != null) numbers.add(String(params.extractedListingText.bathroomCount));
+  return numbers;
+}
+
+function isUnsupportedCapacityClaim(text: string, sourceNumbers: Set<string>): boolean {
+  const claimNumbers = extractCapacityClaimNumbers(text);
+  // Need at least two capacity figures (e.g. "2 voyageurs" ... "4 lits")
+  // for this to even be a *comparison* -- a single capacity figure stated
+  // alone isn't a claimed inconsistency.
+  if (claimNumbers.length < 2) return false;
+  return !claimNumbers.every((n) => sourceNumbers.has(n));
+}
+
+// Drops any weakness/top_priority whose text makes an unsupported capacity
+// claim. Logs when it fires (no listing content in the log) so this
+// backstop's real-world frequency stays visible -- it should be rare now
+// that the prompt provides real structured data and an explicit citation
+// requirement. Never auto-rewritten -- a rewritten claim risks reading as
+// a different, equally unverified assertion -- the whole item is dropped.
+function stripUnsupportedInconsistencyClaims(
+  input: Partial<AnalysisResult>,
+  sourceNumbers: Set<string>,
+  logTag: string
+): Partial<AnalysisResult> {
+  let droppedCount = 0;
+
+  const weaknesses = (input.weaknesses ?? []).filter((w) => {
+    const bad = isUnsupportedCapacityClaim(`${w.title ?? ""} ${w.explanation ?? ""} ${w.recommendation ?? ""}`, sourceNumbers);
+    if (bad) droppedCount++;
+    return !bad;
+  });
+
+  const topPriorities = (input.top_priorities ?? []).filter((p) => {
+    const bad = isUnsupportedCapacityClaim(
+      `${p.title ?? ""} ${p.current_issue ?? ""} ${p.recommended_change ?? ""} ${p.expected_benefit ?? ""}`,
+      sourceNumbers
+    );
+    if (bad) droppedCount++;
+    return !bad;
+  });
+
+  if (droppedCount > 0) {
+    console.warn(`[ai] stripped_unsupported_inconsistency_claim ${logTag} count=${droppedCount}`);
+  }
+
+  return { ...input, weaknesses, top_priorities: topPriorities };
+}
+
 // Only genuinely stochastic response-shape hiccups are worth one same-prompt
 // retry -- a fresh sample has a real chance of coming back clean. Truncation
 // (ai_truncated_response) is NOT included: the same input at the same
@@ -135,6 +224,17 @@ RÈGLES STRICTES :
   Mauvais : "Votre annonce a une forte valeur perçue." / Bon : "La présentation donne l'impression que le logement vaut son prix."
 - Tutoie l'utilisateur ("ton annonce", "tu"), jamais de vouvoiement.
 - Réponds uniquement en français.
+
+FIABILITÉ FACTUELLE (TRÈS IMPORTANT) :
+- Distingue toujours trois niveaux dans ce que tu écris : (1) un FAIT observé -- ce qui est écrit noir sur blanc dans les informations fournies par le propriétaire, ou visible sans ambiguïté dans une capture ; (2) une INTERPRÉTATION -- ton ressenti, l'impression que ça donne à un voyageur ; (3) une RECOMMANDATION -- une action que tu suggères. Ne présente JAMAIS une interprétation ou une supposition comme un fait établi.
+- N'affirme JAMAIS qu'il existe une incohérence ou une contradiction factuelle (par exemple entre le nombre de voyageurs, de chambres, de lits ou de salles de bain annoncés) sauf si les DEUX valeurs qui se contredisent sont littéralement présentes dans les informations fournies ci-dessous (titre, description, ou données structurées). Ne déduis JAMAIS un nombre de lits, de chambres ou de couchages en comptant des lits sur une photo si une donnée structurée équivalente t'est fournie -- utilise toujours la donnée structurée en priorité, jamais une estimation visuelle, quand les deux sont disponibles.
+- Si tu signales une incohérence, cite précisément et explicitement les deux éléments contradictoires que tu compares (ex: "le titre indique 6 voyageurs mais la description ne mentionne que 2 lits doubles"). Une incohérence qui ne cite pas ces deux éléments précis ne doit jamais être écrite. Si tu ne peux pas citer deux éléments réellement contradictoires, n'invente pas d'incohérence : n'en mentionne aucune.
+- Si une information est absente ou ambiguë (nombre de lits, de chambres, équipements, etc.), dis-le explicitement plutôt que de deviner (ex: "Je ne vois pas clairement combien de chambres compte ce logement à partir de ce qui est fourni"). Une estimation visuelle incertaine ne doit jamais être présentée comme un fait établi.
+
+SPÉCIFICITÉ DES RECOMMANDATIONS :
+- Pour "top_priorities" et pour les "weaknesses[].recommendation" les plus importantes, ancre chaque recommandation dans une observation spécifique à CETTE annonce (un élément précis d'une photo, du titre ou de la description), explique pourquoi cela peut faire hésiter un voyageur, puis donne une action précise -- si possible avec un exemple concret adapté à cette annonce. N'écris jamais une recommandation qui pourrait s'appliquer telle quelle à n'importe quelle autre annonce Airbnb.
+  Interdit (trop générique) : "Améliore tes photos." / Attendu : "Ta photo de couverture montre le salon alors que la terrasse est l'élément le plus différenciant visible dans la galerie ; teste une photo extérieure plus lumineuse en première position pour que l'atout du logement soit compris immédiatement."
+- S'il n'y a pas assez d'éléments observables dans les informations fournies pour écrire une recommandation vraiment spécifique à cette annonce, préfère une observation plus courte plutôt que de remplir avec une généralité interchangeable.
 
 CE QUE TU N'ES PAS : tu n'es pas un outil de SEO Airbnb, ni un expert de l'algorithme de recherche, ni un revenue manager. Ne mentionne JAMAIS le ranking Airbnb, un benchmark de marché, un taux d'occupation, du pricing dynamique, du revenue management, ou un audit technique d'équipements. Ta seule perspective est celle d'un voyageur qui regarde l'annonce et réagit à chaud, en quelques secondes. Formule toujours une réaction humaine et concrète, jamais un score marketing abstrait.
   Mauvais : "Votre photo principale possède un score d'optimisation de 42 %." / Bon : "Ta photo montre correctement le salon, mais en quelques secondes je ne vois pas encore ce qui rend ton logement spécial."
@@ -340,7 +440,17 @@ export async function analyzeListing(params: {
   // listing's images but none of its actual title/description wording.
   // Not persisted anywhere; used only to build the prompt's context text
   // below, the same way city/property_type already are.
-  extractedListingText?: { title: string | null; description: string | null } | null;
+  extractedListingText?: {
+    title: string | null;
+    description: string | null;
+    // Structured counts from Airbnb's own og:title (see
+    // lib/airbnbExtract.ts) -- the one source precise enough to ground a
+    // factual claim about sleeping capacity. null means genuinely unknown,
+    // never zero.
+    bedroomCount?: number | null;
+    bedCount?: number | null;
+    bathroomCount?: number | null;
+  } | null;
   // Client-generated correlation id (see AnalyzeWizard.tsx) -- purely for
   // log correlation between a specific user-visible attempt and the raw
   // model call(s) it triggered. Never persisted, never sent to Anthropic.
@@ -383,6 +493,18 @@ export async function analyzeListing(params: {
     params.extractedListingText?.description
       ? `Description actuelle de l'annonce (récupérée automatiquement depuis le lien) : ${params.extractedListingText.description}`
       : null,
+    // Structured, authoritative -- never a visual guess. See the FIABILITÉ
+    // FACTUELLE rules above: these must be used in priority over any
+    // photo-based estimate of sleeping capacity.
+    params.extractedListingText?.bedroomCount != null
+      ? `Nombre de chambres annoncé par Airbnb (donnée structurée fiable) : ${params.extractedListingText.bedroomCount}`
+      : null,
+    params.extractedListingText?.bedCount != null
+      ? `Nombre de lits annoncé par Airbnb (donnée structurée fiable) : ${params.extractedListingText.bedCount}`
+      : null,
+    params.extractedListingText?.bathroomCount != null
+      ? `Nombre de salles de bain annoncé par Airbnb (donnée structurée fiable) : ${params.extractedListingText.bathroomCount}`
+      : null,
   ].filter(Boolean);
 
   const content: Anthropic.MessageParam["content"] = [
@@ -401,6 +523,7 @@ export async function analyzeListing(params: {
   ];
 
   const logTag = `attempt_id=${params.attemptId ?? "none"}`;
+  const sourceNumbers = buildSourceNumberSet({ input: params.input, extractedListingText: params.extractedListingText });
 
   for (let attempt = 0; attempt <= APP_MAX_RETRIES; attempt++) {
     const aiStartedAt = Date.now();
@@ -468,7 +591,7 @@ export async function analyzeListing(params: {
       );
     }
 
-    const input = validation.input;
+    const input = stripUnsupportedInconsistencyClaims(validation.input, sourceNumbers, logTag);
 
     // The schema's maxLength/the prompt's instruction steer the model but
     // aren't a hard guarantee (same reasoning as the overall_score check

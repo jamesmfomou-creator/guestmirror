@@ -7,6 +7,7 @@ import { verdictFor } from "@/lib/utils";
 import { ScoreHeader } from "@/components/result/ScoreHeader";
 import { FirstHesitation } from "@/components/result/FirstHesitation";
 import { MainProblem } from "@/components/result/MainProblem";
+import { FreeRecommendation } from "@/components/result/FreeRecommendation";
 import { LockedTeaser } from "@/components/result/LockedTeaser";
 import { LockedPreviewB } from "@/components/result/LockedPreviewB";
 import { AhaCoverImage } from "@/components/result/AhaCoverImage";
@@ -130,6 +131,13 @@ export default async function ResultPage({
         <>
           <FirstHesitation result={analysis.result} />
           <MainProblem issue={analysis.result.top_priorities[0]?.current_issue ?? null} analysisId={id} />
+          <FreeRecommendation
+            recommendation={analysis.result.top_priorities[0]?.recommended_change ?? null}
+            analysisId={id}
+            inputMethod={resultInputMethod}
+            userType={analysis.user_type}
+            propertyCountRange={analysis.property_count_range}
+          />
           <LockedTeaser count={lockedRecommendationCount(analysis.result)} analysisId={id} />
           <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
@@ -143,6 +151,13 @@ export default async function ResultPage({
         <>
           <FirstHesitation result={analysis.result} />
           <MainProblem issue={analysis.result.top_priorities[0]?.current_issue ?? null} analysisId={id} />
+          <FreeRecommendation
+            recommendation={analysis.result.top_priorities[0]?.recommended_change ?? null}
+            analysisId={id}
+            inputMethod={resultInputMethod}
+            userType={analysis.user_type}
+            propertyCountRange={analysis.property_count_range}
+          />
           <LockedPreviewB
             analysisId={id}
             otherImageUrls={images.slice(1)}
