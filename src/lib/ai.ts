@@ -28,7 +28,7 @@ export class AnalysisError extends Error {
 // "we're rate limited", "our request was malformed", etc. instead of a
 // single generic "ai_error" bucket that hides which cause actually produces
 // the failures.
-function categorizeAnthropicError(err: unknown): string {
+export function categorizeAnthropicError(err: unknown): string {
   if (err instanceof APIConnectionTimeoutError) return "ai_timeout";
   if (err instanceof RateLimitError) return "ai_rate_limited";
   if (err instanceof BadRequestError) return "ai_invalid_request";
@@ -50,11 +50,11 @@ function categorizeAnthropicError(err: unknown): string {
 //     failures of forced tool_choice, not a data-shape problem.
 //  3. only once we have a real tool_use with parsed input do we check
 //     whether the required fields are actually present.
-type ResponseValidation =
+export type ResponseValidation =
   | { ok: true; input: Partial<AnalysisResult> }
   | { ok: false; code: string; reason: string };
 
-function validateAiResponse(response: Anthropic.Message): ResponseValidation {
+export function validateAiResponse(response: Anthropic.Message): ResponseValidation {
   if (response.stop_reason === "max_tokens") {
     return { ok: false, code: "ai_truncated_response", reason: "stop_reason=max_tokens" };
   }
@@ -622,10 +622,20 @@ export async function analyzeListing(params: {
     // words, and drops the title entirely (never shows a mangled one) if
     // even a single word is already over the limit.
     const rawTitles = input.title_analysis?.suggested_titles ?? [];
-    const cleanTitles = sanitizeAirbnbTitles(rawTitles);
-    console.log(
-      `[ai] generated_title_length raw=${JSON.stringify(rawTitles.map(titleCharCount))} final=${JSON.stringify(cleanTitles.map(titleCharCount))} dropped=${rawTitles.length - cleanTitles.length}`
-    );
+    // Fail-open, same pattern as stripUnsupportedInconsistencyClaims above:
+    // malformed model output here must never crash an otherwise-valid
+    // analysis. Confirmed failure mode (not hypothetical): a non-string
+    // entry in suggested_titles used to throw uncaught here, surfacing as
+    // an uncategorized "unknown" 500 well after a successful AI response.
+    let cleanTitles: string[] = [];
+    try {
+      cleanTitles = sanitizeAirbnbTitles(rawTitles);
+      console.log(
+        `[ai] generated_title_length raw=${JSON.stringify(rawTitles.map((t) => (typeof t === "string" ? titleCharCount(t) : null)))} final=${JSON.stringify(cleanTitles.map(titleCharCount))} dropped=${rawTitles.length - cleanTitles.length}`
+      );
+    } catch (err) {
+      console.error(`[ai] title sanitization failed ${logTag}:`, err);
+    }
 
     return {
       result: {

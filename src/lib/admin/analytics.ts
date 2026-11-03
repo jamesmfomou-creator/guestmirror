@@ -23,7 +23,7 @@ export const FUNNEL_STEPS: { key: string; label: string }[] = [
   { key: "payment_completed", label: "Paiements complétés" },
 ];
 
-interface EventRow {
+export interface EventRow {
   event_name: string;
   anonymous_id: string | null;
   session_id: string | null;
@@ -210,6 +210,11 @@ export interface AbVariantStats {
   resultsViewed: number;
   ahaMomentsViewed: number;
   unlockCtaClicks: number;
+  // Diagnostic only (see ANALYTICS_EVENTS's comment on paywall_mounted):
+  // compares against unlockCtaClicks and paywallsViewed to tell apart "the
+  // paywall never rendered" from "it rendered but was never scrolled into
+  // view" for the gap between the two.
+  paywallsMounted: number;
   paywallsViewed: number;
   unlockClicks: number;
   checkoutsStarted: number;
@@ -345,10 +350,10 @@ function metadataNumber(meta: Record<string, unknown> | null, key: string): numb
 // subscription conversion silently disappears from every one of those
 // views even though the money is real -- it only ever showed up in the
 // Pricing section's own subscription-specific counters.
-function isPaymentEvent(eventName: string): boolean {
+export function isPaymentEvent(eventName: string): boolean {
   return eventName === "payment_completed" || eventName === "subscription_started";
 }
-function paymentEventRevenueEur(r: EventRow): number {
+export function paymentEventRevenueEur(r: EventRow): number {
   return r.event_name === "subscription_started"
     ? metadataNumber(r.metadata, "price")
     : metadataNumber(r.metadata, "amount") / 100;
@@ -417,6 +422,7 @@ function emptyAbVariantStats(): AbVariantStats {
     resultsViewed: 0,
     ahaMomentsViewed: 0,
     unlockCtaClicks: 0,
+    paywallsMounted: 0,
     paywallsViewed: 0,
     unlockClicks: 0,
     checkoutsStarted: 0,
@@ -998,6 +1004,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     const resultsViewed = countDistinct("result_viewed");
     const ahaMomentsViewed = countDistinct("aha_viewed");
     const unlockCtaClicks = countDistinct("unlock_cta_clicked");
+    const paywallsMounted = countDistinct("paywall_mounted");
     const paywallsViewed = countDistinct("paywall_viewed");
     const unlockClicks = countDistinct("unlock_clicked");
     const checkoutsStarted = countDistinct("checkout_started");
@@ -1011,6 +1018,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       resultsViewed,
       ahaMomentsViewed,
       unlockCtaClicks,
+      paywallsMounted,
       paywallsViewed,
       unlockClicks,
       checkoutsStarted,

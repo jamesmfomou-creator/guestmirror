@@ -44,6 +44,10 @@ export async function POST(req: NextRequest) {
     );
   }
   const data = parsed.data;
+  // Carried through every log line below so a failure at any stage can be
+  // traced back to the specific user attempt it came from -- previously
+  // only the AI-call logs (lib/ai.ts) had any correlating ID at all.
+  const attemptTag = `attempt_id=${data.attempt_id ?? "none"}`;
 
   for (const img of data.images) {
     const approxBytes = (img.base64.length * 3) / 4;
@@ -77,27 +81,27 @@ export async function POST(req: NextRequest) {
   // *before* ever calling the AI or creating an analysis record.
   if (!DEMO_MODE && data.images.length === 0 && data.listing_url) {
     const urlExtractionStartedAt = Date.now();
-    console.log(`[airbnb] airbnb_url_received`);
+    console.log(`[airbnb] airbnb_url_received ${attemptTag}`);
     const extraction = await extractAirbnbListing(data.listing_url);
     if (!extraction.ok) {
       console.warn(
-        `[airbnb] airbnb_url_extraction_failed error_code=${extraction.errorCode} status=${extraction.status ?? ""} duration_ms=${extraction.durationMs}`
+        `[airbnb] airbnb_url_extraction_failed error_code=${extraction.errorCode} status=${extraction.status ?? ""} duration_ms=${extraction.durationMs} ${attemptTag}`
       );
       return airbnbExtractionFailedResponse();
     }
     console.log(
-      `[airbnb] airbnb_listing_data_ready images_found=${extraction.data.imageUrls.length} duration_ms=${extraction.durationMs}`
+      `[airbnb] airbnb_listing_data_ready images_found=${extraction.data.imageUrls.length} duration_ms=${extraction.durationMs} ${attemptTag}`
     );
 
     const downloadStartedAt = Date.now();
     const downloaded = await Promise.all(extraction.data.imageUrls.map((u) => downloadImageAsBase64(u)));
     const usable = downloaded.filter((img): img is { base64: string; mediaType: string } => img !== null);
     console.log(
-      `[airbnb] image download duration_ms=${Date.now() - downloadStartedAt} usable=${usable.length}/${extraction.data.imageUrls.length}`
+      `[airbnb] image download duration_ms=${Date.now() - downloadStartedAt} usable=${usable.length}/${extraction.data.imageUrls.length} ${attemptTag}`
     );
 
     if (usable.length === 0) {
-      console.warn("[airbnb] airbnb_url_extraction_failed error_code=image_download_failed");
+      console.warn(`[airbnb] airbnb_url_extraction_failed error_code=image_download_failed ${attemptTag}`);
       return airbnbExtractionFailedResponse();
     }
 
@@ -112,7 +116,7 @@ export async function POST(req: NextRequest) {
     effectiveCity = extraction.data.city ?? effectiveCity;
     effectiveGuestCapacity = extraction.data.guestCapacity ?? effectiveGuestCapacity;
     urlExtractionDurationMs = Date.now() - urlExtractionStartedAt;
-    console.log(`[airbnb] analysis_started_from_url image_count=${usable.length}`);
+    console.log(`[airbnb] analysis_started_from_url image_count=${usable.length} ${attemptTag}`);
   }
 
   const input = {
@@ -134,7 +138,7 @@ export async function POST(req: NextRequest) {
       try {
         previousAnalysis = await getAnalysis(data.previous_analysis_id);
       } catch (err) {
-        console.error(`[analyze] previous analysis lookup failed, continuing without it:`, err);
+        console.error(`[analyze] previous analysis lookup failed, continuing without it ${attemptTag}:`, err);
       }
     }
 
@@ -154,7 +158,7 @@ export async function POST(req: NextRequest) {
           promoCodeToRecord = data.promo_code;
         }
       } catch (err) {
-        console.error(`[analyze] promo code lookup failed, treating as no code:`, err);
+        console.error(`[analyze] promo code lookup failed, treating as no code ${attemptTag}:`, err);
       }
     }
 
@@ -170,6 +174,7 @@ export async function POST(req: NextRequest) {
         propertyCountRange: data.property_count_range || null,
         isUnlocked: Boolean(promoCodeToRecord),
         promoCode: promoCodeToRecord,
+        attemptId: data.attempt_id ?? null,
       });
       return NextResponse.json({ id: record.id, overall_score: record.overall_score });
     }
@@ -178,7 +183,7 @@ export async function POST(req: NextRequest) {
     effectiveImages = await optimizeImages(effectiveImages);
     const imagePreprocessingDurationMs = Date.now() - preprocessStartedAt;
     console.log(
-      `[analyze] image preprocessing duration_ms=${imagePreprocessingDurationMs} count=${effectiveImages.length}`
+      `[analyze] image preprocessing duration_ms=${imagePreprocessingDurationMs} count=${effectiveImages.length} ${attemptTag}`
     );
 
     const aiStartedAt = Date.now();
@@ -206,7 +211,7 @@ export async function POST(req: NextRequest) {
       );
     }
     const imageStorageDurationMs = Date.now() - storageStartedAt;
-    console.log(`[analyze] image storage duration_ms=${imageStorageDurationMs} count=${storedImages.length}`);
+    console.log(`[analyze] image storage duration_ms=${imageStorageDurationMs} count=${storedImages.length} ${attemptTag}`);
 
     const dbStartedAt = Date.now();
     let record;
@@ -221,6 +226,7 @@ export async function POST(req: NextRequest) {
         propertyCountRange: data.property_count_range || null,
         isUnlocked: Boolean(promoCodeToRecord),
         promoCode: promoCodeToRecord,
+        attemptId: data.attempt_id ?? null,
       });
     } catch (err) {
       throw new AnalysisError(
@@ -230,9 +236,9 @@ export async function POST(req: NextRequest) {
       );
     }
     const databaseDurationMs = Date.now() - dbStartedAt;
-    console.log(`[analyze] db write duration_ms=${databaseDurationMs}`);
+    console.log(`[analyze] db write duration_ms=${databaseDurationMs} ${attemptTag}`);
     const totalDurationMs = Date.now() - requestStartedAt;
-    console.log(`[analyze] total duration_ms=${totalDurationMs} id=${record.id}`);
+    console.log(`[analyze] total duration_ms=${totalDurationMs} id=${record.id} ${attemptTag}`);
 
     return NextResponse.json({
       id: record.id,
@@ -264,7 +270,7 @@ export async function POST(req: NextRequest) {
       ai_stop_reason: stopReason,
     });
   } catch (err) {
-    console.error(`[analyze] failed duration_ms=${Date.now() - requestStartedAt}:`, err);
+    console.error(`[analyze] failed duration_ms=${Date.now() - requestStartedAt} ${attemptTag}:`, err);
     if (err instanceof AnalysisError) {
       return NextResponse.json({ error: err.message, error_code: err.code }, { status: 422 });
     }

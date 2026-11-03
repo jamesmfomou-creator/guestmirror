@@ -445,6 +445,11 @@ export default async function AdminAnalyticsPage({
                 a={data.abTest.A.unlockCtaClicks}
                 b={data.abTest.B.unlockCtaClicks}
               />
+              <AbRow
+                label="Paywall monté (diagnostic)"
+                a={data.abTest.A.paywallsMounted}
+                b={data.abTest.B.paywallsMounted}
+              />
               <AbRow label="Paywalls vus" a={data.abTest.A.paywallsViewed} b={data.abTest.B.paywallsViewed} />
               <AbRow label="Clics unlock (plan)" a={data.abTest.A.unlockClicks} b={data.abTest.B.unlockClicks} />
               <AbRow

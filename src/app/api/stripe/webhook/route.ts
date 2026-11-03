@@ -110,14 +110,31 @@ async function handleOneTimeCheckout(session: Stripe.Checkout.Session) {
 
   if (!SUPABASE_CONFIGURED) return;
   const supabase = getSupabaseAdmin()!;
-  await supabase.from("payments").insert({
-    id: randomUUID(),
-    analysis_id: analysisId,
-    stripe_session_id: session.id,
-    stripe_payment_intent_id: (session.payment_intent as string) ?? null,
-    amount: session.amount_total ?? null,
-    status: "paid",
-  });
+
+  // Stripe redelivers webhooks it doesn't get a 2xx for (at-least-once
+  // delivery) -- check-then-insert by stripe_session_id first, same
+  // dedup pattern trackServerEvent already uses, so a redelivery of an
+  // already-processed session can't insert a second payments row (which
+  // would also mean a second "your report is unlocked" email below).
+  const { data: existingPayment } = await supabase
+    .from("payments")
+    .select("id")
+    .eq("stripe_session_id", session.id)
+    .maybeSingle();
+
+  if (!existingPayment) {
+    const { error: paymentInsertError } = await supabase.from("payments").insert({
+      id: randomUUID(),
+      analysis_id: analysisId,
+      stripe_session_id: session.id,
+      stripe_payment_intent_id: (session.payment_intent as string) ?? null,
+      amount: session.amount_total ?? null,
+      status: "paid",
+    });
+    if (paymentInsertError) {
+      console.error(`[stripe] payments insert failed session=${session.id} analysis=${analysisId}: ${paymentInsertError.message}`);
+    }
+  }
 
   try {
     const dedupeKey = { field: "stripe_session_id", value: session.id };
@@ -143,6 +160,10 @@ async function handleOneTimeCheckout(session: Stripe.Checkout.Session) {
   } catch {
     // analytics must never break payment confirmation handling
   }
+
+  // Gated on !existingPayment: a redelivery of an already-processed
+  // session must not resend the unlock email a second time.
+  if (existingPayment) return;
 
   try {
     const analysis = await getAnalysis(analysisId);
@@ -349,8 +370,16 @@ export async function POST(req: NextRequest) {
       default:
         break;
     }
-  } catch {
-    // Stripe retries on non-2xx; we've already done what we safely can.
+  } catch (err) {
+    // A real handler failure (e.g. unlockAnalysis's write failing) used to
+    // be swallowed here with a 200 returned regardless, which told Stripe
+    // delivery had succeeded -- so a genuinely failed unlock was never
+    // retried and was lost silently. Returning 500 lets Stripe's own
+    // retry-with-backoff do its job; the handlers above are now
+    // redelivery-safe (unlockAnalysis is idempotent, payments/analytics
+    // writes are deduped), so a retry is safe to re-run in full.
+    console.error(`[stripe] webhook handler failed event=${event.id} type=${event.type}:`, err);
+    return NextResponse.json({ error: "Webhook handler failed." }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });
