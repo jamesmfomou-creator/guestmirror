@@ -229,6 +229,57 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   }
 }
 
+/**
+ * Monthly subscription renewals are billed by Stripe directly on the
+ * existing subscription -- no checkout.session.completed fires for them,
+ * only this invoice event. Without this handler, every renewal after the
+ * first was real money collected but invisible everywhere in our own
+ * analytics (funnel, revenue, A/B stats) even though Stripe's own records
+ * always had it -- confirmed via the Stripe API directly (not assumed).
+ */
+async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
+  // The very first invoice of a new subscription (billing_reason
+  // "subscription_create") is already recorded via checkout.session.completed
+  // -> handleSubscriptionCheckout's subscription_started event. Only
+  // renewals (and any other reason besides the initial creation) are new
+  // money this handler needs to record -- otherwise the first payment would
+  // be double-counted.
+  if (invoice.billing_reason === "subscription_create") return;
+
+  const subscriptionId =
+    typeof (invoice as unknown as { subscription?: string | { id: string } }).subscription === "string"
+      ? (invoice as unknown as { subscription?: string }).subscription
+      : (invoice as unknown as { subscription?: { id: string } }).subscription?.id;
+  if (!subscriptionId) return;
+
+  try {
+    const dedupeKey = { field: "stripe_invoice_id", value: invoice.id };
+    const metadata = {
+      plan: "plus",
+      amount: invoice.amount_paid ?? null,
+      currency: (invoice.currency || "eur").toUpperCase(),
+      payment_status: "paid",
+      stripe_subscription_id: subscriptionId,
+      stripe_invoice_id: invoice.id,
+      billing_reason: invoice.billing_reason ?? null,
+    };
+    // Same generic-event + plan-specific-event pattern as
+    // handleOneTimeCheckout -- picked up by every existing
+    // payment_completed-based aggregation (funnel, revenue KPI, by-source,
+    // A/B stats, isPaymentEvent in admin/analytics.ts) with no further
+    // changes needed there.
+    await trackServerEvent({ eventName: "payment_completed", email: invoice.customer_email ?? null, dedupeKey, metadata });
+    await trackServerEvent({
+      eventName: "subscription_renewed",
+      email: invoice.customer_email ?? null,
+      dedupeKey,
+      metadata,
+    });
+  } catch {
+    // analytics must never break payment confirmation handling
+  }
+}
+
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
   const subscriptionId =
     typeof (invoice as unknown as { subscription?: string | { id: string } }).subscription === "string"
@@ -291,6 +342,9 @@ export async function POST(req: NextRequest) {
         break;
       case "invoice.payment_failed":
         await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+        break;
+      case "invoice.payment_succeeded":
+        await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
         break;
       default:
         break;

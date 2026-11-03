@@ -124,9 +124,18 @@ export async function POST(req: NextRequest) {
   };
 
   try {
+    // Best-effort only: in production this is never used for anything but
+    // deciding the DEMO_MODE result variant below, so a lookup failure here
+    // should never fail the whole analysis -- it previously could, landing
+    // as an undiagnosable generic "unknown" error for what amounts to a
+    // rescan-comparison nicety, not a real blocker.
     let previousAnalysis = null;
     if (data.previous_analysis_id) {
-      previousAnalysis = await getAnalysis(data.previous_analysis_id);
+      try {
+        previousAnalysis = await getAnalysis(data.previous_analysis_id);
+      } catch (err) {
+        console.error(`[analyze] previous analysis lookup failed, continuing without it:`, err);
+      }
     }
 
     // Free-trial link (/analyze?promo=<code>, see StepImport/AnalyzeWizard):
@@ -135,12 +144,17 @@ export async function POST(req: NextRequest) {
     // typo'd, or exhausted code is silently treated as "no code" rather
     // than an error -- it must never block a normal submission. Once the
     // quota is used up, further analyses with the same code are entirely
-    // normal (the existing paywall, including Lifetime, applies as-is).
+    // normal (the existing paywall, including Lifetime, applies as-is). A
+    // lookup *failure* gets the same treatment, for the same reason.
     let promoCodeToRecord: string | null = null;
     if (data.promo_code) {
-      const status = await getPromoCodeStatus(data.promo_code);
-      if (status && status.usedCount < status.maxFreeUnlocks) {
-        promoCodeToRecord = data.promo_code;
+      try {
+        const status = await getPromoCodeStatus(data.promo_code);
+        if (status && status.usedCount < status.maxFreeUnlocks) {
+          promoCodeToRecord = data.promo_code;
+        }
+      } catch (err) {
+        console.error(`[analyze] promo code lookup failed, treating as no code:`, err);
       }
     }
 

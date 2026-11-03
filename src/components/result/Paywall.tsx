@@ -46,10 +46,14 @@ export function Paywall({
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Lower threshold than the 0.4 default: this section is taller than a
+  // phone viewport (title + benefits + 3 pricing cards), and the default
+  // was measurably undercounting real views -- see useInViewOnce's comment
+  // for the real numbers that showed this.
   const ref = useInViewOnce<HTMLDivElement>(() => {
     track("paywall_viewed", { analysisId, input_method: inputMethod, user_type: userType, property_count_range: propertyCountRange });
     track("pricing_viewed", { analysisId });
-  });
+  }, 0.1);
 
   // UX nudge only (see lib/pricing.ts's PLUS_PLAN.concierge for the
   // always-on static mention) -- never hides or blocks the other plans.

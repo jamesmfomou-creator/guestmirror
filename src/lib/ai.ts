@@ -170,6 +170,27 @@ function stripUnsupportedInconsistencyClaims(
   sourceNumbers: Set<string>,
   logTag: string
 ): Partial<AnalysisResult> {
+  // This filter exists purely to *improve* reliability -- it must never
+  // become a new way for an analysis to fail outright. If the model ever
+  // returns a malformed array entry (e.g. a null/undefined item) that this
+  // logic doesn't expect, fail open: log it and return the original,
+  // unfiltered input rather than letting the whole request crash with an
+  // undiagnosable error (this closes a real gap found during the 2026-11
+  // audit: any uncaught exception here surfaced only as the server's
+  // generic "unknown" error code, with no way to tell what actually broke).
+  try {
+    return stripUnsupportedInconsistencyClaimsUnsafe(input, sourceNumbers, logTag);
+  } catch (err) {
+    console.error(`[ai] stripUnsupportedInconsistencyClaims failed ${logTag}, returning input unfiltered:`, err);
+    return input;
+  }
+}
+
+function stripUnsupportedInconsistencyClaimsUnsafe(
+  input: Partial<AnalysisResult>,
+  sourceNumbers: Set<string>,
+  logTag: string
+): Partial<AnalysisResult> {
   let droppedCount = 0;
 
   const weaknesses = (input.weaknesses ?? []).filter((w) => {

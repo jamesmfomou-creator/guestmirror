@@ -58,6 +58,7 @@ const ERROR_CODE_LABELS: Record<string, string> = {
   airbnb_url_extraction_failed: "Extraction du lien Airbnb échouée",
   response_parse_failed: "Réponse serveur illisible",
   timeout: "Délai dépassé (client)",
+  network_error: "Connexion coupée (réseau, avant réponse serveur)",
   unknown: "Inconnu",
 };
 

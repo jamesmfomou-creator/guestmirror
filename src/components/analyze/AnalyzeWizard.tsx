@@ -303,9 +303,17 @@ export function AnalyzeWizard() {
       // failures down by real cause instead of a generic "api_error" bucket.
       const serverErrorCode =
         !isTimeout && err instanceof Error && typeof err.cause === "string" ? err.cause : null;
+      // A plain fetch() failure (connection dropped mid-request, DNS
+      // failure, offline) throws a TypeError before any response is ever
+      // received -- distinct from our own explicit `throw new Error(...)`
+      // calls above (always a plain Error), which already carry a specific
+      // server-provided code via `cause` when there is one. Distinguishing
+      // this closes part of the generic "api_error" bucket found to be ~50%
+      // of all technical failures in the 2026-11 audit.
+      const isNetworkFailure = !isTimeout && !serverErrorCode && err instanceof TypeError;
       track("analysis_failed", {
         attemptId: attemptId.current,
-        error_code: isTimeout ? "timeout" : serverErrorCode || "api_error",
+        error_code: isTimeout ? "timeout" : serverErrorCode || (isNetworkFailure ? "network_error" : "api_error"),
         duration_ms: Date.now() - (startedAt.current ?? Date.now()),
         image_count: images.length,
         input_method: inputMethod(),
