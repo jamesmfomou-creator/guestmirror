@@ -106,11 +106,19 @@ export function sanitizeAirbnbTitle(rawTitle: string): string | null {
   return null;
 }
 
-/** Applies sanitizeAirbnbTitle to a list, dropping unfixable titles and duplicates produced by shortening. */
-export function sanitizeAirbnbTitles(rawTitles: string[]): string[] {
+/**
+ * Applies sanitizeAirbnbTitle to a list, dropping unfixable titles and
+ * duplicates produced by shortening. The schema/prompt steer the model
+ * toward an array of strings but don't guarantee it (same reasoning as
+ * elsewhere in this file) -- a non-string entry is skipped rather than
+ * crashing (sanitizeAirbnbTitle calls .trim(), which throws on anything
+ * but a string).
+ */
+export function sanitizeAirbnbTitles(rawTitles: unknown[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const raw of rawTitles) {
+    if (typeof raw !== "string") continue;
     const clean = sanitizeAirbnbTitle(raw);
     if (clean && !seen.has(clean)) {
       seen.add(clean);

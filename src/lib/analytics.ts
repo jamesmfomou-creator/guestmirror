@@ -105,6 +105,13 @@ export const ANALYTICS_EVENTS = [
   "unlock_cta_clicked",
   "paywall_cta_clicked",
   "free_recommendation_viewed",
+  // Fires the instant the Paywall component mounts -- before
+  // useInViewOnce's IntersectionObserver gets a chance to fire
+  // paywall_viewed. Added to isolate a measured ~33% gap between
+  // unlock_cta_clicked (variant B) and paywall_viewed: comparing this
+  // against both tells apart "never rendered" from "rendered but never
+  // scrolled into view."
+  "paywall_mounted",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];

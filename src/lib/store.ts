@@ -53,6 +53,34 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+/** Shared row -> AnalysisRecord mapping, used by every read path (getAnalysis, the attempt_id dedup lookup below) so they can't drift apart. */
+function mapAnalysisRow(row: Record<string, unknown>): AnalysisRecord {
+  const images = ((row.analysis_images as { storage_path: string; position: number }[]) || [])
+    .sort((a, b) => a.position - b.position)
+    .map((img) => img.storage_path);
+  return {
+    id: row.id as string,
+    user_id: (row.user_id as string) ?? null,
+    email: (row.email as string) ?? null,
+    listing_url: (row.listing_url as string) ?? null,
+    city: (row.city as string) ?? null,
+    property_type: (row.property_type as string) ?? null,
+    guest_capacity: (row.guest_capacity as string) ?? null,
+    nightly_price: (row.nightly_price as string) ?? null,
+    overall_score: row.overall_score as number,
+    result: row.result_json as AnalysisResult,
+    images,
+    is_unlocked: row.is_unlocked as boolean,
+    payment_status: row.payment_status as PaymentStatus,
+    previous_analysis_id: (row.previous_analysis_id as string) ?? null,
+    user_type: (row.user_type as UserType) ?? null,
+    property_count_range: (row.property_count_range as PropertyCountRange) ?? null,
+    promo_code: (row.promo_code as string) ?? null,
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string,
+  };
+}
+
 export async function createAnalysis(params: {
   input: AnalysisInput;
   images: string[];
@@ -64,7 +92,29 @@ export async function createAnalysis(params: {
   userType?: UserType | null;
   propertyCountRange?: PropertyCountRange | null;
   promoCode?: string | null;
+  attemptId?: string | null;
 }): Promise<AnalysisRecord> {
+  // A double submission (double-click, client retry after a slow
+  // response) would otherwise pay for a second full AI call and create a
+  // second analysis row for the exact same attempt. The client already
+  // guards against this (AnalyzeWizard disables the button while
+  // submitting), but nothing enforced it server-side -- check-then-insert
+  // here, same dedup pattern already used for Stripe events, so a
+  // same-attempt resubmission returns the existing analysis instead of
+  // creating a duplicate. Requires the attempt_id column + unique index
+  // from supabase/migrations/0008_reliability.sql to fully close the race
+  // between two concurrent requests; this check alone already covers the
+  // much more common sequential-retry case.
+  if (params.attemptId && SUPABASE_CONFIGURED) {
+    const supabase = getSupabaseAdmin()!;
+    const { data: existing } = await supabase
+      .from("analyses")
+      .select("*, analysis_images(storage_path, position)")
+      .eq("attempt_id", params.attemptId)
+      .maybeSingle();
+    if (existing) return mapAnalysisRow(existing as Record<string, unknown>);
+  }
+
   const record: AnalysisRecord = {
     id: randomUUID(),
     user_id: params.userId ?? null,
@@ -106,6 +156,7 @@ export async function createAnalysis(params: {
       user_type: record.user_type,
       property_count_range: record.property_count_range,
       promo_code: record.promo_code,
+      attempt_id: params.attemptId ?? null,
     });
     if (error) throw new Error(`Supabase insert failed: ${error.message}`);
 
@@ -134,31 +185,7 @@ export async function getAnalysis(id: string): Promise<AnalysisRecord | null> {
       .eq("id", id)
       .maybeSingle();
     if (error || !data) return null;
-    const row = data as Record<string, unknown>;
-    const images = ((row.analysis_images as { storage_path: string; position: number }[]) || [])
-      .sort((a, b) => a.position - b.position)
-      .map((img) => img.storage_path);
-    return {
-      id: row.id as string,
-      user_id: (row.user_id as string) ?? null,
-      email: (row.email as string) ?? null,
-      listing_url: (row.listing_url as string) ?? null,
-      city: (row.city as string) ?? null,
-      property_type: (row.property_type as string) ?? null,
-      guest_capacity: (row.guest_capacity as string) ?? null,
-      nightly_price: (row.nightly_price as string) ?? null,
-      overall_score: row.overall_score as number,
-      result: row.result_json as AnalysisResult,
-      images,
-      is_unlocked: row.is_unlocked as boolean,
-      payment_status: row.payment_status as PaymentStatus,
-      previous_analysis_id: (row.previous_analysis_id as string) ?? null,
-      user_type: (row.user_type as UserType) ?? null,
-      property_count_range: (row.property_count_range as PropertyCountRange) ?? null,
-      promo_code: (row.promo_code as string) ?? null,
-      created_at: row.created_at as string,
-      updated_at: row.updated_at as string,
-    };
+    return mapAnalysisRow(data as Record<string, unknown>);
   }
 
   return readLocalRecord(id);
@@ -236,10 +263,18 @@ export async function getLatestUnlockedAnalysisByEmail(
 export async function unlockAnalysis(id: string, paymentStatus: PaymentStatus = "paid") {
   if (SUPABASE_CONFIGURED) {
     const supabase = getSupabaseAdmin()!;
-    await supabase
+    const { error } = await supabase
       .from("analyses")
       .update({ is_unlocked: true, payment_status: paymentStatus, updated_at: nowIso() })
       .eq("id", id);
+    // This is the single write that turns a confirmed Stripe payment into
+    // actual report access -- previously unchecked, so a failed write here
+    // (RLS, network blip, bad id) looked identical to success: no error
+    // surfaced anywhere, customer paid but stayed locked out.
+    if (error) {
+      console.error(`[store] unlockAnalysis failed id=${id} payment_status=${paymentStatus}: ${error.message}`);
+      throw new Error(`unlockAnalysis failed: ${error.message}`);
+    }
     return;
   }
   const record = readLocalRecord(id);

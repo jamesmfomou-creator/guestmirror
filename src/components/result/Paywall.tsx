@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { PricingCards } from "@/components/pricing/PricingCards";
 import { track } from "@/lib/analytics";
@@ -45,6 +45,15 @@ export function Paywall({
 }) {
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Fires on mount, independent of scroll position -- diagnostic only (see
+  // ANALYTICS_EVENTS's comment on paywall_mounted), to tell apart the
+  // component never rendering from it rendering but never being scrolled
+  // into view.
+  useEffect(() => {
+    track("paywall_mounted", { analysisId, input_method: inputMethod });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once per mount only, not on every analysisId/inputMethod identity change
+  }, []);
 
   // Lower threshold than the 0.4 default: this section is taller than a
   // phone viewport (title + benefits + 3 pricing cards), and the default

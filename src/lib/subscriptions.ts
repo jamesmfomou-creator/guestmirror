@@ -112,7 +112,7 @@ export async function upsertSubscriptionFromCheckout(params: {
   const normalized = normalizeEmail(params.email);
   if (!normalized) return;
 
-  await supabase.from("subscriptions").upsert(
+  const { error } = await supabase.from("subscriptions").upsert(
     {
       email: normalized,
       stripe_customer_id: params.stripeCustomerId,
@@ -123,6 +123,9 @@ export async function upsertSubscriptionFromCheckout(params: {
     },
     { onConflict: "email" }
   );
+  if (error) {
+    console.error(`[subscriptions] upsertSubscriptionFromCheckout failed email=${normalized}: ${error.message}`);
+  }
 }
 
 /**
@@ -141,7 +144,7 @@ export async function upsertLifetimeFromCheckout(params: {
   const normalized = normalizeEmail(params.email);
   if (!normalized) return;
 
-  await supabase.from("subscriptions").upsert(
+  const { error } = await supabase.from("subscriptions").upsert(
     {
       email: normalized,
       stripe_customer_id: params.stripeCustomerId,
@@ -158,6 +161,9 @@ export async function upsertLifetimeFromCheckout(params: {
     },
     { onConflict: "email" }
   );
+  if (error) {
+    console.error(`[subscriptions] upsertLifetimeFromCheckout failed email=${normalized}: ${error.message}`);
+  }
 }
 
 /** Called from customer.subscription.updated/deleted -- no email in the payload, look up by subscription id. */
@@ -169,7 +175,7 @@ export async function updateSubscriptionByStripeId(params: {
   if (!SUPABASE_CONFIGURED) return null;
   const supabase = getSupabaseAdmin()!;
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("subscriptions")
     .update({
       subscription_status: params.status,
@@ -178,6 +184,11 @@ export async function updateSubscriptionByStripeId(params: {
     .eq("stripe_subscription_id", params.stripeSubscriptionId)
     .select("email, stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, current_period_end")
     .maybeSingle();
+  if (error) {
+    console.error(
+      `[subscriptions] updateSubscriptionByStripeId failed stripe_subscription_id=${params.stripeSubscriptionId}: ${error.message}`
+    );
+  }
 
   return (data as SubscriptionRecord) ?? null;
 }
