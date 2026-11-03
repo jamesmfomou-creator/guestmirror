@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { scoreColor, scoreLabel } from "@/lib/utils";
 
 export function ScoreRing({
@@ -19,17 +20,33 @@ export function ScoreRing({
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (Math.max(0, Math.min(100, score)) / 100) * circumference;
   const color = scoreColor(score);
+  const filterId = useId();
 
   return (
     <div className="inline-flex flex-col items-center gap-3">
       <div className="relative" style={{ width: size, height: size }}>
-        <svg width={size} height={size} className="-rotate-90">
+        {/* Soft colored halo behind the ring -- the same glow language
+            used elsewhere (hero, final CTA) -- plus a tinted track instead
+            of flat grey, so the dial reads as a designed piece rather than
+            a generic progress indicator. */}
+        <div
+          aria-hidden
+          className="absolute inset-[-20%] rounded-full blur-xl"
+          style={{ backgroundColor: color, opacity: 0.16 }}
+        />
+        <svg width={size} height={size} className="relative -rotate-90">
+          <defs>
+            <filter id={filterId} x="-50%" y="-50%" width="200%" height="200%">
+              <feDropShadow dx="0" dy="1.5" stdDeviation="2" floodColor={color} floodOpacity="0.35" />
+            </filter>
+          </defs>
           <circle
             cx={size / 2}
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke="var(--border)"
+            stroke={color}
+            strokeOpacity={0.14}
             strokeWidth={strokeWidth}
           />
           <circle
@@ -42,6 +59,7 @@ export function ScoreRing({
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={circumference}
+            filter={`url(#${filterId})`}
             className="animate-ring-draw"
             style={
               {

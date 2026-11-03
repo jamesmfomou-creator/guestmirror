@@ -17,9 +17,9 @@ export async function SocialProof() {
   const displayCount = Math.floor(count / 5) * 5;
 
   return (
-    <p className="inline-flex items-center gap-1.5 text-sm font-medium text-muted">
-      <Check size={14} className="shrink-0 text-score-high" />
-      Déjà plus de {displayCount} annonces analysées avec GuestMirror
-    </p>
+    <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-xs font-semibold tracking-wide text-muted shadow-[0_2px_8px_-4px_rgba(28,26,23,0.15)]">
+      <Check size={13} className="shrink-0 text-score-high" />
+      Déjà plus de {displayCount} annonces analysées
+    </span>
   );
 }

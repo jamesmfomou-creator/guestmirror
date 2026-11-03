@@ -1,6 +1,7 @@
 import { Lock } from "lucide-react";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { Reveal } from "./Reveal";
+import { Eyebrow } from "./Eyebrow";
 
 const LOCKED_PREVIEW = [
   "Quelle photo mettre en première",
@@ -13,13 +14,25 @@ export function ReportMockup() {
     <section className="py-20 sm:py-28">
       <div className="mx-auto max-w-2xl px-5">
         <Reveal className="text-center">
-          <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+          <div className="mb-4 flex justify-center">
+            <Eyebrow>Aperçu du rapport</Eyebrow>
+          </div>
+          <h2 className="font-display text-balance text-3xl font-bold tracking-tight sm:text-4xl">
             Pas juste un score. Un diagnostic.
           </h2>
         </Reveal>
 
         <Reveal delay={0.1} className="mt-12">
-          <div className="card overflow-hidden p-7 shadow-[0_24px_60px_-30px_rgba(28,26,23,0.25)] sm:p-10">
+          <div className="card overflow-hidden shadow-[0_32px_80px_-32px_rgba(28,26,23,0.3)]">
+            <div className="flex items-center gap-1.5 border-b border-border bg-background-alt/70 px-4 py-2.5">
+              <span aria-hidden className="h-2.5 w-2.5 rounded-full bg-border" />
+              <span aria-hidden className="h-2.5 w-2.5 rounded-full bg-border" />
+              <span aria-hidden className="h-2.5 w-2.5 rounded-full bg-border" />
+              <span className="ml-3 truncate rounded-md bg-card px-2.5 py-1 text-[11px] text-muted-2">
+                guestmirror.fr/resultat
+              </span>
+            </div>
+            <div className="p-7 sm:p-10">
             <div className="flex flex-col items-center text-center">
               <span className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-2">
                 Test des 5 secondes
@@ -71,6 +84,7 @@ export function ReportMockup() {
                   <span className="text-sm text-muted">{item}</span>
                 </div>
               ))}
+            </div>
             </div>
           </div>
         </Reveal>

@@ -11,6 +11,7 @@ import { ReportMockup } from "@/components/landing/ReportMockup";
 import { SocialProof } from "@/components/landing/SocialProof";
 import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
 import { ScrollingShowcase } from "@/components/landing/ScrollingShowcase";
+import { CaseStudiesCarousel } from "@/components/landing/CaseStudiesCarousel";
 import { getShowcaseItems } from "@/lib/showcase";
 import { PricingCards } from "@/components/pricing/PricingCards";
 import { FAQAccordion } from "@/components/landing/FAQAccordion";
@@ -18,6 +19,7 @@ import { Reveal } from "@/components/landing/Reveal";
 import { BRAND_NAME } from "@/lib/brand";
 import { CtaTrackedButton } from "@/components/landing/CtaTrackedButton";
 import { getLifetimePriceLabel } from "@/lib/lifetimePrice";
+import { Eyebrow } from "@/components/landing/Eyebrow";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
@@ -66,15 +68,18 @@ export default async function LandingPage() {
       <AnalyticsBeacon event="landing_view" />
 
       {/* HERO */}
-      <section className="mx-auto max-w-6xl px-5 pt-14 pb-16 sm:pt-20 sm:pb-24">
-        <div className="grid items-center gap-14 lg:grid-cols-2 lg:gap-10">
+      <section className="mx-auto max-w-6xl overflow-x-clip px-5 pt-14 pb-16 sm:pt-20 sm:pb-24">
+        <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
           <div className="text-center lg:text-left">
-            <h1 className="font-display text-balance text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
-              Ton Airbnb passe-t-il le test des 5 secondes ?
+            <div className="mb-5 flex justify-center lg:justify-start">
+              <Eyebrow>L&apos;IA au service de ton annonce Airbnb</Eyebrow>
+            </div>
+            <h1 className="font-display text-balance text-5xl leading-[1.2] font-extrabold tracking-[-0.01em] sm:text-6xl sm:leading-[1.15] lg:text-7xl lg:leading-[1.12]">
+              Améliore ton annonce Airbnb pour donner envie de réserver.
             </h1>
-            <p className="mx-auto mt-5 max-w-xl text-balance text-lg text-muted lg:mx-0">
-              Apporte ton annonce Airbnb et découvre en quelques secondes ce qu&apos;un voyageur
-              voit, comprend… et ce qui le fait hésiter.
+            <p className="mx-auto mt-6 max-w-xl text-balance text-lg text-muted lg:mx-0">
+              Colle ton lien Airbnb. GuestMirror analyse ton annonce, identifie ses points
+              faibles et te montre comment l&apos;améliorer.
             </p>
             <div className="mt-8 flex flex-col items-center gap-4 lg:items-start">
               <HeroForm />
@@ -110,6 +115,8 @@ export default async function LandingPage() {
 
       <ScrollingShowcase items={showcaseItems} className="border-y border-border/70 bg-background-alt/50 py-4" />
 
+      <CaseStudiesCarousel />
+
       <ReportMockup />
 
       <div id="comment-ca-marche">
@@ -124,7 +131,10 @@ export default async function LandingPage() {
       <section className="border-t border-border/70 bg-background-alt/50 py-20 sm:py-28">
         <div className="mx-auto max-w-3xl px-5 text-center">
           <Reveal>
-            <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+            <div className="mb-4 flex justify-center">
+              <Eyebrow>Mode comparaison</Eyebrow>
+            </div>
+            <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
               Laquelle tu cliquerais ?
             </h2>
             <p className="mx-auto mt-3 max-w-md text-muted">
@@ -141,7 +151,10 @@ export default async function LandingPage() {
       {/* PRICING */}
       <section className="border-t border-border/70 py-20 sm:py-28">
         <Reveal className="mx-auto max-w-3xl px-5 text-center">
-          <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+          <div className="mb-4 flex justify-center">
+            <Eyebrow>Tarifs</Eyebrow>
+          </div>
+          <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
             Découvre exactement quoi améliorer
           </h2>
           <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
@@ -195,7 +208,10 @@ export default async function LandingPage() {
       <section className="border-t border-border/70 py-20 sm:py-28">
         <div className="mx-auto max-w-2xl px-5">
           <Reveal>
-            <h2 className="font-display text-center text-2xl font-bold tracking-tight sm:text-3xl">
+            <div className="mb-4 flex justify-center">
+              <Eyebrow>FAQ</Eyebrow>
+            </div>
+            <h2 className="font-display text-center text-3xl font-bold tracking-tight sm:text-4xl">
               Questions fréquentes
             </h2>
           </Reveal>
@@ -206,9 +222,13 @@ export default async function LandingPage() {
       </section>
 
       {/* FINAL CTA */}
-      <section className="border-t border-border/70 bg-background-alt/50 py-20 sm:py-28">
+      <section className="relative overflow-hidden border-t border-border/70 bg-background-alt/50 py-24 sm:py-32">
+        <div
+          aria-hidden
+          className="absolute top-1/2 left-1/2 -z-10 h-[420px] w-[620px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/15 blur-[110px]"
+        />
         <Reveal className="mx-auto max-w-lg px-5 text-center">
-          <h2 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">Et ton annonce ?</h2>
+          <h2 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">Et ton annonce ?</h2>
           <p className="mt-4 text-muted">
             Découvre ce qu&apos;un voyageur voit pendant ses premières secondes.
           </p>

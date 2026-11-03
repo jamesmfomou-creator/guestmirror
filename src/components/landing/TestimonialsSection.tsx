@@ -1,4 +1,5 @@
 import { listPublicTestimonials } from "@/lib/feedback";
+import { Eyebrow } from "./Eyebrow";
 
 const USER_TYPE_LABELS: Record<string, string> = {
   host: "Hôte",
@@ -33,7 +34,10 @@ export async function TestimonialsSection() {
   return (
     <section className="border-t border-border/70 py-20 sm:py-28">
       <div className={`mx-auto px-5 ${gridWidth}`}>
-        <h2 className="text-center font-display text-2xl font-bold tracking-tight sm:text-3xl">
+        <div className="mb-4 flex justify-center">
+          <Eyebrow>Avis d&apos;hôtes</Eyebrow>
+        </div>
+        <h2 className="text-center font-display text-3xl font-bold tracking-tight sm:text-4xl">
           Témoignages d&apos;hôtes
         </h2>
         <div

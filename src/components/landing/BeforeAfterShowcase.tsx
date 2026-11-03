@@ -1,13 +1,17 @@
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { BRAND_NAME } from "@/lib/brand";
 import { Reveal } from "./Reveal";
+import { Eyebrow } from "./Eyebrow";
 
 export function BeforeAfterShowcase() {
   return (
     <section className="py-20 sm:py-28">
       <div className="mx-auto max-w-3xl px-5 text-center">
         <Reveal>
-          <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+          <div className="mb-4 flex justify-center">
+            <Eyebrow>Progression</Eyebrow>
+          </div>
+          <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
             Corrige. Refais le test. Compare.
           </h2>
         </Reveal>

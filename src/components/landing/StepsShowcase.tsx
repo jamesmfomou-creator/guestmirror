@@ -1,5 +1,6 @@
 import { ImagePlus, ScanSearch, CircleAlert, RefreshCcw } from "lucide-react";
 import { Reveal } from "./Reveal";
+import { Eyebrow } from "./Eyebrow";
 
 // One consistent visual treatment per step (icon tile, same size/background
 // for all four) instead of four different media types (a photo thumbnail, a
@@ -40,7 +41,10 @@ export function StepsShowcase() {
     <section className="border-t border-border/70 bg-background-alt/50 py-20 sm:py-28">
       <div className="mx-auto max-w-5xl px-5">
         <Reveal className="text-center">
-          <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+          <div className="mb-4 flex justify-center">
+            <Eyebrow>Comment ça marche</Eyebrow>
+          </div>
+          <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
             4 étapes. Moins d&apos;une minute.
           </h2>
           <p className="mx-auto mt-3 max-w-md text-sm text-muted">

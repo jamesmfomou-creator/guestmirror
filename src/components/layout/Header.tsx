@@ -19,15 +19,15 @@ export function Header() {
   }, []);
 
   return (
-    <header
-      className={cn(
-        "sticky top-0 z-40 border-b transition-colors duration-300",
-        scrolled
-          ? "border-border/70 bg-background/80 backdrop-blur-md"
-          : "border-transparent bg-background/0"
-      )}
-    >
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4">
+    <header className="sticky top-3 z-40 px-4 sm:top-4 sm:px-5">
+      <div
+        className={cn(
+          "mx-auto flex max-w-5xl items-center justify-between rounded-full border px-5 py-3 transition-all duration-300",
+          scrolled
+            ? "border-border bg-card/95 shadow-[0_12px_32px_-16px_rgba(28,26,23,0.25)] backdrop-blur-md"
+            : "border-border/60 bg-card/75 backdrop-blur-sm"
+        )}
+      >
         <Logo />
         <nav className="flex items-center gap-5 text-sm text-muted">
           <Link

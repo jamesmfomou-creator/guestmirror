@@ -1,6 +1,7 @@
 import { Image, Sparkles, Eye, HelpCircle, ListOrdered, Type } from "lucide-react";
 import { BRAND_NAME } from "@/lib/brand";
 import { Reveal } from "./Reveal";
+import { Eyebrow } from "./Eyebrow";
 
 const ITEMS = [
   {
@@ -40,7 +41,10 @@ export function WhatWeSee() {
     <section className="border-t border-border/70 bg-background-alt/50 py-20 sm:py-28">
       <div className="mx-auto max-w-4xl px-5">
         <Reveal className="mx-auto max-w-xl text-center">
-          <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+          <div className="mb-4 flex justify-center">
+            <Eyebrow>Méthode</Eyebrow>
+          </div>
+          <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
             Ce que {BRAND_NAME} regarde
           </h2>
           <p className="mt-3 text-muted">

@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus } from "lucide-react";
+import { ImagePlus, Link2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { track } from "@/lib/analytics";
 import { isAirbnbUrl } from "@/lib/airbnbUrl";
@@ -50,25 +50,32 @@ export function HeroForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto w-full max-w-sm">
-      <label htmlFor="hero-airbnb-url" className="block text-left text-sm font-medium text-foreground">
+    <form onSubmit={handleSubmit} className="mx-auto w-full max-w-md">
+      <label htmlFor="hero-airbnb-url" className="sr-only">
         Colle ton lien Airbnb
       </label>
-      <input
-        id="hero-airbnb-url"
-        type="text"
-        inputMode="url"
-        autoComplete="off"
-        value={url}
-        onChange={(e) => handleChange(e.target.value)}
-        placeholder="https://www.airbnb.fr/rooms/…"
-        className="mt-2 w-full rounded-xl border border-border bg-background px-4 py-3 text-[15px] focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-      />
+      <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-1.5 shadow-[0_8px_28px_-14px_rgba(28,26,23,0.22)] transition-shadow focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 sm:flex-row sm:items-center sm:gap-1.5">
+        <div className="flex items-center gap-2 pl-2.5 sm:flex-1">
+          <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
+            <Link2 size={16} strokeWidth={2.25} />
+          </span>
+          <input
+            id="hero-airbnb-url"
+            type="text"
+            inputMode="url"
+            autoComplete="off"
+            value={url}
+            onChange={(e) => handleChange(e.target.value)}
+            placeholder="https://www.airbnb.fr/rooms/…"
+            className="w-full bg-transparent py-2.5 text-base text-foreground placeholder:text-muted-2 focus:outline-none"
+          />
+        </div>
+        <Button type="submit" size="lg" className="w-full shrink-0 gap-1.5 sm:w-auto">
+          Analyser
+          <ArrowRight size={16} />
+        </Button>
+      </div>
       {error && <p className="mt-2 text-left text-sm text-score-low">{error}</p>}
-
-      <Button type="submit" size="lg" className="mt-3 w-full">
-        Analyser mon annonce
-      </Button>
 
       <div className="mt-4 flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-muted-2">
         <span className="h-px flex-1 bg-border" />
