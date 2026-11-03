@@ -18,7 +18,10 @@ export function BeforeAfterShowcase() {
             <div className="mt-3">
               <ScoreRing score={43} size={140} strokeWidth={10} showLabel={false} />
             </div>
-            <span className="mt-3 text-sm font-semibold">😬 JE PASSE</span>
+            <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold">
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-score-low" />
+              JE PASSE
+            </span>
           </Reveal>
 
           <Reveal delay={0.15} className="flex flex-col items-center gap-1.5">
@@ -35,7 +38,10 @@ export function BeforeAfterShowcase() {
             <div className="mt-3">
               <ScoreRing score={81} size={140} strokeWidth={10} showLabel={false} />
             </div>
-            <span className="mt-3 text-sm font-semibold">🔥 JE CLIQUE</span>
+            <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold">
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-score-high" />
+              JE CLIQUE
+            </span>
           </Reveal>
         </div>
 

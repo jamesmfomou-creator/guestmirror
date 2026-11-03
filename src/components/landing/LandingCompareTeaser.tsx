@@ -52,9 +52,7 @@ export function LandingCompareTeaser() {
                     isWinner ? "bg-black/55" : "bg-black/60"
                   }`}
                 >
-                  <span className="text-3xl font-bold">
-                    {verdict.emoji} {card.score}
-                  </span>
+                  <span className="text-3xl font-bold">{card.score}</span>
                   <span className="text-xs text-white/70">/ 100</span>
                   <span className="mt-1 text-sm font-semibold tracking-wide">{verdict.short}</span>
                 </div>
@@ -73,7 +71,7 @@ export function LandingCompareTeaser() {
       {choice && (
         <div className="animate-fade-up mt-7 text-center">
           <p className="text-sm font-semibold text-foreground">
-            Tu as choisi {choice.toUpperCase()} 👀
+            Tu as choisi {choice.toUpperCase()}
           </p>
           <p className="mt-1 text-sm text-muted">Intéressant. Voici ce que notre analyse remarque.</p>
 

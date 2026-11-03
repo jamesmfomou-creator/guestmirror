@@ -28,7 +28,8 @@ export function ReportMockup() {
                 <ScoreRing score={43} size={132} strokeWidth={10} showLabel={false} />
               </div>
               <span className="mt-3 inline-flex items-center gap-2 rounded-full bg-background-alt px-4 py-1.5 text-sm font-semibold text-foreground">
-                🤔 J&apos;HÉSITE
+                <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-score-mid" />
+                J&apos;HÉSITE
               </span>
             </div>
 
@@ -53,7 +54,8 @@ export function ReportMockup() {
               </div>
               <div className="rounded-xl bg-score-low/10 p-4 text-center">
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-score-low">
-                  🔴 Problème principal
+                  <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-score-low" />
+                  Problème principal
                 </span>
                 <p className="mx-auto mt-2 max-w-sm text-sm font-medium leading-snug text-foreground">
                   &ldquo;Ta terrasse semble être ton meilleur atout, mais elle n&apos;apparaît

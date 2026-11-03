@@ -25,13 +25,22 @@ export async function TestimonialsSection() {
   const testimonials = await listPublicTestimonials();
   if (testimonials.length === 0) return null;
 
+  // A grid stretched across the full width with only one or two real cards
+  // looks empty rather than selective -- cap the layout width to what the
+  // actual count fills intentionally instead of always reserving 3 columns.
+  const gridWidth = testimonials.length === 1 ? "max-w-md" : testimonials.length === 2 ? "max-w-3xl" : "max-w-5xl";
+
   return (
     <section className="border-t border-border/70 py-20 sm:py-28">
-      <div className="mx-auto max-w-5xl px-5">
+      <div className={`mx-auto px-5 ${gridWidth}`}>
         <h2 className="text-center font-display text-2xl font-bold tracking-tight sm:text-3xl">
           Témoignages d&apos;hôtes
         </h2>
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          className={`mx-auto mt-10 grid gap-5 ${
+            testimonials.length === 1 ? "max-w-md grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-3"
+          }`}
+        >
           {testimonials.map((t) => (
             <div key={t.id} className="card p-5 text-left sm:p-6">
               <p className="text-sm leading-relaxed text-foreground">&ldquo;{t.text}&rdquo;</p>

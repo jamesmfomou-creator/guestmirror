@@ -8,7 +8,6 @@ import { BeforeAfterShowcase } from "@/components/landing/BeforeAfterShowcase";
 import { LandingCompareTeaser } from "@/components/landing/LandingCompareTeaser";
 import { WhatWeSee } from "@/components/landing/WhatWeSee";
 import { ReportMockup } from "@/components/landing/ReportMockup";
-import { SimpleBand } from "@/components/landing/SimpleBand";
 import { SocialProof } from "@/components/landing/SocialProof";
 import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
 import { ScrollingShowcase } from "@/components/landing/ScrollingShowcase";
@@ -70,7 +69,7 @@ export default async function LandingPage() {
       <section className="mx-auto max-w-6xl px-5 pt-14 pb-16 sm:pt-20 sm:pb-24">
         <div className="grid items-center gap-14 lg:grid-cols-2 lg:gap-10">
           <div className="text-center lg:text-left">
-            <h1 className="font-display text-balance text-4xl font-extrabold tracking-tight sm:text-5xl">
+            <h1 className="font-display text-balance text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
               Ton Airbnb passe-t-il le test des 5 secondes ?
             </h1>
             <p className="mx-auto mt-5 max-w-xl text-balance text-lg text-muted lg:mx-0">
@@ -111,9 +110,13 @@ export default async function LandingPage() {
 
       <ScrollingShowcase items={showcaseItems} className="border-y border-border/70 bg-background-alt/50 py-4" />
 
+      <ReportMockup />
+
       <div id="comment-ca-marche">
         <StepsShowcase />
       </div>
+
+      <WhatWeSee />
 
       <BeforeAfterShowcase />
 
@@ -134,12 +137,6 @@ export default async function LandingPage() {
           </Reveal>
         </div>
       </section>
-
-      <WhatWeSee />
-
-      <ReportMockup />
-
-      <SimpleBand />
 
       {/* PRICING */}
       <section className="border-t border-border/70 py-20 sm:py-28">

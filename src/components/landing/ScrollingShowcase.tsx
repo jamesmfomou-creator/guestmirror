@@ -1,5 +1,5 @@
 import { ShowcaseItem } from "@/lib/showcase";
-import { scoreColor, verdictFor } from "@/lib/utils";
+import { scoreColor } from "@/lib/utils";
 
 const USER_TYPE_LABELS: Record<string, string> = {
   host: "Hôte",
@@ -15,10 +15,13 @@ const USER_TYPE_LABELS: Record<string, string> = {
 const MIN_ITEMS = 6;
 
 function ScoreCard({ score }: { score: number }) {
-  const verdict = verdictFor(score);
   return (
     <div className="flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full border border-border bg-card px-4 py-2 text-sm">
-      <span className="text-base leading-none">{verdict.emoji}</span>
+      <span
+        aria-hidden
+        className="h-2 w-2 shrink-0 rounded-full"
+        style={{ backgroundColor: scoreColor(score) }}
+      />
       <span className="font-semibold tabular-nums" style={{ color: scoreColor(score) }}>
         {score}/100
       </span>

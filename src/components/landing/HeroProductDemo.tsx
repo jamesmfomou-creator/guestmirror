@@ -43,8 +43,9 @@ export function HeroProductDemo() {
         aria-hidden
         className="absolute right-0 bottom-0 hidden w-48 rotate-[4deg] rounded-2xl border border-border bg-card p-3.5 opacity-70 shadow-[0_12px_30px_-16px_rgba(28,26,23,0.25)] sm:block"
       >
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-score-low">
-          🔴 Problème
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-score-low">
+          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-score-low" />
+          Problème
         </span>
         <p className="mt-1 text-[11px] leading-snug text-muted">Ton meilleur atout est peu visible.</p>
       </div>
@@ -112,9 +113,10 @@ export function HeroProductDemo() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.4, ease: EASE }}
-                        className="rounded-full bg-background-alt px-3 py-1 text-xs font-semibold text-foreground"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-background-alt px-3 py-1 text-xs font-semibold text-foreground"
                       >
-                        🤔 J&apos;HÉSITE
+                        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-score-mid" />
+                        J&apos;HÉSITE
                       </motion.span>
                     )}
                   </AnimatePresence>
@@ -133,7 +135,7 @@ export function HeroProductDemo() {
                   transition={{ duration: 0.45, ease: EASE }}
                   className="mx-auto flex max-w-[240px] items-center gap-2 rounded-xl bg-score-low/10 px-3 py-2 text-left"
                 >
-                  <span className="text-sm">🔴</span>
+                  <span aria-hidden className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-score-low" />
                   <p className="text-[11px] leading-snug text-foreground">
                     Ton meilleur atout n&apos;est pas visible immédiatement.
                   </p>
