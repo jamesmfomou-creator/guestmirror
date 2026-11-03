@@ -186,31 +186,53 @@ export async function POST(req: NextRequest) {
       `[analyze] image preprocessing duration_ms=${imagePreprocessingDurationMs} count=${effectiveImages.length} ${attemptTag}`
     );
 
+    // Image storage has no dependency on the AI's response (it only needs
+    // effectiveImages, already available) -- previously ran sequentially
+    // after the AI call for no reason. Running both concurrently shaves the
+    // storage+DB tail (~1.5s on average, measured) off the total wait,
+    // since it now overlaps with the AI call instead of extending it. Each
+    // promise stamps its own duration independently (inside .then(), not
+    // from when Promise.all as a whole resolves) so the per-step timings
+    // reported below stay accurate instead of both collapsing to ~the AI
+    // call's duration.
     const aiStartedAt = Date.now();
-    const { result, aiInputTokens, aiOutputTokens, parsingDurationMs, retryCount, stopReason } =
-      await analyzeListing({
-        images: effectiveImages,
-        input,
-        extractedListingText,
-        attemptId: data.attempt_id ?? null,
-      });
-    const aiCallDurationMs = Date.now() - aiStartedAt;
+    let aiCallDurationMs = 0;
+    const aiPromise = analyzeListing({
+      images: effectiveImages,
+      input,
+      extractedListingText,
+      attemptId: data.attempt_id ?? null,
+    }).then((r) => {
+      aiCallDurationMs = Date.now() - aiStartedAt;
+      return r;
+    });
 
     const storageStartedAt = Date.now();
     const tempId = crypto.randomUUID();
+    let imageStorageDurationMs = 0;
+    const storagePromise = Promise.all(
+      effectiveImages.map((img, i) => storeImage(tempId, i, img.base64, img.mediaType))
+    ).then((r) => {
+      imageStorageDurationMs = Date.now() - storageStartedAt;
+      return r;
+    });
+
+    let result, aiInputTokens, aiOutputTokens, parsingDurationMs, retryCount, stopReason;
     let storedImages: string[];
     try {
-      storedImages = await Promise.all(
-        effectiveImages.map((img, i) => storeImage(tempId, i, img.base64, img.mediaType))
-      );
+      [{ result, aiInputTokens, aiOutputTokens, parsingDurationMs, retryCount, stopReason }, storedImages] =
+        await Promise.all([aiPromise, storagePromise]);
     } catch (err) {
+      // Preserve analyzeListing's own AnalysisError (code, message) when
+      // that's the one that failed -- only image storage failures get
+      // recategorized here.
+      if (err instanceof AnalysisError) throw err;
       throw new AnalysisError(
         "Une erreur inattendue est survenue. Merci de réessayer dans quelques instants.",
         "image_processing_failed",
         err
       );
     }
-    const imageStorageDurationMs = Date.now() - storageStartedAt;
     console.log(`[analyze] image storage duration_ms=${imageStorageDurationMs} count=${storedImages.length} ${attemptTag}`);
 
     const dbStartedAt = Date.now();

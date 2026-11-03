@@ -13,16 +13,24 @@ import { LoadingShowcase } from "./LoadingShowcase";
 // Every stage label below is a generic topic name, never a real number --
 // e.g. never "8 recommandations détectées", since the actual count isn't
 // known until the backend responds. Purely anticipatory, not fabricated.
+// Spread across ~50s (real server data: ~61s average total wait) so most
+// of the wait has specific, varied content instead of an early handoff to
+// a generic spinner -- each topic mirrors a real category of the analysis
+// output (lib/ai.ts's schema), same discipline as before, just more of it.
 const STAGES = [
-  { topic: "Photo de couverture", completionLabel: "Analyse terminée", atMs: 1200 },
-  { topic: "Première impression", completionLabel: "Analyse terminée", atMs: 3200 },
-  { topic: "Impact visuel", completionLabel: "Analyse terminée", atMs: 5200 },
-  { topic: "Différenciation", completionLabel: "Analyse terminée", atMs: 7200 },
-  { topic: "Points d'hésitation", completionLabel: "Détectés", atMs: 9200 },
-  { topic: "Recommandations", completionLabel: "Préparées", atMs: 11_000 },
+  { topic: "Photo de couverture", completionLabel: "Analysée", atMs: 1200 },
+  { topic: "Première impression", completionLabel: "Analysée", atMs: 3200 },
+  { topic: "Impact visuel", completionLabel: "Analysé", atMs: 5200 },
+  { topic: "Différenciation", completionLabel: "Analysée", atMs: 7200 },
+  { topic: "Ordre des photos", completionLabel: "Vérifié", atMs: 9800 },
+  { topic: "Titre et description", completionLabel: "Analysés", atMs: 14_500 },
+  { topic: "Points d'hésitation", completionLabel: "Détectés", atMs: 20_500 },
+  { topic: "Comparaison avec le marché", completionLabel: "Faite", atMs: 28_000 },
+  { topic: "Recommandations", completionLabel: "Préparées", atMs: 36_500 },
+  { topic: "Priorités", completionLabel: "Classées", atMs: 45_000 },
 ];
 const FINALIZING_AT_MS = STAGES[STAGES.length - 1].atMs;
-const REASSURANCE_AT_MS = 25_000;
+const REASSURANCE_AT_MS = FINALIZING_AT_MS + 20_000;
 const TRANSITION_MS = 1300;
 const SOFT_CAP = 90;
 const RING_SIZE = 72;

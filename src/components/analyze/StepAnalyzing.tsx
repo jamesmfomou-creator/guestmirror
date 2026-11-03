@@ -6,18 +6,26 @@ import { LoadingShowcase } from "./LoadingShowcase";
 
 // Messages are staged on elapsed time, not on real backend state (the
 // analysis is a single request with no incremental progress to report).
-// Thresholds are tuned so all 4 stages play out in the first ~11s -- well
-// before a typical analysis finishes -- then we hand off to a dedicated
-// "finalizing" phase for however long the backend actually takes, instead
-// of leaving a frozen percentage on screen.
+// Stages are spaced out across ~53s -- real server data (7-day average)
+// puts total wait at ~61s, so this covers almost all of it with specific,
+// varied content instead of collapsing into a generic spinner early. Each
+// stage names a real category of what the analysis actually produces
+// (lib/ai.ts's schema: photo order, title, description, priorities) --
+// never a fabricated number or finding, only ever "what's being looked
+// at" in general terms.
 const STAGES = [
   { atMs: 0, message: "Lecture de ton annonce…" },
   { atMs: 2500, message: "Analyse de ta première impression…" },
   { atMs: 5500, message: "Je cherche ce qui peut faire hésiter…" },
-  { atMs: 8500, message: "Je prépare tes recommandations…" },
+  { atMs: 9000, message: "J'évalue tes photos et leur ordre…" },
+  { atMs: 14_000, message: "J'analyse ton titre et ta description…" },
+  { atMs: 20_000, message: "Je compare avec ce qui fonctionne sur Airbnb…" },
+  { atMs: 28_000, message: "Je prépare tes recommandations…" },
+  { atMs: 37_000, message: "Je priorise les actions les plus utiles…" },
+  { atMs: 46_000, message: "Je vérifie la cohérence de l'ensemble…" },
 ];
-const FINALIZING_AT_MS = 11_000;
-const REASSURANCE_AT_MS = 25_000;
+const FINALIZING_AT_MS = 53_000;
+const REASSURANCE_AT_MS = FINALIZING_AT_MS + 20_000;
 const SOFT_CAP = 90;
 const RING_SIZE = 96;
 const STROKE_WIDTH = 7;
