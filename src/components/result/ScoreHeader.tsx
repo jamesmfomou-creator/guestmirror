@@ -1,7 +1,7 @@
 import { AnalysisResult, SCORE_LABELS, ScoreBreakdown } from "@/lib/types";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { ScoreBar } from "@/components/ui/ScoreBar";
-import { verdictFor } from "@/lib/utils";
+import { verdictFor, scoreSummarySentence } from "@/lib/utils";
 import { BRAND_NAME } from "@/lib/brand";
 
 const ALL_KEYS: (keyof ScoreBreakdown)[] = [
@@ -14,7 +14,19 @@ const ALL_KEYS: (keyof ScoreBreakdown)[] = [
   "traveler_confidence",
 ];
 
-export function ScoreHeader({ result, locked }: { result: AnalysisResult; locked: boolean }) {
+export function ScoreHeader({
+  result,
+  locked,
+  shortSummary,
+}: {
+  result: AnalysisResult;
+  locked: boolean;
+  // Funnel simplification mission, variant B only: the long "Ce que j'ai
+  // compris en 5 secondes" paragraph is replaced by one short, score-tier
+  // sentence. Variant A's locked view (and the unlocked view, for anyone)
+  // is untouched -- this prop defaults to false/unset everywhere else.
+  shortSummary?: boolean;
+}) {
   const verdict = verdictFor(result.overall_score);
 
   return (
@@ -31,12 +43,18 @@ export function ScoreHeader({ result, locked }: { result: AnalysisResult; locked
       </span>
 
       {locked ? (
-        <div className="mt-7 max-w-md">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-2">
-            Ce que j&apos;ai compris en 5 secondes
+        shortSummary ? (
+          <p className="mx-auto mt-5 max-w-sm text-balance text-base text-muted">
+            {scoreSummarySentence(result.overall_score)}
           </p>
-          <p className="mt-2 text-balance text-lg text-foreground">{result.summary}</p>
-        </div>
+        ) : (
+          <div className="mt-7 max-w-md">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-2">
+              Ce que j&apos;ai compris en 5 secondes
+            </p>
+            <p className="mt-2 text-balance text-lg text-foreground">{result.summary}</p>
+          </div>
+        )
       ) : (
         <>
           <p className="mx-auto mt-6 max-w-md text-balance text-lg text-foreground">{result.summary}</p>
