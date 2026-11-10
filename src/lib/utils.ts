@@ -60,6 +60,24 @@ export function verdictFor(score: number): Verdict {
   return { emoji: "😬", short: "JE PASSE", long: "RISQUE DE PASSER À L'ANNONCE SUIVANTE" };
 }
 
+/**
+ * One short, score-tier sentence for the compact free diagnostic screen
+ * (funnel simplification mission) -- same thresholds as verdictFor so the
+ * two stay consistent. Never artificially negative for a high score.
+ */
+export function scoreSummarySentence(score: number): string {
+  if (score >= 80) {
+    return "Ton annonce fait déjà une très bonne première impression. Découvre comment aller encore plus loin.";
+  }
+  if (score >= 60) {
+    return "Ton annonce donne déjà envie d'en savoir plus. Découvre comment la renforcer encore.";
+  }
+  if (score >= 40) {
+    return "Ton annonce présente des points à améliorer. Découvre ce qui peut faire hésiter les voyageurs.";
+  }
+  return "Ton annonce présente plusieurs points à améliorer. Découvre ce qui freine les voyageurs.";
+}
+
 export function lockedRecommendationCount(result: {
   top_priorities: { rank: number }[];
   weaknesses: unknown[];

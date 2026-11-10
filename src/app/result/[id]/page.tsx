@@ -11,7 +11,6 @@ import { FreeRecommendation } from "@/components/result/FreeRecommendation";
 import { LockedTeaser } from "@/components/result/LockedTeaser";
 import { LockedPreviewB } from "@/components/result/LockedPreviewB";
 import { AhaCoverImage } from "@/components/result/AhaCoverImage";
-import { UnlockCtaGate } from "@/components/result/UnlockCtaGate";
 import { Paywall } from "@/components/result/Paywall";
 import { FullPriorities } from "@/components/result/FullPriorities";
 import { StrengthsWeaknesses } from "@/components/result/StrengthsWeaknesses";
@@ -131,7 +130,7 @@ export default async function ResultPage({
         </h1>
       )}
 
-      <ScoreHeader result={analysis.result} locked={!unlocked} />
+      <ScoreHeader result={analysis.result} locked={!unlocked} shortSummary={variant === "B"} />
 
       {!unlocked && variant === "A" && (
         <>
@@ -155,26 +154,9 @@ export default async function ResultPage({
 
       {!unlocked && variant === "B" && (
         <>
-          <FirstHesitation result={analysis.result} />
-          <MainProblem issue={analysis.result.top_priorities[0]?.current_issue ?? null} analysisId={id} />
-          <FreeRecommendation
-            recommendation={analysis.result.top_priorities[0]?.recommended_change ?? null}
-            analysisId={id}
-            inputMethod={resultInputMethod}
-            userType={analysis.user_type}
-            propertyCountRange={analysis.property_count_range}
-          />
-          <LockedPreviewB
-            analysisId={id}
-            otherImageUrls={images.slice(1)}
-            hasSuggestedTitle={Boolean(analysis.result.title_analysis?.suggested_titles?.[0])}
-            hasImprovedDescription={Boolean(analysis.result.description_analysis?.improved_description)}
-            hasTopAction={Boolean(analysis.result.action_plan?.[0])}
-            count={lockedRecommendationCount(analysis.result)}
-          />
-          <UnlockCtaGate analysisId={id}>
+          <LockedPreviewB analysisId={id} count={lockedRecommendationCount(analysis.result)}>
             <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />
-          </UnlockCtaGate>
+          </LockedPreviewB>
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
             {analysis.result.disclaimer}
           </p>
