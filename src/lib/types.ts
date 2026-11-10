@@ -83,6 +83,10 @@ export type PaymentStatus = "none" | "pending" | "paid";
 
 export type UserType = "host" | "concierge" | "cohost" | "other";
 export type PropertyCountRange = "1" | "2-5" | "6-20" | "21+";
+// Onboarding "objectif" question (variant B only, asked after email --
+// see StepGoal.tsx). Segmentation only, same as UserType/PropertyCountRange
+// above: never used to alter what the AI analysis itself produces.
+export type Goal = "improve_appeal" | "reduce_hesitation" | "verify_improvements" | "optimize_multiple";
 
 export interface AnalysisInput {
   listing_url: string | null;
@@ -110,6 +114,7 @@ export interface AnalysisRecord {
   user_type: UserType | null;
   property_count_range: PropertyCountRange | null;
   promo_code: string | null;
+  goal: Goal | null;
   created_at: string;
   updated_at: string;
 }

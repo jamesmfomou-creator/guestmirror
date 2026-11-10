@@ -6,6 +6,7 @@ import {
   AnalysisInput,
   AnalysisRecord,
   AnalysisResult,
+  Goal,
   PaymentStatus,
   PropertyCountRange,
   UserType,
@@ -76,6 +77,7 @@ function mapAnalysisRow(row: Record<string, unknown>): AnalysisRecord {
     user_type: (row.user_type as UserType) ?? null,
     property_count_range: (row.property_count_range as PropertyCountRange) ?? null,
     promo_code: (row.promo_code as string) ?? null,
+    goal: (row.goal as Goal) ?? null,
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
   };
@@ -93,6 +95,7 @@ export async function createAnalysis(params: {
   propertyCountRange?: PropertyCountRange | null;
   promoCode?: string | null;
   attemptId?: string | null;
+  goal?: Goal | null;
 }): Promise<AnalysisRecord> {
   // A double submission (double-click, client retry after a slow
   // response) would otherwise pay for a second full AI call and create a
@@ -133,6 +136,7 @@ export async function createAnalysis(params: {
     user_type: params.userType ?? null,
     property_count_range: params.propertyCountRange ?? null,
     promo_code: params.promoCode ?? null,
+    goal: params.goal ?? null,
     created_at: nowIso(),
     updated_at: nowIso(),
   };
@@ -157,6 +161,7 @@ export async function createAnalysis(params: {
       property_count_range: record.property_count_range,
       promo_code: record.promo_code,
       attempt_id: params.attemptId ?? null,
+      goal: record.goal,
     });
     if (error) throw new Error(`Supabase insert failed: ${error.message}`);
 

@@ -175,6 +175,7 @@ export async function POST(req: NextRequest) {
         isUnlocked: Boolean(promoCodeToRecord),
         promoCode: promoCodeToRecord,
         attemptId: data.attempt_id ?? null,
+        goal: data.goal ?? null,
       });
       return NextResponse.json({ id: record.id, overall_score: record.overall_score });
     }
@@ -249,6 +250,7 @@ export async function POST(req: NextRequest) {
         isUnlocked: Boolean(promoCodeToRecord),
         promoCode: promoCodeToRecord,
         attemptId: data.attempt_id ?? null,
+        goal: data.goal ?? null,
       });
     } catch (err) {
       throw new AnalysisError(

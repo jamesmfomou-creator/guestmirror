@@ -112,6 +112,13 @@ export const ANALYTICS_EVENTS = [
   // against both tells apart "never rendered" from "rendered but never
   // scrolled into view."
   "paywall_mounted",
+  // Onboarding "objectif" question (funnel optimization mission, variant B
+  // only -- see StepGoal.tsx). onboarding_completed fires once the user
+  // continues past it (a choice is required, see StepGoal), right before
+  // the real analysis request fires.
+  "onboarding_goal_viewed",
+  "onboarding_goal_selected",
+  "onboarding_completed",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];

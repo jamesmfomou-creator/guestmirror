@@ -26,6 +26,7 @@ export interface Database {
           property_count_range: string | null;
           promo_code: string | null;
           attempt_id: string | null;
+          goal: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -47,6 +48,7 @@ export interface Database {
           property_count_range?: string | null;
           promo_code?: string | null;
           attempt_id?: string | null;
+          goal?: string | null;
           created_at?: string;
           updated_at?: string;
         };

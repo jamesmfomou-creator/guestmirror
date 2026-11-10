@@ -27,7 +27,7 @@ import { GuestQuestions } from "@/components/result/GuestQuestions";
 import { DeleteAnalysis } from "@/components/result/DeleteAnalysis";
 import { OptionalInfoCard } from "@/components/result/OptionalInfoCard";
 import { ManageSubscriptionLink } from "@/components/result/ManageSubscriptionLink";
-import { lockedRecommendationCount, previewTeaser } from "@/lib/utils";
+import { lockedRecommendationCount } from "@/lib/utils";
 import { BRAND_NAME } from "@/lib/brand";
 import { getSubscriptionByEmail, isPlusActive, isLifetimeActive } from "@/lib/subscriptions";
 import { getAbVariantServer } from "@/lib/ab-server";
@@ -125,6 +125,12 @@ export default async function ResultPage({
 
       {!unlocked && variant === "B" && <AhaCoverImage imageUrl={images[0]} />}
 
+      {!unlocked && variant === "B" && (
+        <h1 className="mx-auto max-w-md text-balance text-center text-2xl font-semibold tracking-tight sm:text-3xl">
+          Ton diagnostic Airbnb est prêt
+        </h1>
+      )}
+
       <ScoreHeader result={analysis.result} locked={!unlocked} />
 
       {!unlocked && variant === "A" && (
@@ -161,9 +167,9 @@ export default async function ResultPage({
           <LockedPreviewB
             analysisId={id}
             otherImageUrls={images.slice(1)}
-            suggestedTitle={previewTeaser(analysis.result.title_analysis?.suggested_titles?.[0], 3)}
-            improvedDescription={previewTeaser(analysis.result.description_analysis?.improved_description, 6)}
-            topAction={previewTeaser(analysis.result.action_plan?.[0], 6)}
+            hasSuggestedTitle={Boolean(analysis.result.title_analysis?.suggested_titles?.[0])}
+            hasImprovedDescription={Boolean(analysis.result.description_analysis?.improved_description)}
+            hasTopAction={Boolean(analysis.result.action_plan?.[0])}
             count={lockedRecommendationCount(analysis.result)}
           />
           <UnlockCtaGate analysisId={id}>
