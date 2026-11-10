@@ -45,6 +45,11 @@ export function Paywall({
 }) {
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // New copywriting (funnel optimization mission) is variant B only --
+  // variant A's paywall text stays exactly as it was, same reasoning as
+  // every other A/B decision in this mission (folded into the existing B
+  // arm rather than a new, orthogonal test).
+  const [abVariant] = useState(() => getAbVariant());
 
   // Fires on mount, independent of scroll position -- diagnostic only (see
   // ANALYTICS_EVENTS's comment on paywall_mounted), to tell apart the
@@ -114,9 +119,13 @@ export function Paywall({
   return (
     <div ref={ref} id="paywall" className="mx-auto mt-6 max-w-3xl scroll-mt-20">
       <div className="text-center">
-        <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Débloque ton analyse complète</h2>
+        <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          {abVariant === "B" ? "Passe du diagnostic à l'action." : "Débloque ton analyse complète"}
+        </h2>
         <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
-          Découvre exactement quoi améliorer sur ton annonce.
+          {abVariant === "B"
+            ? "Découvre les points faibles de ton annonce et les recommandations concrètes pour l'améliorer."
+            : "Découvre exactement quoi améliorer sur ton annonce."}
         </p>
       </div>
 

@@ -10,11 +10,13 @@ export const analyzeRequestSchema = z.object({
   previous_analysis_id: z.string().uuid().nullable().optional(),
   user_type: z.enum(["host", "concierge", "cohost", "other"]).nullable().optional(),
   property_count_range: z.enum(["1", "2-5", "6-20", "21+"]).nullable().optional(),
+  goal: z.enum(["improve_appeal", "reduce_hesitation", "verify_improvements", "optimize_multiple"]).nullable().optional(),
   promo_code: z.string().trim().max(64).nullable().optional(),
   // Client-generated correlation id (see AnalyzeWizard.tsx's attemptId,
-  // already sent to /api/track) -- purely for server-side log correlation
-  // between a user-visible attempt and the raw AI call(s) it triggered.
-  // Not persisted to the analyses table, never required.
+  // already sent to /api/track) -- used for server-side log correlation
+  // (lib/ai.ts, api/analyze/route.ts) between a user-visible attempt and
+  // the raw AI call(s) it triggered, and persisted on the analyses row
+  // (see lib/store.ts's createAnalysis) to dedupe a resubmitted attempt.
   attempt_id: z.string().max(100).nullable().optional(),
   images: z
     .array(

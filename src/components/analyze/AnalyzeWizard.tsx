@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { StepImport } from "./StepImport";
 import { StepProfile } from "./StepProfile";
 import { StepEmail } from "./StepEmail";
+import { StepGoal } from "./StepGoal";
 import { StepAnalyzing } from "./StepAnalyzing";
 import { AnalysisAhaFlow } from "./AnalysisAhaFlow";
 import { PendingImage, fileToBase64 } from "@/lib/files";
@@ -14,9 +15,9 @@ import { isAirbnbUrl } from "@/lib/airbnbUrl";
 import { takePendingFiles } from "@/lib/pendingUpload";
 import { BRAND_NAME } from "@/lib/brand";
 import { verdictFor } from "@/lib/utils";
-import { UserType, PropertyCountRange } from "@/lib/types";
+import { UserType, PropertyCountRange, Goal } from "@/lib/types";
 
-type Step = "import" | "profile" | "email" | "analyzing";
+type Step = "import" | "profile" | "email" | "goal" | "analyzing";
 
 const MAX_IMAGES = 10;
 const MIN_ANIMATION_MS = 3400;
@@ -49,6 +50,7 @@ export function AnalyzeWizard() {
   const [email, setEmail] = useState("");
   const [userType, setUserType] = useState<UserType | null>(null);
   const [propertyCountRange, setPropertyCountRange] = useState<PropertyCountRange | null>(null);
+  const [goal, setGoal] = useState<Goal | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -175,13 +177,35 @@ export function AnalyzeWizard() {
     router.push(`/result/${json.id}`);
   }
 
+  function handleEmailSubmit() {
+    track("email_submitted", { email: email.trim() });
+    // Variant B only (see the funnel optimization mission's A/B decision:
+    // folded into the existing "Aha moment" B arm rather than a new,
+    // orthogonal test) -- variant A's path is untouched, straight to
+    // runAnalysis exactly as before.
+    if (abVariant === "B") {
+      setStep("goal");
+    } else {
+      runAnalysis();
+    }
+  }
+
+  function handleSelectGoal(value: Goal) {
+    setGoal(value);
+    track("onboarding_goal_selected", { goal: value });
+  }
+
+  function handleGoalContinue() {
+    track("onboarding_completed", { goal });
+    runAnalysis();
+  }
+
   async function runAnalysis() {
     if (submitting) return;
     setSubmitting(true);
     setAnalysisDone(false);
     setApiError(null);
     pendingResult.current = null;
-    track("email_submitted", { email: email.trim() });
     setStep("analyzing");
     startedAt.current = Date.now();
     attemptId.current = genId();
@@ -222,6 +246,7 @@ export function AnalyzeWizard() {
           previous_analysis_id: previousAnalysisId || null,
           user_type: userType,
           property_count_range: propertyCountRange,
+          goal,
           promo_code: promoCode || null,
         }),
         signal: timeoutController.signal,
@@ -320,7 +345,12 @@ export function AnalyzeWizard() {
       });
       setApiError(message);
       setSubmitting(false);
-      setStep("email");
+      // Variant B already has a goal selected in state at this point --
+      // sending them back to "email" would force re-entering the email
+      // AND re-answering the goal question. "goal" keeps both: the email
+      // stays filled in (state, not re-asked) and the goal choice is
+      // still selected, just needs one more tap on Continuer to retry.
+      setStep(abVariant === "B" ? "goal" : "email");
     } finally {
       clearTimeout(timeoutTimer);
     }
@@ -371,10 +401,13 @@ export function AnalyzeWizard() {
         <StepEmail
           email={email}
           onChange={setEmail}
-          onSubmit={runAnalysis}
+          onSubmit={handleEmailSubmit}
           loading={submitting}
           error={apiError}
         />
+      )}
+      {step === "goal" && (
+        <StepGoal goal={goal} onSelect={handleSelectGoal} onContinue={handleGoalContinue} error={apiError} />
       )}
       {step === "analyzing" && abVariant === "B" && (
         <AnalysisAhaFlow

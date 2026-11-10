@@ -26,7 +26,7 @@ export function UnlockCtaGate({ analysisId, children }: { analysisId: string; ch
   return (
     <div className="mx-auto mt-7 max-w-xl text-center">
       <Button size="lg" className="w-full" onClick={handleClick}>
-        Voir mon analyse complète
+        Débloquer mon plan complet →
       </Button>
     </div>
   );

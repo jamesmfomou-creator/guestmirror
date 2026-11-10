@@ -1,0 +1,75 @@
+"use client";
+
+import { useEffect } from "react";
+import { Button } from "@/components/ui/Button";
+import { track } from "@/lib/analytics";
+import { Goal } from "@/lib/types";
+
+const GOAL_OPTIONS: { value: Goal; label: string }[] = [
+  { value: "improve_appeal", label: "Améliorer mon annonce pour donner davantage envie de réserver." },
+  { value: "reduce_hesitation", label: "Identifier ce qui peut faire hésiter les voyageurs." },
+  { value: "verify_improvements", label: "Vérifier les améliorations apportées à mon annonce." },
+  { value: "optimize_multiple", label: "Optimiser plusieurs logements Airbnb." },
+];
+
+/**
+ * Onboarding "objectif" question -- variant B only, asked right after
+ * email, before the real analysis request fires (see AnalyzeWizard.tsx).
+ * A choice is required to continue (no skip link, unlike StepProfile):
+ * the brief for this step specifies exactly one button, no "passer cette
+ * étape".
+ *
+ * The answer is segmentation only -- never claim or imply to the user
+ * that the AI diagnostic itself is tailored to this choice, since the
+ * analysis engine doesn't read it.
+ */
+export function StepGoal({
+  goal,
+  onSelect,
+  onContinue,
+  error,
+}: {
+  goal: Goal | null;
+  onSelect: (value: Goal) => void;
+  onContinue: () => void;
+  error?: string | null;
+}) {
+  useEffect(() => {
+    track("onboarding_goal_viewed");
+  }, []);
+
+  return (
+    <div className="animate-fade-up">
+      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+        Quel est ton objectif avec cette annonce ?
+      </h1>
+      <p className="mt-3 text-muted">Pour mieux comprendre tes priorités.</p>
+
+      <div className="mt-8 space-y-2.5">
+        {GOAL_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onSelect(opt.value)}
+            aria-pressed={goal === opt.value}
+            className={`w-full rounded-2xl border px-5 py-4 text-left text-[15px] font-medium transition-colors ${
+              goal === opt.value
+                ? "border-accent bg-accent-soft text-accent-hover"
+                : "border-border bg-card text-foreground hover:border-accent/50"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {error && (
+        <p className="mt-4 rounded-xl bg-score-low/10 px-4 py-3 text-sm text-score-low">{error}</p>
+      )}
+
+      <Button size="lg" className="mt-6 w-full" onClick={onContinue} disabled={!goal}>
+        Continuer vers mon diagnostic →
+      </Button>
+    </div>
+  );
+}
