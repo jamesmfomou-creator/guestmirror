@@ -16,6 +16,51 @@ const attributionSchema = z
   .nullable()
   .optional();
 
+// Confirmed via real data (2026-11-12 support investigation): several
+// landing_view events had document.referrer pointing squarely at
+// Instagram (l.instagram.com / instagram.com) but were still bucketed as
+// "direct" in /admin/analytics's source breakdown, because `source` was
+// only ever read from utm_source -- a visitor who taps a plain,
+// untagged link (bio link shared without UTM params, or a shortener that
+// drops them) left no other trace of where they came from. The pipeline
+// itself wasn't broken -- those events fired and were stored correctly --
+// only the *label* was wrong. This infers a reasonable source from the
+// referrer's domain only when no explicit UTM source was provided, so an
+// intentional utm_source always wins (e.g. to tell paid from organic on
+// the same domain) and a referrer-only guess never overrides it.
+const REFERRER_SOURCE_RULES: { suffixes: string[]; source: string }[] = [
+  { suffixes: ["instagram.com"], source: "ig" },
+  { suffixes: ["facebook.com", "fb.com"], source: "facebook" },
+  { suffixes: ["l.facebook.com", "lm.facebook.com"], source: "facebook" },
+  { suffixes: ["google.com", "google.fr"], source: "google" },
+  { suffixes: ["bing.com"], source: "bing" },
+  { suffixes: ["duckduckgo.com"], source: "duckduckgo" },
+  { suffixes: ["tiktok.com"], source: "tiktok" },
+  { suffixes: ["youtube.com", "youtu.be"], source: "youtube" },
+  { suffixes: ["reddit.com"], source: "reddit" },
+  { suffixes: ["linkedin.com"], source: "linkedin" },
+  { suffixes: ["twitter.com", "t.co", "x.com"], source: "twitter" },
+  { suffixes: ["chatgpt.com"], source: "chatgpt" },
+];
+
+export function inferSourceFromReferrer(referrer: string | null | undefined): string | null {
+  if (!referrer) return null;
+  let host: string;
+  try {
+    host = new URL(referrer).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  for (const rule of REFERRER_SOURCE_RULES) {
+    if (rule.suffixes.some((suffix) => host === suffix || host.endsWith(`.${suffix}`))) {
+      return rule.source;
+    }
+  }
+  // Still more useful than "direct" for anything not explicitly mapped
+  // above -- the bare referring domain, without the www. prefix.
+  return host.replace(/^www\./, "") || null;
+}
+
 const trackRequestSchema = z.object({
   event_name: z.enum(ANALYTICS_EVENTS),
   anonymous_id: z.string().max(100).nullable().optional(),
@@ -45,7 +90,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const supabase = getSupabaseAdmin()!;
-    const source = body.last_touch?.source || "direct";
+    const source = body.last_touch?.source || inferSourceFromReferrer(body.referrer) || "direct";
 
     await supabase.from("analytics_events").insert({
       id: randomUUID(),
