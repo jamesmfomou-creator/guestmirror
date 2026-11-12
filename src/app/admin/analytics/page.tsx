@@ -410,6 +410,44 @@ export default async function AdminAnalyticsPage({
         </div>
       </section>
 
+      {/* Onboarding "objectif" (variant B uniquement, voir StepGoal.tsx) --
+          pour orienter le contenu/positionnement, pas un test A/B en soi. */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Objectifs des utilisateurs (onboarding)</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Réponse à « Quel est ton objectif avec cette annonce ? » — posée après l&apos;email,
+          variante B uniquement.
+        </p>
+        <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[480px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Objectif</th>
+                <th className="px-4 py-2.5 font-medium">Réponses</th>
+                <th className="px-4 py-2.5 font-medium">Part</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(() => {
+                const total = data.goalBreakdown.reduce((sum, r) => sum + r.count, 0);
+                return data.goalBreakdown.map((row) => (
+                  <tr key={row.goal} className="border-b border-border last:border-b-0">
+                    <td className="px-4 py-2.5">{row.label}</td>
+                    <td className="px-4 py-2.5 font-medium tabular-nums">{row.count}</td>
+                    <td className="px-4 py-2.5 text-muted-2 tabular-nums">
+                      {total > 0 ? Math.round((row.count / total) * 100) : 0}%
+                    </td>
+                  </tr>
+                ));
+              })()}
+            </tbody>
+          </table>
+        </div>
+        {data.goalBreakdown.every((r) => r.count === 0) && (
+          <p className="mt-3 text-sm text-muted-2">Aucune réponse pour la période sélectionnée.</p>
+        )}
+      </section>
+
       {/* A/B test: pre-paywall "Aha moment" */}
       <section className="mt-10">
         <h2 className="text-lg font-semibold">A/B Test — Aha moment</h2>

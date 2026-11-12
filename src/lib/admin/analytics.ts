@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { SUPABASE_CONFIGURED } from "@/lib/env";
+import { Goal } from "@/lib/types";
 
 export type Period = "today" | "7d" | "30d";
 
@@ -9,6 +10,17 @@ export type Period = "today" | "7d" | "30d";
 // "started". listing_input_submitted fires exactly once per method (see
 // AnalyzeWizard.goToEmail) and replaces both as the funnel step -- the
 // old events still fire unchanged elsewhere, just not used here anymore.
+// Same labels as StepGoal.tsx's GOAL_OPTIONS, kept here independently
+// (no shared import -- this file runs server-side, StepGoal.tsx is a
+// client component) since the admin dashboard needs the label text, not
+// the component.
+export const GOAL_LABELS: Record<Goal, string> = {
+  improve_appeal: "Améliorer mon annonce pour donner davantage envie de réserver",
+  reduce_hesitation: "Identifier ce qui peut faire hésiter les voyageurs",
+  verify_improvements: "Vérifier les améliorations apportées à mon annonce",
+  optimize_multiple: "Optimiser plusieurs logements Airbnb",
+};
+
 export const FUNNEL_STEPS: { key: string; label: string }[] = [
   { key: "landing_view", label: "Landing views" },
   { key: "cta_test_clicked", label: "CTA clicks" },
@@ -37,6 +49,7 @@ interface AnalysisRow {
   email: string | null;
   overall_score: number;
   created_at: string;
+  goal: string | null;
 }
 
 interface PaymentRow {
@@ -284,6 +297,12 @@ export interface AnalyticsDashboard {
     usersWith2Plus: number;
     usersWith3Plus: number;
   };
+  // Onboarding "objectif" question (variant B only, see StepGoal.tsx) --
+  // how many completed analyses in this period picked each goal, for
+  // content/positioning decisions. Always all 4 goals, 0 included, sorted
+  // by count desc. Analyses with no goal (variant A, or predating the
+  // question) are simply not counted anywhere here.
+  goalBreakdown: { goal: Goal; label: string; count: number }[];
 }
 
 const PAGE_SIZE = 1000;
@@ -523,6 +542,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       usersWith2Plus: 0,
       usersWith3Plus: 0,
     },
+    goalBreakdown: [],
   };
 
   if (!SUPABASE_CONFIGURED) return empty;
@@ -539,7 +559,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
         .range(from, to)
     ),
     fetchAllRows<AnalysisRow>((from, to) =>
-      supabase.from("analyses").select("id, email, overall_score, created_at").range(from, to)
+      supabase.from("analyses").select("id, email, overall_score, created_at, goal").range(from, to)
     ),
     fetchAllRows<{ subscription_status: string }>((from, to) =>
       supabase
@@ -1087,5 +1107,19 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       usersWith2Plus: counts.filter((c) => c >= 2).length,
       usersWith3Plus: counts.filter((c) => c >= 3).length,
     },
+    goalBreakdown: computeGoalBreakdown(analyses, since),
   };
+}
+
+function computeGoalBreakdown(analyses: AnalysisRow[], since: Date): AnalyticsDashboard["goalBreakdown"] {
+  const counts = new Map<Goal, number>();
+  for (const row of analyses) {
+    if (!row.goal || new Date(row.created_at) < since) continue;
+    if (!(row.goal in GOAL_LABELS)) continue; // defensive: ignore any unexpected stored value
+    const goal = row.goal as Goal;
+    counts.set(goal, (counts.get(goal) ?? 0) + 1);
+  }
+  return (Object.keys(GOAL_LABELS) as Goal[])
+    .map((goal) => ({ goal, label: GOAL_LABELS[goal], count: counts.get(goal) ?? 0 }))
+    .sort((a, b) => b.count - a.count);
 }
