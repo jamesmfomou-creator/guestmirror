@@ -33,6 +33,8 @@ import { getAbVariantServer } from "@/lib/ab-server";
 import { getInputMethodForAnalysis } from "@/lib/inputMethod";
 import { getLifetimePriceLabel } from "@/lib/lifetimePrice";
 import { PostPurchaseFeedback } from "@/components/result/PostPurchaseFeedback";
+import { IncompleteResultNotice } from "@/components/result/IncompleteResultNotice";
+import { isIncompleteResult } from "@/lib/resultShape";
 
 export const metadata: Metadata = {
   title: `Ton ${BRAND_NAME}`,
@@ -58,6 +60,10 @@ export default async function ResultPage({
   const lifetimeActive = isLifetimeActive(subscription);
   const unlocked = analysis.is_unlocked || plusActive || lifetimeActive;
   const variant = await getAbVariantServer();
+  // Legacy rows stored with a score but none of the detail (see
+  // lib/resultShape.ts). Shown as what they are, in both A/B arms alike,
+  // instead of a teaser and a paywall for recommendations that don't exist.
+  const incomplete = isIncompleteResult(analysis.result);
   // Read from the analysis_completed event tracked at submission time --
   // NOT re-derived from analysis.images, since a pure-URL submission also
   // ends up with stored images (extracted from the listing page) that
@@ -130,9 +136,22 @@ export default async function ResultPage({
         </h1>
       )}
 
-      <ScoreHeader result={analysis.result} locked={!unlocked} shortSummary={variant === "B"} />
+      <ScoreHeader
+        result={analysis.result}
+        locked={!unlocked}
+        shortSummary={variant === "B"}
+        hideBreakdown={incomplete}
+      />
 
-      {!unlocked && variant === "A" && (
+      {incomplete && (
+        <IncompleteResultNotice
+          listingUrl={analysis.listing_url}
+          unlocked={unlocked}
+          canRerunUnlocked={plusActive || lifetimeActive}
+        />
+      )}
+
+      {!unlocked && !incomplete && variant === "A" && (
         <>
           <FirstHesitation result={analysis.result} />
           <MainProblem issue={analysis.result.top_priorities[0]?.current_issue ?? null} analysisId={id} />
@@ -152,7 +171,7 @@ export default async function ResultPage({
         </>
       )}
 
-      {!unlocked && variant === "B" && (
+      {!unlocked && !incomplete && variant === "B" && (
         <>
           <LockedPreviewB analysisId={id} count={lockedRecommendationCount(analysis.result)}>
             <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />
@@ -164,7 +183,11 @@ export default async function ResultPage({
         </>
       )}
 
-      {unlocked && (
+      {/* Nothing below was produced for an incomplete analysis: empty
+          sections and 0/100 verdicts would read as findings. */}
+      {unlocked && incomplete && <DeleteAnalysis analysisId={id} />}
+
+      {unlocked && !incomplete && (
         <>
           {previous && <BeforeAfter previous={previous.result} current={analysis.result} />}
           <FullPriorities result={analysis.result} />

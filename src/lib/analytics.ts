@@ -37,6 +37,19 @@ export const ANALYTICS_EVENTS = [
   // Real failure (API error, timeout, network) as opposed to a silent
   // drop-off -- lets the dashboard tell errors apart from abandonment.
   "analysis_failed",
+  // Connection-loss recovery (see lib/analysisRecovery.ts). None of these
+  // is an outcome on its own -- an attempt still ends in exactly one
+  // analysis_completed or analysis_failed:
+  //  - analysis_connection_lost: the browser lost the request and started
+  //    asking the server what became of the attempt.
+  //  - analysis_retry: the same attempt was sent again (same attemptId, so
+  //    never a second analysis) -- automatically because the server never
+  //    received it, or manually after an inconclusive recovery.
+  //  - analysis_recovered: a result reached the visitor by another path
+  //    than the original response.
+  "analysis_connection_lost",
+  "analysis_retry",
+  "analysis_recovered",
   // Airbnb-URL-only submission where the listing page couldn't be fetched
   // or had no usable photos. Deliberately NOT analysis_failed/completed:
   // this never reaches the AI and no analysis record is created, so it

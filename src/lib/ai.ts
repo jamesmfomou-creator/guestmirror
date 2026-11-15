@@ -12,6 +12,7 @@ import { DEMO_MODE } from "@/lib/env";
 import { DEMO_RESULT } from "@/lib/demo-data";
 import { BRAND_NAME } from "@/lib/brand";
 import { AIRBNB_TITLE_MAX_LENGTH, sanitizeAirbnbTitles, titleCharCount } from "@/lib/titles";
+import { aiResultSchema, describeShapeIssues } from "@/lib/resultShape";
 
 export class AnalysisError extends Error {
   code: string;
@@ -81,6 +82,17 @@ export function validateAiResponse(response: Anthropic.Message): ResponseValidat
   // not-null violation instead of the existing, fast "réessaie" retry path.
   if (typeof input.overall_score !== "number" || !input.summary) {
     return { ok: false, code: "ai_schema_mismatch", reason: "missing overall_score/summary" };
+  }
+  // Full-shape gate. The two-field check above let through responses whose
+  // nested fields had all come back as strings of leaked `<parameter ...>`
+  // markup (8 of the 59 analyses stored in the 7 days before this was
+  // added) -- stored and counted as successes, but with nothing usable
+  // behind the score. See lib/resultShape.ts for what is and isn't
+  // enforced. Same code as above on purpose: it is the same failure class
+  // and already has the one-retry policy (RETRYABLE_VALIDATION_CODES).
+  const shape = aiResultSchema.safeParse(input);
+  if (!shape.success) {
+    return { ok: false, code: "ai_schema_mismatch", reason: `shape: ${describeShapeIssues(shape.error)}` };
   }
   return { ok: true, input };
 }
@@ -405,6 +417,36 @@ const RESULT_SCHEMA = {
   ],
 };
 
+// Strict tool use (`strict: true`) makes the API constrain generation to the
+// schema, so the nested-field-as-string failure described in
+// lib/resultShape.ts cannot be produced in the first place -- the shape
+// gate in validateAiResponse stays as the backstop. Strict mode accepts a
+// subset of JSON Schema: every object needs `additionalProperties: false`,
+// and numeric/string bounds (minimum, maximum, maxLength) are not
+// supported. Derived from RESULT_SCHEMA rather than written twice so the
+// two can never drift; the dropped bounds are all still enforced in code
+// (scores are clamped by display helpers, titles by sanitizeAirbnbTitles).
+const STRICT_UNSUPPORTED_KEYWORDS = new Set(["minimum", "maximum", "maxLength", "minLength", "multipleOf"]);
+
+export function toStrictSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(toStrictSchema);
+  if (typeof schema !== "object" || schema === null) return schema;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
+    if (STRICT_UNSUPPORTED_KEYWORDS.has(key)) continue;
+    // `properties` maps field names to sub-schemas -- recurse into the
+    // values, but never treat a field *named* e.g. "maximum" as a keyword.
+    out[key] =
+      key === "properties" && typeof value === "object" && value !== null
+        ? Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, toStrictSchema(v)]))
+        : toStrictSchema(value);
+  }
+  if (out.type === "object") out.additionalProperties = false;
+  return out;
+}
+
+export const STRICT_RESULT_SCHEMA = toStrictSchema(RESULT_SCHEMA);
+
 // The SDK defaults to a 10-minute timeout with 2 retries -- in the worst
 // case that lets a single request hang for ~30 minutes with zero feedback.
 // Bounding both keeps the longest possible wait predictable.
@@ -483,6 +525,9 @@ export async function analyzeListing(params: {
   parsingDurationMs: number;
   retryCount: number;
   stopReason: string | null;
+  // Model id that actually produced the result (observability: recorded on
+  // analysis_server_completed so cost/latency can be compared per model).
+  model: string | null;
 }> {
   if (DEMO_MODE) {
     return {
@@ -492,6 +537,7 @@ export async function analyzeListing(params: {
       parsingDurationMs: 0,
       retryCount: 0,
       stopReason: null,
+      model: null,
     };
   }
 
@@ -652,6 +698,7 @@ export async function analyzeListing(params: {
       parsingDurationMs,
       retryCount: attempt,
       stopReason: response.stop_reason,
+      model: response.model ?? MODEL,
     };
   }
 

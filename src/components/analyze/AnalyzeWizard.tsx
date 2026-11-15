@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { StepImport } from "./StepImport";
 import { StepProfile } from "./StepProfile";
@@ -16,6 +16,18 @@ import { takePendingFiles } from "@/lib/pendingUpload";
 import { BRAND_NAME } from "@/lib/brand";
 import { verdictFor } from "@/lib/utils";
 import { UserType, PropertyCountRange, Goal } from "@/lib/types";
+import { ResumeAnalysisBanner } from "./ResumeAnalysisBanner";
+import {
+  classifyUserAgent,
+  clearPendingAttempt,
+  fetchAttemptStatus,
+  isConnectionLoss,
+  newAttemptId,
+  nextPollDelayMs,
+  recoveryDeadlineAt,
+  RECOVERY_MIN_WINDOW_MS,
+  savePendingAttempt,
+} from "@/lib/analysisRecovery";
 
 type Step = "import" | "profile" | "email" | "goal" | "analyzing";
 
@@ -31,6 +43,67 @@ function genId() {
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2);
 }
+
+const GENERIC_FAILURE_MESSAGE = "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants.";
+
+type AnalyzeResponse = {
+  id?: string;
+  overall_score?: number;
+  timings?: Record<string, number | null>;
+  ai_stop_reason?: string | null;
+  // The server found this attempt already finished and returned the stored
+  // analysis instead of running a new one (see api/analyze/route.ts).
+  deduplicated?: boolean;
+};
+
+// How a result reached the browser when it did NOT come straight back from
+// the original request -- recorded on analysis_recovered/analysis_completed.
+type RecoveryTrigger = "immediate" | "poll" | "visibility" | "online" | "resubmit" | "manual_retry";
+
+// What the visitor is told while the browser is reconnecting to an analysis
+// it lost track of. Always a statement of what is actually known.
+type RecoveryNotice = "checking" | "processing" | "offline" | "already_running";
+
+const RECOVERY_NOTICES: Record<RecoveryNotice, { title: string; body: string }> = {
+  checking: {
+    title: "Connexion interrompue",
+    body: "On vérifie où en est ton analyse…",
+  },
+  processing: {
+    title: "Ton analyse continue",
+    body: "La connexion a été interrompue, mais ton analyse est toujours en cours sur nos serveurs. Ton résultat s'affichera ici automatiquement — garde cette page ouverte.",
+  },
+  offline: {
+    title: "Tu sembles hors ligne",
+    body: "Dès que la connexion revient, on reprend automatiquement là où ton analyse en est.",
+  },
+  already_running: {
+    title: "Ton analyse est déjà en cours",
+    body: "Ton résultat s'affichera ici automatiquement — garde cette page ouverte.",
+  },
+};
+
+interface RecoveryState {
+  active: boolean;
+  cause: "timeout" | "network_error" | "in_flight";
+  lostAtMs: number;
+  deadlineAtMs: number;
+  polls: number;
+  unknownCount: number;
+  resubmitted: boolean;
+  lastStatus: string | null;
+}
+
+const IDLE_RECOVERY: RecoveryState = {
+  active: false,
+  cause: "network_error",
+  lostAtMs: 0,
+  deadlineAtMs: 0,
+  polls: 0,
+  unknownCount: 0,
+  resubmitted: false,
+  lastStatus: null,
+};
 
 export function AnalyzeWizard() {
   const router = useRouter();
@@ -55,19 +128,40 @@ export function AnalyzeWizard() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [analysisDone, setAnalysisDone] = useState(false);
+  const [recoveryNotice, setRecoveryNotice] = useState<RecoveryNotice | null>(null);
   const startedAt = useRef<number | null>(null);
   const attemptId = useRef<string | null>(null);
+  // ---- Connection-loss recovery (applies identically to both A/B arms:
+  // everything lives here in the wizard, the two loader components are
+  // untouched). See lib/analysisRecovery.ts for the why.
+  // Inputs the current attempt id was generated for: the id is reused only
+  // for a resubmission of the exact same inputs.
+  const attemptSignature = useRef<string | null>(null);
+  // True after an attempt ended without a verdict from the server (we lost
+  // the connection and could not get it back in time). The next submission
+  // of the same inputs then reuses the id, so if the server did finish, the
+  // visitor gets that analysis instantly instead of paying the wait again.
+  const reuseAttempt = useRef(false);
+  // Set the moment a result is in hand, by whichever path got it first.
+  const finished = useRef(false);
+  const recovery = useRef<RecoveryState>({ ...IDLE_RECOVERY });
+  const recoveredVia = useRef<RecoveryTrigger | null>(null);
+  const checkingStatus = useRef(false);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeRequest = useRef<AbortController | null>(null);
+  const hidden = useRef<{ since: number | null; totalMs: number }>({ since: null, totalMs: 0 });
+  const wakeLock = useRef<WakeLockSentinel | null>(null);
+  // Window listeners and timers must call the *current* render's functions
+  // (which close over the current url/images/profile state), not the ones
+  // from the render they were registered in.
+  const latest = useRef<{ checkStatus: (trigger: RecoveryTrigger) => void; inFlight: boolean }>({
+    checkStatus: () => {},
+    inFlight: false,
+  });
   // Assigned once per visitor (persisted, see lib/ab.ts) and read once per
   // mount -- never re-rolled mid-session.
   const [abVariant] = useState(() => getAbVariant());
-  const pendingResult = useRef<{
-    id?: string;
-    overall_score?: number;
-    timings?: Record<string, number | null>;
-    ai_stop_reason?: string | null;
-  } | null>(
-    null
-  );
+  const pendingResult = useRef<AnalyzeResponse | null>(null);
 
   const previousAnalysisId = searchParams.get("previous");
   // Free-trial link (see api/analyze/route.ts) -- read once, never
@@ -131,13 +225,10 @@ export function AnalyzeWizard() {
     setStep("email");
   }
 
-  function finishAndRedirect(json: {
-    id?: string;
-    overall_score?: number;
-    timings?: Record<string, number | null>;
-    ai_stop_reason?: string | null;
-  }) {
+  function finishAndRedirect(json: AnalyzeResponse) {
     const method = inputMethod();
+    const elapsedMs = Date.now() - (startedAt.current ?? Date.now());
+    const recovered = recoveredVia.current;
     track("analysis_completed", {
       attemptId: attemptId.current,
       analysisId: json.id,
@@ -146,7 +237,14 @@ export function AnalyzeWizard() {
       image_count: images.length,
       has_listing_url: url.trim().length > 0,
       input_method: method,
-      duration_ms: Date.now() - (startedAt.current ?? Date.now()),
+      // duration_ms is what the dashboard's latency stats are built from
+      // ("how long does an analysis take"). A recovered result's wall-clock
+      // includes however long the phone stayed locked, and a deduplicated
+      // one comes back in milliseconds -- neither measures the analysis, so
+      // both are reported under a separate field and flagged instead.
+      ...(recovered
+        ? { recovered: true, recovery_trigger: recovered, client_elapsed_ms: elapsedMs }
+        : { duration_ms: elapsedMs }),
       user_type: userType,
       property_count_range: propertyCountRange,
       ai_stop_reason: json.ai_stop_reason ?? null,
@@ -200,27 +298,295 @@ export function AnalyzeWizard() {
     runAnalysis();
   }
 
-  async function runAnalysis() {
-    if (submitting) return;
-    setSubmitting(true);
-    setAnalysisDone(false);
-    setApiError(null);
-    pendingResult.current = null;
-    setStep("analyzing");
-    startedAt.current = Date.now();
-    attemptId.current = genId();
-    const method = inputMethod();
-    track("analysis_started", {
+  function submissionSignature() {
+    return JSON.stringify([
+      url.trim(),
+      images.map((i) => i.id),
+      email.trim().toLowerCase(),
+      goal,
+      userType,
+      propertyCountRange,
+      previousAnalysisId,
+      promoCode,
+    ]);
+  }
+
+  // Keeps the screen on while the analysis runs, where the browser supports
+  // it. The audit's leading (unproven) hypothesis for lost requests is the
+  // phone auto-locking ~30 s into a ~60 s wait and the OS suspending the
+  // page. Purely progressive enhancement: unsupported, denied or released by
+  // the browser, the analysis proceeds exactly as before.
+  async function acquireWakeLock() {
+    try {
+      if (!("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+      wakeLock.current = await navigator.wakeLock.request("screen");
+    } catch {
+      wakeLock.current = null;
+    }
+  }
+
+  function releaseWakeLock() {
+    const lock = wakeLock.current;
+    wakeLock.current = null;
+    lock?.release().catch(() => {});
+  }
+
+  function hiddenMs() {
+    const h = hidden.current;
+    return h.totalMs + (h.since != null ? Date.now() - h.since : 0);
+  }
+
+  function clientContext() {
+    return {
+      ...classifyUserAgent(navigator.userAgent),
+      visibility: document.visibilityState,
+      online: navigator.onLine,
+      hidden_ms: hiddenMs(),
+      wake_lock_held: wakeLock.current != null && !wakeLock.current.released,
+    };
+  }
+
+  /** Ends everything attached to the current attempt except its outcome. */
+  function settle(options: { keepPending?: boolean } = {}) {
+    if (pollTimer.current) clearTimeout(pollTimer.current);
+    pollTimer.current = null;
+    recovery.current = { ...IDLE_RECOVERY };
+    latest.current.inFlight = false;
+    setRecoveryNotice(null);
+    releaseWakeLock();
+    if (!options.keepPending) clearPendingAttempt();
+  }
+
+  function complete(json: AnalyzeResponse, via: RecoveryTrigger | null) {
+    if (finished.current) return;
+    finished.current = true;
+    const rec = recovery.current;
+    if (via) {
+      recoveredVia.current = via;
+      track("analysis_recovered", {
+        attemptId: attemptId.current,
+        analysisId: json.id,
+        recovery_trigger: via,
+        cause: rec.active ? rec.cause : null,
+        lost_for_ms: rec.active ? Date.now() - rec.lostAtMs : null,
+        polls: rec.polls,
+        resubmitted: rec.resubmitted,
+        ...clientContext(),
+      });
+    }
+    settle();
+    // A request still hanging on a dead connection has nothing left to tell
+    // us; its catch block sees `finished` and stays silent.
+    activeRequest.current?.abort();
+
+    setAnalysisDone(true);
+    if (abVariant === "B") {
+      // AnalysisAhaFlow drives its own short "Ta première impression est
+      // prête." beat once `done` flips true, then calls onTransitionEnd.
+      pendingResult.current = json;
+    } else {
+      const elapsed = Date.now() - (startedAt.current ?? Date.now());
+      const wait = Math.max(MIN_ANIMATION_MS - elapsed, 700);
+      setTimeout(() => finishAndRedirect(json), wait);
+    }
+  }
+
+  function backToRetryStep() {
+    setSubmitting(false);
+    // Variant B already has a goal selected in state at this point --
+    // sending them back to "email" would force re-entering the email
+    // AND re-answering the goal question. "goal" keeps both: the email
+    // stays filled in (state, not re-asked) and the goal choice is
+    // still selected, just needs one more tap on Continuer to retry.
+    setStep(abVariant === "B" ? "goal" : "email");
+  }
+
+  /** The server's own verdict on this attempt: it stopped, with this code. */
+  function failAttempt(errorCode: string, message: string, extra: Record<string, string | number | boolean | null> = {}) {
+    if (finished.current) return;
+    finished.current = true;
+    track("analysis_failed", {
       attemptId: attemptId.current,
+      error_code: errorCode,
+      duration_ms: Date.now() - (startedAt.current ?? Date.now()),
       image_count: images.length,
-      has_listing_url: url.trim().length > 0,
-      input_method: method,
+      input_method: inputMethod(),
+      ...extra,
     });
-    if (method === "airbnb_url") {
-      track("airbnb_url_extraction_started", { attemptId: attemptId.current });
+    // A definitive failure: the next try is a new attempt with a new id.
+    reuseAttempt.current = false;
+    settle();
+    setApiError(message);
+    backToRetryStep();
+  }
+
+  function failExtraction(message: string | undefined) {
+    if (finished.current) return;
+    finished.current = true;
+    // Not a real analysis failure: nothing was analyzed, no record
+    // was created. Send the user back to add a screenshot (URL stays
+    // filled in) instead of the generic "réessayer" retry screen,
+    // and track it separately so it never counts as
+    // analysis_completed/analysis_failed downstream.
+    track("airbnb_url_extraction_failed", {
+      attemptId: attemptId.current,
+      duration_ms: Date.now() - (startedAt.current ?? Date.now()),
+    });
+    reuseAttempt.current = false;
+    settle();
+    setApiError(message || "Impossible d'analyser automatiquement ce lien Airbnb.");
+    setSubmitting(false);
+    setStep("import");
+  }
+
+  /**
+   * Recovery ran out of time without ever learning the outcome. Reported as
+   * the failure it started as (network_error / timeout) -- flagged, so the
+   * dashboard can tell "lost and never found" from the pre-recovery numbers.
+   */
+  function giveUpRecovery() {
+    if (finished.current) return;
+    finished.current = true;
+    const rec = recovery.current;
+    track("analysis_failed", {
+      attemptId: attemptId.current,
+      error_code: rec.cause === "network_error" ? "network_error" : "timeout",
+      duration_ms: Date.now() - (startedAt.current ?? Date.now()),
+      image_count: images.length,
+      input_method: inputMethod(),
+      recovery_attempted: true,
+      recovery_polls: rec.polls,
+      recovery_last_status: rec.lastStatus,
+      resubmitted: rec.resubmitted,
+      ...clientContext(),
+    });
+    // Same id next time, and the pending marker stays: if the server did
+    // finish, "Réessayer" (or coming back later) returns that analysis at
+    // once -- no second wait, no second model call.
+    reuseAttempt.current = true;
+    settle({ keepPending: true });
+    activeRequest.current?.abort();
+    setApiError(
+      "La connexion a été interrompue et on n'a pas pu récupérer ton analyse. Réessaie : si elle s'est terminée entre-temps, tu la retrouveras tout de suite."
+    );
+    backToRetryStep();
+  }
+
+  function scheduleNextPoll() {
+    const rec = recovery.current;
+    if (!rec.active || finished.current) return;
+    if (Date.now() >= rec.deadlineAtMs) {
+      giveUpRecovery();
+      return;
+    }
+    if (pollTimer.current) clearTimeout(pollTimer.current);
+    pollTimer.current = setTimeout(() => latest.current.checkStatus("poll"), nextPollDelayMs(rec.polls));
+  }
+
+  /**
+   * Asks the server what became of the current attempt. In recovery it
+   * drives the whole flow; outside of it (page just came back to the
+   * foreground while the original request is still pending) only a
+   * "completed" answer matters and anything else is ignored.
+   */
+  async function checkStatus(trigger: RecoveryTrigger) {
+    const id = attemptId.current;
+    if (!id || finished.current || checkingStatus.current) return;
+    checkingStatus.current = true;
+    if (pollTimer.current) clearTimeout(pollTimer.current);
+    pollTimer.current = null;
+
+    let status: Awaited<ReturnType<typeof fetchAttemptStatus>> | null;
+    try {
+      status = await fetchAttemptStatus(id);
+    } catch {
+      status = null; // still no connection
+    }
+    checkingStatus.current = false;
+    // The attempt may have ended, or a new one started, while we waited.
+    if (finished.current || attemptId.current !== id) return;
+
+    if (status?.status === "completed" && status.id) {
+      complete({ id: status.id, overall_score: status.overall_score }, trigger);
+      return;
     }
 
+    const rec = recovery.current;
+    if (!rec.active) return;
+    rec.polls += 1;
+    rec.lastStatus = status?.status ?? "unreachable";
+
+    if (!status) {
+      setRecoveryNotice("offline");
+    } else if (status.status === "failed") {
+      if (status.error_code === "airbnb_url_extraction_failed") {
+        failExtraction(undefined);
+      } else {
+        failAttempt(status.error_code || "unknown", GENERIC_FAILURE_MESSAGE, { learned_via: "status" });
+      }
+      return;
+    } else if (status.status === "processing") {
+      setRecoveryNotice(rec.cause === "in_flight" ? "already_running" : "processing");
+    } else {
+      // "unknown": the server has no trace of this attempt. Once could be
+      // timing; twice, with a working connection, means the request never
+      // arrived (dropped during upload). Send it again -- same attempt id,
+      // so even if we are wrong the server runs it at most once.
+      rec.unknownCount += 1;
+      if (rec.unknownCount >= 2 && !rec.resubmitted) {
+        rec.resubmitted = true;
+        track("analysis_retry", {
+          attemptId: id,
+          reason: "server_never_received",
+          cause: rec.cause,
+          elapsed_ms: Date.now() - (startedAt.current ?? Date.now()),
+          ...clientContext(),
+        });
+        setRecoveryNotice("checking");
+        void submitAttempt("resubmit");
+        return;
+      }
+      setRecoveryNotice("checking");
+    }
+    scheduleNextPoll();
+  }
+
+  function enterRecovery(cause: RecoveryState["cause"]) {
+    if (finished.current) return;
+    const now = Date.now();
+    const rec = recovery.current;
+    if (!rec.active) {
+      recovery.current = {
+        active: true,
+        cause,
+        lostAtMs: now,
+        deadlineAtMs: recoveryDeadlineAt(startedAt.current ?? now, now),
+        polls: 0,
+        unknownCount: 0,
+        resubmitted: false,
+        lastStatus: null,
+      };
+      track("analysis_connection_lost", {
+        attemptId: attemptId.current,
+        cause,
+        elapsed_ms: now - (startedAt.current ?? now),
+        image_count: images.length,
+        input_method: inputMethod(),
+        ...clientContext(),
+      });
+      setRecoveryNotice(cause === "in_flight" ? "already_running" : "checking");
+    } else {
+      // The resubmission was lost too: keep looking, with a fresh minimum
+      // window so it gets a real chance.
+      rec.deadlineAtMs = Math.max(rec.deadlineAtMs, now + RECOVERY_MIN_WINDOW_MS);
+    }
+    void checkStatus("immediate");
+  }
+
+  async function submitAttempt(kind: "initial" | "resubmit") {
     const timeoutController = new AbortController();
+    activeRequest.current = timeoutController;
+    latest.current.inFlight = true;
     const timeoutTimer = setTimeout(() => timeoutController.abort(), FETCH_TIMEOUT_MS);
 
     try {
@@ -252,14 +618,15 @@ export function AnalyzeWizard() {
         signal: timeoutController.signal,
       });
 
-      let json: {
-        id?: string;
-        overall_score?: number;
-        error?: string;
-        error_code?: string;
-        timings?: Record<string, number | null>;
-        ai_stop_reason?: string | null;
-      };
+      // The server is already working on this exact attempt in another
+      // request (double submission, or the resubmission of a request that
+      // did arrive after all). Not an error: wait for that one's result.
+      if (res.status === 202) {
+        enterRecovery("in_flight");
+        return;
+      }
+
+      let json: AnalyzeResponse & { error?: string; error_code?: string };
       try {
         json = await res.json();
       } catch {
@@ -270,21 +637,12 @@ export function AnalyzeWizard() {
       }
       if (!res.ok) {
         if (json.error_code === "airbnb_url_extraction_failed") {
-          // Not a real analysis failure: nothing was analyzed, no record
-          // was created. Send the user back to add a screenshot (URL stays
-          // filled in) instead of the generic "réessayer" retry screen,
-          // and track it separately so it never counts as
-          // analysis_completed/analysis_failed downstream.
-          track("airbnb_url_extraction_failed", {
-            attemptId: attemptId.current,
-            duration_ms: Date.now() - (startedAt.current ?? Date.now()),
-          });
-          setApiError(json.error || "Impossible d'analyser automatiquement ce lien Airbnb.");
-          setSubmitting(false);
-          setStep("import");
+          failExtraction(json.error);
           return;
         }
         if (res.status === 413 && images.length > 0) {
+          if (finished.current) return;
+          finished.current = true;
           // Image(s) over the size limit, rejected before any real
           // analysis was attempted -- same "not a real analysis failure"
           // reasoning as the Airbnb extraction case above: track it
@@ -296,6 +654,8 @@ export function AnalyzeWizard() {
             error_code: "image_too_large",
             image_count: images.length,
           });
+          reuseAttempt.current = false;
+          settle();
           setApiError(json.error || "Une des images dépasse la taille maximale autorisée.");
           setSubmitting(false);
           setStep("import");
@@ -306,55 +666,124 @@ export function AnalyzeWizard() {
         });
       }
 
-      setAnalysisDone(true);
-      if (abVariant === "B") {
-        // AnalysisAhaFlow drives its own short "Ta première impression est
-        // prête." beat once `done` flips true, then calls onTransitionEnd.
-        pendingResult.current = json;
-      } else {
-        const elapsed = Date.now() - (startedAt.current ?? Date.now());
-        const wait = Math.max(MIN_ANIMATION_MS - elapsed, 700);
-        setTimeout(() => finishAndRedirect(json), wait);
-      }
+      // A result that did not simply come back from the original request
+      // is a recovery, however it got here.
+      const via: RecoveryTrigger | null =
+        kind === "resubmit" ? "resubmit" : json.deduplicated ? "manual_retry" : null;
+      complete(json, via);
     } catch (err) {
-      const isTimeout = err instanceof DOMException && err.name === "AbortError";
-      const message = isTimeout
-        ? "L'analyse a pris plus de temps que prévu. Réessaie, tes images sont toujours prêtes."
-        : err instanceof Error
-          ? err.message
-          : "Une erreur est survenue.";
+      // The result already arrived by another path and this request was
+      // aborted on purpose.
+      if (finished.current) return;
+
+      // No response at all (connection dropped, page suspended, client
+      // timeout). Before the 2026-11 audit this was reported as a failed
+      // analysis on the spot -- while the server, in every recorded case,
+      // went on to finish and store it. Now: find out what really happened.
+      const loss = isConnectionLoss(err);
+      if (loss) {
+        enterRecovery(loss);
+        return;
+      }
+
       // `cause` carries the server's specific error_code (see api/analyze/route.ts
       // and lib/ai.ts's categorizeAnthropicError) so admin/analytics can break
       // failures down by real cause instead of a generic "api_error" bucket.
-      const serverErrorCode =
-        !isTimeout && err instanceof Error && typeof err.cause === "string" ? err.cause : null;
-      // A plain fetch() failure (connection dropped mid-request, DNS
-      // failure, offline) throws a TypeError before any response is ever
-      // received -- distinct from our own explicit `throw new Error(...)`
-      // calls above (always a plain Error), which already carry a specific
-      // server-provided code via `cause` when there is one. Distinguishing
-      // this closes part of the generic "api_error" bucket found to be ~50%
-      // of all technical failures in the 2026-11 audit.
-      const isNetworkFailure = !isTimeout && !serverErrorCode && err instanceof TypeError;
-      track("analysis_failed", {
-        attemptId: attemptId.current,
-        error_code: isTimeout ? "timeout" : serverErrorCode || (isNetworkFailure ? "network_error" : "api_error"),
-        duration_ms: Date.now() - (startedAt.current ?? Date.now()),
-        image_count: images.length,
-        input_method: inputMethod(),
-      });
-      setApiError(message);
-      setSubmitting(false);
-      // Variant B already has a goal selected in state at this point --
-      // sending them back to "email" would force re-entering the email
-      // AND re-answering the goal question. "goal" keeps both: the email
-      // stays filled in (state, not re-asked) and the goal choice is
-      // still selected, just needs one more tap on Continuer to retry.
-      setStep(abVariant === "B" ? "goal" : "email");
+      const serverErrorCode = err instanceof Error && typeof err.cause === "string" ? err.cause : null;
+      failAttempt(serverErrorCode || "api_error", err instanceof Error ? err.message : "Une erreur est survenue.");
     } finally {
       clearTimeout(timeoutTimer);
+      if (activeRequest.current === timeoutController) {
+        activeRequest.current = null;
+        latest.current.inFlight = false;
+      }
     }
   }
+
+  async function runAnalysis() {
+    if (submitting) return;
+    setSubmitting(true);
+    setAnalysisDone(false);
+    setApiError(null);
+    pendingResult.current = null;
+    setStep("analyzing");
+    startedAt.current = Date.now();
+
+    // Same inputs as an attempt we lost track of -> same id, so the server
+    // can hand back what it already produced. Anything else -> new attempt.
+    const signature = submissionSignature();
+    const isSameAttempt =
+      reuseAttempt.current && attemptId.current != null && attemptSignature.current === signature;
+    if (!isSameAttempt) attemptId.current = newAttemptId();
+    attemptSignature.current = signature;
+    reuseAttempt.current = false;
+    finished.current = false;
+    recoveredVia.current = null;
+    recovery.current = { ...IDLE_RECOVERY };
+    hidden.current = { since: document.visibilityState === "hidden" ? Date.now() : null, totalMs: 0 };
+    if (attemptId.current) savePendingAttempt({ attemptId: attemptId.current, startedAtMs: startedAt.current });
+    void acquireWakeLock();
+
+    const method = inputMethod();
+    if (isSameAttempt) {
+      track("analysis_retry", {
+        attemptId: attemptId.current,
+        reason: "manual_same_attempt",
+        ...clientContext(),
+      });
+    }
+    track("analysis_started", {
+      attemptId: attemptId.current,
+      image_count: images.length,
+      has_listing_url: url.trim().length > 0,
+      input_method: method,
+      is_retry: isSameAttempt,
+      ...classifyUserAgent(navigator.userAgent),
+    });
+    if (method === "airbnb_url") {
+      track("airbnb_url_extraction_started", { attemptId: attemptId.current });
+    }
+
+    await submitAttempt("initial");
+  }
+
+  // Latest functions for the listeners/timers below (see `latest`).
+  useEffect(() => {
+    latest.current.checkStatus = (trigger) => void checkStatus(trigger);
+  });
+
+  useEffect(() => {
+    function onVisibilityChange() {
+      const h = hidden.current;
+      if (document.visibilityState === "hidden") {
+        h.since = Date.now();
+        return;
+      }
+      const hiddenFor = h.since != null ? Date.now() - h.since : 0;
+      h.totalMs += hiddenFor;
+      h.since = null;
+      const waiting = latest.current.inFlight || recovery.current.active;
+      if (!waiting || finished.current) return;
+      // The browser releases a wake lock whenever the page is hidden.
+      void acquireWakeLock();
+      // Back in the foreground. In recovery: check right away instead of
+      // waiting out the backoff. Otherwise, after a real absence, the
+      // original request may be dead without having errored yet -- ask
+      // whether the analysis finished while we were away.
+      if (recovery.current.active || hiddenFor >= 5_000) latest.current.checkStatus("visibility");
+    }
+    function onOnline() {
+      if (recovery.current.active && !finished.current) latest.current.checkStatus("online");
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("online", onOnline);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("online", onOnline);
+      if (pollTimer.current) clearTimeout(pollTimer.current);
+      wakeLock.current?.release().catch(() => {});
+    };
+  }, []);
 
   function handleFinalizing() {
     track("analysis_progress_90", { attemptId: attemptId.current });
@@ -374,6 +803,17 @@ export function AnalyzeWizard() {
         <div className="mb-6 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-hover">
           Nouvelle analyse après modifications — on comparera ton nouveau {BRAND_NAME} à
           l&apos;ancien.
+        </div>
+      )}
+      {step !== "analyzing" && <ResumeAnalysisBanner />}
+      {step === "analyzing" && recoveryNotice && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-2 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-hover"
+        >
+          <p className="font-semibold">{RECOVERY_NOTICES[recoveryNotice].title}</p>
+          <p className="mt-0.5">{RECOVERY_NOTICES[recoveryNotice].body}</p>
         </div>
       )}
       {step === "import" && (
