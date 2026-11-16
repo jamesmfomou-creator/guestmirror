@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import Anthropic, { APIError, APIConnectionError, APIConnectionTimeoutError } from "@anthropic-ai/sdk";
-import { categorizeAnthropicError, STRICT_RESULT_SCHEMA, toStrictSchema, validateAiResponse } from "./ai";
+import {
+  ANALYSIS_TOOL_NAME,
+  PRODUCTION_REQUEST_OPTIONS,
+  RESULT_SCHEMA,
+  STRICT_RESULT_SCHEMA,
+  buildAnalysisRequest,
+  categorizeAnthropicError,
+  toStrictSchema,
+  validateAiResponse,
+} from "./ai";
 
 // APIError.generate is the same factory the real SDK uses internally to
 // build the right error subclass from an HTTP response -- using it here
@@ -245,5 +254,65 @@ describe("toStrictSchema", () => {
     };
     walk(STRICT_RESULT_SCHEMA, "$", false);
     expect(offenders).toEqual([]);
+  });
+});
+
+// The request production sends is built by buildAnalysisRequest with
+// PRODUCTION_REQUEST_OPTIONS. These pin it: a change to the model call has
+// to show up here as a deliberate edit, never as a side effect of adding a
+// benchmark option.
+describe("buildAnalysisRequest", () => {
+  const params = {
+    images: [
+      { base64: "AAAA", mediaType: "image/jpeg" },
+      { base64: "BBBB", mediaType: "image/png" },
+    ],
+    input: { listing_url: null, city: "Lyon", property_type: null, guest_capacity: "4", nightly_price: null },
+    extractedListingText: { title: "Titre", description: null, bedroomCount: 2 },
+  };
+
+  it("builds the production request by default", () => {
+    const request = buildAnalysisRequest(params);
+    expect(request.model).toBe(PRODUCTION_REQUEST_OPTIONS.model);
+    expect(request.max_tokens).toBe(10_000);
+    expect(request.tool_choice).toEqual({ type: "tool", name: ANALYSIS_TOOL_NAME });
+    expect(request.tools).toHaveLength(1);
+    const tool = request.tools![0] as Anthropic.Tool;
+    expect(tool.name).toBe(ANALYSIS_TOOL_NAME);
+    expect(tool.input_schema).toBe(RESULT_SCHEMA);
+    expect("strict" in tool).toBe(false);
+    // No field beyond the ones the production call has always sent.
+    expect(Object.keys(request).sort()).toEqual(["max_tokens", "messages", "model", "system", "tool_choice", "tools"]);
+  });
+
+  it("sends one text block with the context, then the images in order", () => {
+    const content = buildAnalysisRequest(params).messages[0].content as Anthropic.ContentBlockParam[];
+    expect(content.map((b) => b.type)).toEqual(["text", "image", "image"]);
+    const text = (content[0] as Anthropic.TextBlockParam).text;
+    expect(text).toContain("Ville / destination : Lyon");
+    expect(text).toContain("Nombre de voyageurs : 4");
+    expect(text).toContain("Titre actuel de l'annonce");
+    expect(text).toContain("Nombre de chambres annoncé par Airbnb (donnée structurée fiable) : 2");
+    expect(text).toContain("Voici 2 capture(s) d'écran");
+    expect((content[2] as Anthropic.ImageBlockParam).source).toEqual({ type: "base64", media_type: "image/png", data: "BBBB" });
+  });
+
+  it("applies exactly the options it is given", () => {
+    const request = buildAnalysisRequest(params, {
+      model: "some-model",
+      strict: true,
+      toolChoice: "auto",
+      systemSuffix: "SUFFIXE",
+      extra: { output_config: { effort: "low" } },
+    });
+    const production = buildAnalysisRequest(params);
+    expect(request.model).toBe("some-model");
+    expect(request.tool_choice).toEqual({ type: "auto" });
+    const tool = request.tools![0] as Anthropic.Tool;
+    expect(tool.strict).toBe(true);
+    expect(tool.input_schema).toBe(STRICT_RESULT_SCHEMA);
+    expect(request.system).toBe(`${production.system as string}\n\nSUFFIXE`);
+    expect((request as unknown as Record<string, unknown>).output_config).toEqual({ effort: "low" });
+    expect(request.messages).toEqual(production.messages);
   });
 });

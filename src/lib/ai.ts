@@ -288,7 +288,7 @@ CE QUE TU N'ES PAS : tu n'es pas un outil de SEO Airbnb, ni un expert de l'algor
 // instead, byte-for-byte guaranteed correct every time.
 export const DISCLAIMER = `${BRAND_NAME} est une estimation produite à partir des éléments visibles de l'annonce. Il ne prédit ni ne garantit les clics ou les réservations.`;
 
-const RESULT_SCHEMA = {
+export const RESULT_SCHEMA = {
   type: "object",
   properties: {
     overall_score: { type: "integer", minimum: 0, maximum: 100 },
@@ -494,7 +494,7 @@ function getClient() {
   return anthropicClient;
 }
 
-export async function analyzeListing(params: {
+export interface AnalyzeListingParams {
   images: { base64: string; mediaType: string }[];
   input: AnalysisInput;
   // Title/description read from the Airbnb page itself when the analysis
@@ -518,36 +518,41 @@ export async function analyzeListing(params: {
   // log correlation between a specific user-visible attempt and the raw
   // model call(s) it triggered. Never persisted, never sent to Anthropic.
   attemptId?: string | null;
-}): Promise<{
-  result: AnalysisResult;
-  aiInputTokens: number | null;
-  aiOutputTokens: number | null;
-  parsingDurationMs: number;
-  retryCount: number;
-  stopReason: string | null;
-  // Model id that actually produced the result (observability: recorded on
-  // analysis_server_completed so cost/latency can be compared per model).
-  model: string | null;
-}> {
-  if (DEMO_MODE) {
-    return {
-      result: { ...DEMO_RESULT },
-      aiInputTokens: null,
-      aiOutputTokens: null,
-      parsingDurationMs: 0,
-      retryCount: 0,
-      stopReason: null,
-      model: null,
-    };
-  }
+}
 
-  if (params.images.length === 0 && !params.input.listing_url) {
-    throw new AnalysisError(
-      "Nous n'avons pas assez d'informations pour analyser correctement cette annonce. Ajoute 2 ou 3 captures supplémentaires.",
-      "insufficient_input"
-    );
-  }
+// Everything about the request that an experiment may vary. Production uses
+// PRODUCTION_REQUEST_OPTIONS below and nothing else; the benchmark
+// (scripts/ai-benchmark) builds its variants through the same function so a
+// variant is always "production's request with exactly this difference",
+// never a hand-copied prompt that can drift.
+export interface AnalysisRequestOptions {
+  model: string;
+  // Constrain the tool input to the schema at generation time (see
+  // STRICT_RESULT_SCHEMA above).
+  strict: boolean;
+  // "forced" names the tool in tool_choice. Claude Sonnet 5.5 / Opus 5.5
+  // reject that with a 400 and need "auto" (the system prompt already
+  // requires the tool call).
+  toolChoice: "forced" | "auto";
+  // Appended to the system prompt. Benchmark-only: production sends none.
+  systemSuffix?: string;
+  // Extra top-level request fields (thinking / output_config) for models
+  // that need them. Benchmark-only: production sends none.
+  extra?: Record<string, unknown>;
+}
 
+export const ANALYSIS_TOOL_NAME = "submit_guestmirror_analysis";
+
+export const PRODUCTION_REQUEST_OPTIONS: AnalysisRequestOptions = {
+  model: MODEL,
+  strict: false,
+  toolChoice: "forced",
+};
+
+export function buildAnalysisRequest(
+  params: Pick<AnalyzeListingParams, "images" | "input" | "extractedListingText">,
+  options: AnalysisRequestOptions = PRODUCTION_REQUEST_OPTIONS
+): Anthropic.MessageCreateParamsNonStreaming {
   const contextLines = [
     params.input.listing_url ? `Lien de l'annonce : ${params.input.listing_url}` : null,
     params.input.city ? `Ville / destination : ${params.input.city}` : null,
@@ -579,7 +584,7 @@ export async function analyzeListing(params: {
       type: "text",
       text: `Voici les informations fournies par le propriétaire :\n${
         contextLines.join("\n") || "(aucune information complémentaire fournie)"
-      }\n\nVoici ${params.images.length} capture(s) d'écran de l'annonce, dans l'ordre où elles apparaissent. Analyse la présentation de cette annonce et renvoie un ${BRAND_NAME} complet via l'outil submit_guestmirror_analysis.`,
+      }\n\nVoici ${params.images.length} capture(s) d'écran de l'annonce, dans l'ordre où elles apparaissent. Analyse la présentation de cette annonce et renvoie un ${BRAND_NAME} complet via l'outil ${ANALYSIS_TOOL_NAME}.`,
     },
     ...params.images.map(
       (img): Anthropic.ImageBlockParam => ({
@@ -589,6 +594,56 @@ export async function analyzeListing(params: {
     ),
   ];
 
+  return {
+    model: options.model,
+    max_tokens: MAX_OUTPUT_TOKENS,
+    system: options.systemSuffix ? `${SYSTEM_PROMPT}\n\n${options.systemSuffix}` : SYSTEM_PROMPT,
+    tools: [
+      {
+        name: ANALYSIS_TOOL_NAME,
+        description: `Soumet le résultat structuré de l'analyse ${BRAND_NAME}.`,
+        input_schema: (options.strict ? STRICT_RESULT_SCHEMA : RESULT_SCHEMA) as Anthropic.Tool["input_schema"],
+        ...(options.strict ? { strict: true } : {}),
+      },
+    ],
+    tool_choice: options.toolChoice === "forced" ? { type: "tool", name: ANALYSIS_TOOL_NAME } : { type: "auto" },
+    messages: [{ role: "user", content }],
+    ...(options.extra ?? {}),
+  };
+}
+
+export async function analyzeListing(params: AnalyzeListingParams): Promise<{
+  result: AnalysisResult;
+  aiInputTokens: number | null;
+  aiOutputTokens: number | null;
+  parsingDurationMs: number;
+  retryCount: number;
+  stopReason: string | null;
+  // Model id that actually produced the result (observability: recorded on
+  // analysis_server_completed so cost/latency can be compared per model).
+  model: string | null;
+}> {
+  if (DEMO_MODE) {
+    return {
+      result: { ...DEMO_RESULT },
+      aiInputTokens: null,
+      aiOutputTokens: null,
+      parsingDurationMs: 0,
+      retryCount: 0,
+      stopReason: null,
+      model: null,
+    };
+  }
+
+  if (params.images.length === 0 && !params.input.listing_url) {
+    throw new AnalysisError(
+      "Nous n'avons pas assez d'informations pour analyser correctement cette annonce. Ajoute 2 ou 3 captures supplémentaires.",
+      "insufficient_input"
+    );
+  }
+
+  const request = buildAnalysisRequest(params);
+
   const logTag = `attempt_id=${params.attemptId ?? "none"}`;
   const sourceNumbers = buildSourceNumberSet({ input: params.input, extractedListingText: params.extractedListingText });
 
@@ -596,20 +651,7 @@ export async function analyzeListing(params: {
     const aiStartedAt = Date.now();
     let response: Anthropic.Message;
     try {
-      response = await getClient().messages.create({
-        model: MODEL,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        system: SYSTEM_PROMPT,
-        tools: [
-          {
-            name: "submit_guestmirror_analysis",
-            description: `Soumet le résultat structuré de l'analyse ${BRAND_NAME}.`,
-            input_schema: RESULT_SCHEMA as Anthropic.Tool["input_schema"],
-          },
-        ],
-        tool_choice: { type: "tool", name: "submit_guestmirror_analysis" },
-        messages: [{ role: "user", content }],
-      });
+      response = await getClient().messages.create(request);
     } catch (err) {
       // SDK-level failures (network/5xx/timeout/auth/rate-limit) already
       // got the SDK's own AI_MAX_RETRIES retry internally -- never retried

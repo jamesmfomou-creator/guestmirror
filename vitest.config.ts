@@ -13,6 +13,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    // scripts/**/*.test.ts: pure-logic tests of the AI benchmark helpers.
+    // The benchmark itself (scripts/ai-benchmark/run.ts) is not a test and
+    // is never picked up here.
+    include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
   },
 });
