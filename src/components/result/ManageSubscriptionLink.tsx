@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 
-export function ManageSubscriptionLink({ email }: { email: string }) {
+// Opens the Stripe billing portal for the subscription of this report's email.
+// The server only allows it for a visitor who has verified that email.
+export function ManageSubscriptionLink({ analysisId, label = "Gérer mon abonnement" }: { analysisId: string; label?: string }) {
   const [loading, setLoading] = useState(false);
 
   async function handleClick() {
@@ -11,7 +13,7 @@ export function ManageSubscriptionLink({ email }: { email: string }) {
       const res = await fetch("/api/portal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ analysisId }),
       });
       const json = await res.json();
       if (res.ok && json.url) {
@@ -31,7 +33,7 @@ export function ManageSubscriptionLink({ email }: { email: string }) {
       disabled={loading}
       className="text-xs font-medium text-muted underline underline-offset-2 hover:text-accent disabled:opacity-50"
     >
-      {loading ? "Ouverture…" : "Gérer mon abonnement"}
+      {loading ? "Ouverture…" : label}
     </button>
   );
 }

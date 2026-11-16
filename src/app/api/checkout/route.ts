@@ -1,173 +1,163 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { randomUUID } from "crypto";
-import { STRIPE_CONFIGURED, SUPABASE_CONFIGURED, SITE_URL, LIFETIME_CONFIGURED } from "@/lib/env";
-import { getAnalysis, unlockAnalysis } from "@/lib/store";
+import type Stripe from "stripe";
+import { SITE_URL } from "@/lib/env";
+import { getAnalysis } from "@/lib/store";
 import { getStripe } from "@/lib/stripe";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import {
-  upsertSubscriptionFromCheckout,
-  upsertLifetimeFromCheckout,
-  hasActivePlusSubscription,
-  hasActiveLifetimeAccess,
-} from "@/lib/subscriptions";
+import { OFFERS, PRICING_VERSION, isOfferId, priceIdFor, stripeModeOf, type OfferId } from "@/lib/plans";
+import { getAccessForEmail } from "@/lib/access/reportAccess";
+import { listGrantsByEmail } from "@/lib/access/accessStore";
+import { isConciergerieGrantUsable, isLifetimeGrantActive } from "@/lib/access/entitlements";
+import { handleStripeEvent } from "@/lib/stripe/webhookHandlers";
+import { openSession, setAccessCookie } from "@/lib/access/session";
+
+// Starts a Stripe Checkout for one of the three offers (lib/plans.ts).
+//
+// The browser only sends an offer id; the price is chosen here, from the
+// server-side catalogue -- never a price id or an amount from the client.
+// Nothing is granted here: rights are activated by the verified webhook
+// (lib/stripe/webhookHandlers.ts) once Stripe confirms the payment.
 
 const bodySchema = z.object({
   analysisId: z.string().min(1),
-  plan: z.enum(["one_time", "plus", "lifetime"]).default("one_time"),
+  offer: z.string().optional(),
+  // Pages rendered before pricing v2 still send `plan`.
+  plan: z.string().optional(),
 });
 
-async function trackSimulatedPayment(params: {
-  analysisId: string;
-  eventName: "payment_completed" | "one_time_payment_completed" | "subscription_started" | "lifetime_payment_completed";
-  plan: "one_time" | "plus" | "lifetime";
-  price: number | null;
-}) {
-  if (!SUPABASE_CONFIGURED) return;
-  try {
-    const supabase = getSupabaseAdmin()!;
-    const { data: priorEvent } = await supabase
-      .from("analytics_events")
-      .select("source, anonymous_id, session_id, email, metadata")
-      .eq("analysis_id", params.analysisId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    const priorMetadata = (priorEvent?.metadata as Record<string, unknown> | null) ?? null;
+const NO_STORE = { "Cache-Control": "no-store" };
 
-    await supabase.from("analytics_events").insert({
-      id: randomUUID(),
-      event_name: params.eventName,
-      analysis_id: params.analysisId,
-      anonymous_id: priorEvent?.anonymous_id ?? null,
-      session_id: priorEvent?.session_id ?? null,
-      email: priorEvent?.email ?? null,
-      source: priorEvent?.source ?? "direct",
-      metadata: {
-        analysis_id: params.analysisId,
-        plan: params.plan,
-        price: params.price,
-        currency: "EUR",
-        payment_status: "paid",
-        simulated: true,
-        first_touch: priorMetadata?.first_touch ?? null,
-        last_touch: priorMetadata?.last_touch ?? null,
-        user_type: priorMetadata?.user_type ?? null,
-        property_count_range: priorMetadata?.property_count_range ?? null,
-      },
-    });
-  } catch {
-    // analytics must never break checkout
-  }
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: NO_STORE });
 }
 
 export async function POST(req: NextRequest) {
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Requête invalide." }, { status: 400 });
+  if (!parsed.success) return json({ error: "Requête invalide." }, 400);
+  const { analysisId } = parsed.data;
+  const requested = parsed.data.offer ?? parsed.data.plan ?? "one_time";
+  if (requested === "plus") {
+    return json({ error: "Nos offres ont changé. Recharge la page pour voir les nouvelles formules.", code: "offers_changed" }, 409);
   }
-  const { analysisId, plan } = parsed.data;
+  if (!isOfferId(requested)) return json({ error: "Offre inconnue." }, 400);
+  const offer: OfferId = requested;
 
   const analysis = await getAnalysis(analysisId);
-  if (!analysis) {
-    return NextResponse.json({ error: "Analyse introuvable." }, { status: 404 });
+  if (!analysis) return json({ error: "Analyse introuvable." }, 404);
+  const resultUrl = `/result/${analysisId}`;
+
+  // Already readable: never charge again.
+  if (analysis.is_unlocked) return json({ url: `${resultUrl}?unlocked=1` });
+  const access = await getAccessForEmail(analysis.email);
+  if (access.unlimited) return json({ url: resultUrl });
+
+  // One subscription / one lifetime per email: send the owner to their existing right.
+  const grants = await listGrantsByEmail(analysis.email);
+  const hasConciergerie = grants.some((g) => isConciergerieGrantUsable(g, Date.now()));
+  const hasLifetime = grants.some(isLifetimeGrantActive);
+  if ((offer === "conciergerie" && hasConciergerie) || (offer === "lifetime" && hasLifetime) || (offer === "conciergerie" && hasLifetime)) {
+    if (access.verified) return json({ url: resultUrl });
+    return json(
+      {
+        error:
+          offer === "conciergerie" && hasConciergerie
+            ? "Tu as déjà un abonnement Conciergerie avec cet e-mail : vérifie ton e-mail pour l'utiliser."
+            : "Tu as déjà l'accès à vie avec cet e-mail : vérifie ton e-mail pour l'utiliser.",
+        code: "verify_first",
+      },
+      409
+    );
   }
 
-  if (analysis.is_unlocked) {
-    return NextResponse.json({ url: `/result/${analysisId}?unlocked=1` });
-  }
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) return simulatePurchase(offer, analysisId, analysis.email);
 
-  if (plan === "plus" && (await hasActivePlusSubscription(analysis.email))) {
-    return NextResponse.json({ url: `/result/${analysisId}?unlocked=1&plus=1` });
-  }
-  if (plan === "lifetime" && (await hasActiveLifetimeAccess(analysis.email))) {
-    return NextResponse.json({ url: `/result/${analysisId}?unlocked=1&lifetime=1` });
-  }
-  if (plan === "lifetime" && STRIPE_CONFIGURED && !LIFETIME_CONFIGURED) {
-    return NextResponse.json({ error: "L'offre Lifetime n'est pas disponible pour le moment." }, { status: 400 });
-  }
+  const priceId = priceIdFor(offer, stripeModeOf(secretKey));
+  if (!priceId) return json({ error: "Cette offre n'est pas disponible pour le moment." }, 503);
 
-  if (!STRIPE_CONFIGURED) {
-    // No Stripe keys configured (demo / early dev): simulate the unlock so
-    // the full flow can still be tested end to end.
-    if (plan === "plus") {
-      if (analysis.email) {
-        await upsertSubscriptionFromCheckout({
-          email: analysis.email,
-          stripeCustomerId: `sim_cus_${analysisId}`,
-          stripeSubscriptionId: `sim_sub_${analysisId}`,
-          status: "active",
-          currentPeriodEnd: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
-        });
-      }
-      await trackSimulatedPayment({ analysisId, eventName: "subscription_started", plan, price: 6.9 });
-      return NextResponse.json({ url: `/result/${analysisId}?unlocked=1&plus=1&simulated=1` });
-    }
-
-    if (plan === "lifetime") {
-      if (analysis.email) {
-        await upsertLifetimeFromCheckout({ email: analysis.email, stripeCustomerId: `sim_cus_${analysisId}` });
-      }
-      await unlockAnalysis(analysisId, "paid");
-      await trackSimulatedPayment({ analysisId, eventName: "lifetime_payment_completed", plan, price: null });
-      await trackSimulatedPayment({ analysisId, eventName: "payment_completed", plan, price: null });
-      return NextResponse.json({ url: `/result/${analysisId}?unlocked=1&lifetime=1&simulated=1` });
-    }
-
-    await unlockAnalysis(analysisId, "paid");
-    await trackSimulatedPayment({ analysisId, eventName: "payment_completed", plan, price: 4.9 });
-    await trackSimulatedPayment({ analysisId, eventName: "one_time_payment_completed", plan, price: 4.9 });
-    return NextResponse.json({ url: `/result/${analysisId}?unlocked=1&simulated=1` });
-  }
+  const metadata = { app: "guestmirror", offer, analysisId, price_id: priceId, pricing_version: PRICING_VERSION };
+  const common: Stripe.Checkout.SessionCreateParams = {
+    line_items: [{ price: priceId, quantity: 1 }],
+    // Locks the email on Stripe's page to the one the report is tied to.
+    customer_email: analysis.email || undefined,
+    client_reference_id: analysisId,
+    success_url: `${SITE_URL}/api/checkout/return?session_id={CHECKOUT_SESSION_ID}&analysis_id=${analysisId}`,
+    cancel_url: `${SITE_URL}${resultUrl}?canceled=1`,
+    metadata,
+  };
 
   try {
     const stripe = getStripe();
+    const session =
+      OFFERS[offer].checkoutMode === "subscription"
+        ? await stripe.checkout.sessions.create({ ...common, mode: "subscription", subscription_data: { metadata } })
+        : await stripe.checkout.sessions.create({
+            ...common,
+            mode: "payment",
+            payment_intent_data: { metadata },
+            ...(offer === "lifetime" ? { customer_creation: "always" as const } : {}),
+          });
+    return json({ url: session.url });
+  } catch (err) {
+    console.error(`[checkout] session creation failed offer=${offer}:`, err instanceof Error ? err.message : err);
+    return json({ error: "Le paiement n'a pas pu être initié. Merci de réessayer." }, 502);
+  }
+}
 
-    if (plan === "lifetime") {
-      const session = await stripe.checkout.sessions.create({
-        mode: "payment",
-        line_items: [{ price: process.env.STRIPE_PRICE_LIFETIME!, quantity: 1 }],
-        customer_email: analysis.email || undefined,
-        success_url: `${SITE_URL}/result/${analysisId}?unlocked=1&lifetime=1&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${SITE_URL}/result/${analysisId}?canceled=1`,
-        metadata: { analysisId, plan: "lifetime" },
-      });
-      return NextResponse.json({ url: session.url });
-    }
+/**
+ * Local demo only (no Stripe key): runs the very same webhook handling a real
+ * payment would trigger, with synthetic events, so every offer can be tried
+ * end to end without Stripe. Never reachable when a Stripe key is configured.
+ */
+async function simulatePurchase(offer: OfferId, analysisId: string, email: string | null) {
+  if (!email) return json({ error: "Ajoute un e-mail à ton analyse pour simuler un paiement." }, 400);
+  const sessionId = `cs_sim_${analysisId}_${offer}`;
+  const nowS = Math.floor(Date.now() / 1000);
+  const deps = { track: async () => {}, sendUnlockEmail: async () => {} };
+  const metadata = { app: "guestmirror", offer, analysisId, price_id: priceIdFor(offer, "live") ?? "" };
+  const evt = (type: string, object: unknown) =>
+    ({ id: `evt_sim_${type}_${sessionId}`, type, created: nowS, livemode: false, data: { object } }) as unknown as Stripe.Event;
 
-    if (plan === "plus") {
-      const session = await stripe.checkout.sessions.create({
+  if (offer === "conciergerie") {
+    const subscriptionId = `sub_sim_${analysisId}`;
+    await handleStripeEvent(
+      evt("checkout.session.completed", {
+        id: sessionId,
         mode: "subscription",
-        line_items: [{ price: process.env.STRIPE_PRICE_PLUS_MONTHLY!, quantity: 1 }],
-        customer_email: analysis.email || undefined,
-        success_url: `${SITE_URL}/result/${analysisId}?unlocked=1&plus=1&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${SITE_URL}/result/${analysisId}?canceled=1`,
-        metadata: { analysisId, plan: "plus" },
-        subscription_data: { metadata: { analysisId, plan: "plus" } },
-      });
-      return NextResponse.json({ url: session.url });
-    }
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      line_items: [{ price: process.env.STRIPE_PRICE_ONE_TIME!, quantity: 1 }],
-      // Pre-fills (and locks) the email field on Stripe's hosted page --
-      // without this, a customer can type any email at checkout, which
-      // can end up different from the one their analysis/report is tied
-      // to (unlock itself is keyed by analysisId, not email, so it still
-      // works either way, but the mismatch is confusing for the customer
-      // and support). Matches the "plus" branch above, which already did
-      // this correctly.
-      customer_email: analysis.email || undefined,
-      success_url: `${SITE_URL}/result/${analysisId}?unlocked=1&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${SITE_URL}/result/${analysisId}?canceled=1`,
-      metadata: { analysisId, plan: "one_time" },
-    });
-    return NextResponse.json({ url: session.url });
-  } catch {
-    return NextResponse.json(
-      { error: "Le paiement n'a pas pu être initié. Merci de réessayer." },
-      { status: 502 }
+        payment_status: "paid",
+        subscription: subscriptionId,
+        customer: `cus_sim_${analysisId}`,
+        customer_details: { email },
+        metadata,
+      }),
+      deps
+    );
+    await handleStripeEvent(
+      evt("invoice.paid", {
+        id: `in_sim_${analysisId}`,
+        billing_reason: "subscription_create",
+        customer_email: email,
+        parent: { subscription_details: { subscription: subscriptionId } },
+        lines: { data: [{ pricing: { price_details: { price: metadata.price_id } }, period: { start: nowS, end: nowS + 30 * 86400 } }] },
+      }),
+      deps
+    );
+  } else {
+    await handleStripeEvent(
+      evt("checkout.session.completed", {
+        id: sessionId,
+        mode: "payment",
+        payment_status: "paid",
+        payment_intent: `pi_sim_${analysisId}_${offer}`,
+        customer_details: { email },
+        amount_total: Math.round(OFFERS[offer].amountEur * 100),
+        currency: "eur",
+        metadata,
+      }),
+      deps
     );
   }
+  const res = json({ url: `/result/${analysisId}?unlocked=1&offer=${offer}&simulated=1` });
+  if (offer !== "one_time") setAccessCookie(res, await openSession(email.trim().toLowerCase(), sessionId));
+  return res;
 }

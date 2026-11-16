@@ -84,6 +84,50 @@ export async function sendFeedbackReminderEmail(params: { to: string }): Promise
   });
 }
 
+/**
+ * 6-digit code proving the visitor reads this mailbox, before a subscription
+ * or lifetime right attached to it can be used (lib/access/session.ts).
+ * Unlike the other helpers, a failure here is reported to the caller: the
+ * visitor is waiting for this email.
+ */
+export async function sendAccessCodeEmail(params: { to: string; code: string }): Promise<void> {
+  if (!EMAIL_CONFIGURED) return;
+  await sendEmail({
+    to: params.to,
+    subject: `Ton code ${BRAND_NAME} : ${params.code}`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; color: #1c1a17;">
+        <h1 style="font-size: 20px;">Ton code de vérification</h1>
+        <p>Saisis ce code sur ${BRAND_NAME} pour utiliser ton abonnement ou ton accès à vie :</p>
+        <p style="font-size: 32px; font-weight: 700; letter-spacing: 6px; margin: 24px 0;">${params.code}</p>
+        <p style="font-size: 13px; color: #6f6a62;">Il est valable 10 minutes. Si tu n'as rien demandé, ignore simplement cet e-mail.</p>
+        <p style="font-size: 13px; color: #6f6a62;">— L'équipe ${BRAND_NAME}</p>
+      </div>
+    `,
+  });
+}
+
+/** The link to an already unlocked report, sent to its owner on request (never shown on screen). */
+export async function sendExistingReportEmail(params: { to: string; analysisId: string }): Promise<void> {
+  const url = `${SITE_URL}/result/${params.analysisId}`;
+  await sendEmail({
+    to: params.to,
+    subject: `Ton rapport ${BRAND_NAME}`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; color: #1c1a17;">
+        <h1 style="font-size: 20px;">Voici le lien de ton rapport</h1>
+        <p>Tu as demandé à retrouver ton rapport ${BRAND_NAME} déjà débloqué.</p>
+        <p style="margin: 24px 0;">
+          <a href="${url}" style="background: #d9673f; color: #fff; padding: 12px 24px; border-radius: 999px; text-decoration: none; font-weight: 600; display: inline-block;">
+            Voir mon rapport
+          </a>
+        </p>
+        <p style="font-size: 13px; color: #6f6a62;">Si tu n'as rien demandé, ignore simplement cet e-mail.</p>
+      </div>
+    `,
+  });
+}
+
 export async function sendUnlockEmail(params: {
   to: string;
   analysisId: string;

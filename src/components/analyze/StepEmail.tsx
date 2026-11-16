@@ -27,30 +27,30 @@ export function StepEmail({
   // headline next to a failure message.
   const isRetry = Boolean(error);
 
-  // Nudges a returning customer toward their existing unlocked report
-  // instead of unknowingly starting (and possibly paying for) a new one --
-  // added after a support case where a customer forgot she already had a
-  // paid analysis and reran the test. Best-effort only: never blocks
-  // submission, never shown until we've actually confirmed a match.
-  const [existingAnalysisId, setExistingAnalysisId] = useState<string | null>(null);
-  const [checkedEmail, setCheckedEmail] = useState<string | null>(null);
+  // Returning customers who already paid can get the link of their report
+  // by email. It is never shown on screen: a report link is the access token
+  // to a paid report, and the server answers the same way whether or not a
+  // report exists for the address (see api/analyses/existing).
+  const [linkRequest, setLinkRequest] = useState<"idle" | "sending" | "sent">("idle");
 
   function handleChange(value: string) {
     onChange(value);
-    if (value.trim() !== checkedEmail) setExistingAnalysisId(null);
+    if (linkRequest === "sent") setLinkRequest("idle");
   }
 
-  async function checkExisting() {
-    const trimmed = email.trim();
-    if (!EMAIL_RE.test(trimmed) || trimmed === checkedEmail) return;
-    setCheckedEmail(trimmed);
+  async function sendExistingReportLink() {
+    if (!isValid || linkRequest === "sending") return;
+    setLinkRequest("sending");
     try {
-      const res = await fetch(`/api/analyses/existing?email=${encodeURIComponent(trimmed)}`);
-      const json = await res.json();
-      setExistingAnalysisId(json.found ? json.analysisId : null);
+      await fetch("/api/analyses/existing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
     } catch {
-      // best-effort nudge only, never blocks the form
+      // best effort; the confirmation below stays generic either way
     }
+    setLinkRequest("sent");
   }
 
   function handleSubmit(e: FormEvent) {
@@ -77,10 +77,7 @@ export function StepEmail({
           autoFocus
           value={email}
           onChange={(e) => handleChange(e.target.value)}
-          onBlur={() => {
-            setTouched(true);
-            checkExisting();
-          }}
+          onBlur={() => setTouched(true)}
           placeholder="ton@email.com"
           className="w-full rounded-xl border border-border bg-background px-4 py-3 text-[15px] focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
         />
@@ -89,12 +86,25 @@ export function StepEmail({
         )}
       </div>
 
-      {existingAnalysisId && (
-        <p className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-hover">
-          Tu as déjà une analyse débloquée avec cette adresse.{" "}
-          <a href={`/result/${existingAnalysisId}`} className="font-semibold underline underline-offset-2">
-            Voir mon rapport
-          </a>
+      {isValid && (
+        <p className="mt-4 text-sm text-muted">
+          {linkRequest === "sent" ? (
+            <span className="text-accent-hover">
+              Si un rapport débloqué existe pour cette adresse, tu vas recevoir son lien par e-mail.
+            </span>
+          ) : (
+            <>
+              Tu as déjà débloqué un rapport ?{" "}
+              <button
+                type="button"
+                onClick={sendExistingReportLink}
+                disabled={linkRequest === "sending"}
+                className="font-semibold text-accent-hover underline underline-offset-2 disabled:opacity-50"
+              >
+                Recevoir son lien par e-mail
+              </button>
+            </>
+          )}
         </p>
       )}
 

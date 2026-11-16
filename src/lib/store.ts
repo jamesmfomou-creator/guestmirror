@@ -341,6 +341,32 @@ export async function unlockAnalysis(id: string, paymentStatus: PaymentStatus = 
   }
 }
 
+/**
+ * Reverses an unlock: used only when the payment behind it is fully refunded
+ * or disputed (pricing v2 policy). Never called for any other reason.
+ */
+export async function lockAnalysis(id: string) {
+  if (SUPABASE_CONFIGURED) {
+    const supabase = getSupabaseAdmin()!;
+    const { error } = await supabase
+      .from("analyses")
+      .update({ is_unlocked: false, payment_status: "none", updated_at: nowIso() })
+      .eq("id", id);
+    if (error) {
+      console.error(`[store] lockAnalysis failed id=${id}: ${error.message}`);
+      throw new Error(`lockAnalysis failed: ${error.message}`);
+    }
+    return;
+  }
+  const record = readLocalRecord(id);
+  if (record) {
+    record.is_unlocked = false;
+    record.payment_status = "none";
+    record.updated_at = nowIso();
+    writeLocalRecord(record);
+  }
+}
+
 export async function updateAnalysisInput(
   id: string,
   input: {

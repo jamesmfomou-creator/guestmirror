@@ -9,10 +9,22 @@ import { useInViewOnce } from "@/lib/tracking/useInViewOnce";
 import { UserType, PropertyCountRange } from "@/lib/types";
 import type { PaywallPreview } from "@/lib/paywallPreview";
 import { PaywallPreviewV2 } from "./PaywallPreviewV2";
+import { OFFERS, formatEur, type OfferId } from "@/lib/plans";
 
-const PLAN_PRICES: Record<Plan, number | null> = { one_time: 4.9, plus: 6.9, lifetime: null };
+type Plan = OfferId;
 
-type Plan = "one_time" | "plus" | "lifetime";
+// Offer-specific event names. one_time/lifetime keep their historical names
+// so existing dashboards stay continuous; Conciergerie is new.
+const OFFER_CLICKED = {
+  one_time: "one_time_offer_clicked",
+  conciergerie: "conciergerie_offer_clicked",
+  lifetime: "lifetime_offer_clicked",
+} as const;
+const OFFER_CHECKOUT_STARTED = {
+  one_time: "one_time_checkout_started",
+  conciergerie: "conciergerie_checkout_started",
+  lifetime: "lifetime_checkout_started",
+} as const;
 
 const MULTI_PROPERTY_RANGES: PropertyCountRange[] = ["2-5", "6-20", "21+"];
 
@@ -25,7 +37,6 @@ const UNLOCK_BENEFITS = [
   "Des titres Airbnb prêts à utiliser",
   "Une description améliorée",
   "Les actions prioritaires à appliquer",
-  "Ton re-test après modification",
 ];
 
 export function Paywall({
@@ -33,7 +44,6 @@ export function Paywall({
   canceled,
   overallScore,
   inputMethod,
-  lifetimePriceLabel,
   userType,
   propertyCountRange,
   preview,
@@ -43,7 +53,6 @@ export function Paywall({
   canceled?: boolean;
   overallScore?: number;
   inputMethod?: "airbnb_url" | "screenshot" | "mixed";
-  lifetimePriceLabel?: string | null;
   userType?: UserType | null;
   propertyCountRange?: PropertyCountRange | null;
   // Paywall presentation experiment (lib/paywallExperiment.ts). Passed only
@@ -79,15 +88,14 @@ export function Paywall({
     track("pricing_viewed", { analysisId });
   }, 0.1);
 
-  // UX nudge only (see lib/pricing.ts's PLUS_PLAN.concierge for the
-  // always-on static mention) -- never hides or blocks the other plans.
+  // UX nudge only -- never hides or blocks the other plans.
   const showConciergeBanner =
     userType === "concierge" || (propertyCountRange != null && MULTI_PROPERTY_RANGES.includes(propertyCountRange));
 
   async function handleSelect(plan: Plan) {
     setLoadingPlan(plan);
     setError(null);
-    const price = PLAN_PRICES[plan];
+    const price = OFFERS[plan].amountEur;
 
     track("paywall_cta_clicked", {
       analysisId,
@@ -99,25 +107,24 @@ export function Paywall({
       property_count_range: propertyCountRange,
     });
     track("unlock_clicked", { analysisId, plan, price, overall_score: overallScore, user_type: userType, property_count_range: propertyCountRange });
-    track(
-      plan === "one_time" ? "one_time_offer_clicked" : plan === "plus" ? "plus_offer_clicked" : "lifetime_offer_clicked",
-      { analysisId, price, overall_score: overallScore, user_type: userType, property_count_range: propertyCountRange }
-    );
+    track(OFFER_CLICKED[plan], { analysisId, price, overall_score: overallScore, user_type: userType, property_count_range: propertyCountRange });
 
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ analysisId, plan }),
+        body: JSON.stringify({ analysisId, offer: plan }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Le paiement n'a pas pu être initié.");
+      if (!res.ok) {
+        if (json.code === "verify_first") {
+          document.getElementById("verify-access")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        throw new Error(json.error || "Le paiement n'a pas pu être initié.");
+      }
 
       track("checkout_started", { analysisId, plan, price, currency: "EUR", input_method: inputMethod, user_type: userType, property_count_range: propertyCountRange });
-      track(
-        plan === "one_time" ? "one_time_checkout_started" : plan === "plus" ? "subscription_checkout_started" : "lifetime_checkout_started",
-        { analysisId, price, currency: "EUR" }
-      );
+      track(OFFER_CHECKOUT_STARTED[plan], { analysisId, price, currency: "EUR" });
 
       window.location.href = json.url;
     } catch (err) {
@@ -127,7 +134,7 @@ export function Paywall({
   }
 
   return (
-    <div ref={ref} id="paywall" className="mx-auto mt-6 max-w-3xl scroll-mt-20">
+    <div ref={ref} id="paywall" className="mx-auto mt-6 max-w-5xl scroll-mt-20">
       {preview ? (
         <PaywallPreviewV2
           analysisId={analysisId}
@@ -181,13 +188,11 @@ export function Paywall({
       )}
       <div className={preview ? "mt-4" : "mt-7"}>
         <PricingCards
-          lifetimePriceLabel={lifetimePriceLabel ?? null}
+          highlight="one_time"
           showConciergeBanner={showConciergeBanner}
-          plusDescription="Pour tester plusieurs annonces et suivre tes améliorations."
           oneTimeAction={
             <Button
               size="lg"
-              variant="outline"
               className="mt-6 w-full"
               onClick={() => handleSelect("one_time")}
               disabled={loadingPlan !== null}
@@ -195,18 +200,19 @@ export function Paywall({
               {loadingPlan === "one_time"
                 ? "Redirection…"
                 : preview
-                  ? "Débloquer mes recommandations — 4,90 €"
-                  : "Débloquer mon analyse complète — 4,90 €"}
+                  ? `Débloquer mes recommandations — ${formatEur(OFFERS.one_time.amountEur)}`
+                  : `Débloquer mon rapport — ${formatEur(OFFERS.one_time.amountEur)}`}
             </Button>
           }
-          plusAction={
+          conciergerieAction={
             <Button
               size="lg"
+              variant="outline"
               className="mt-6 w-full"
-              onClick={() => handleSelect("plus")}
+              onClick={() => handleSelect("conciergerie")}
               disabled={loadingPlan !== null}
             >
-              {loadingPlan === "plus" ? "Redirection…" : "Passer à GuestMirror Plus — 6,90 €/mois"}
+              {loadingPlan === "conciergerie" ? "Redirection…" : "Choisir Conciergerie"}
             </Button>
           }
           lifetimeAction={
@@ -217,7 +223,7 @@ export function Paywall({
               onClick={() => handleSelect("lifetime")}
               disabled={loadingPlan !== null}
             >
-              {loadingPlan === "lifetime" ? "Redirection…" : "Débloquer l'accès à vie"}
+              {loadingPlan === "lifetime" ? "Redirection…" : "Obtenir l'accès à vie"}
             </Button>
           }
         />

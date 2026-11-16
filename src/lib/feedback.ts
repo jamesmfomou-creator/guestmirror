@@ -4,7 +4,7 @@ import { SUPABASE_CONFIGURED } from "@/lib/env";
 import { UserType, PropertyCountRange } from "@/lib/types";
 
 export type FeedbackRating = "positive" | "negative";
-export type FeedbackPlan = "one_time" | "plus" | "lifetime";
+export type FeedbackPlan = "one_time" | "plus" | "lifetime" | "conciergerie";
 
 export interface FeedbackInput {
   analysisId: string | null;

@@ -1,57 +1,38 @@
 import { ReactNode } from "react";
-import { cn } from "@/lib/utils";
-import { ONE_TIME_PLAN, PLUS_PLAN, LIFETIME_PLAN_BASE, PlanContent } from "@/lib/pricing";
+import { CONCIERGERIE_PLAN, LIFETIME_PLAN, ONE_TIME_PLAN } from "@/lib/pricing";
+import type { OfferId } from "@/lib/plans";
 import { PricingCard } from "./PricingCard";
 
 /**
- * Mobile-first: the grid is single-column by default (stacked, readable),
- * and only becomes side-by-side at the sm breakpoint. Lifetime only
- * renders once a live Stripe price label is available (see
- * lib/lifetimePrice.ts) -- until then this is the same 2-card layout as
- * before, unchanged.
+ * The three offers (pricing v2), shared by the landing page, /pricing and the
+ * paywall. Mobile-first: stacked, then side by side from the md breakpoint.
+ * `highlight` is the visually emphasised card: Conciergerie on marketing
+ * pages, the single analysis on the paywall (one listing, one report).
  */
 export function PricingCards({
-  lifetimePriceLabel,
   oneTimeAction,
-  plusAction,
+  conciergerieAction,
   lifetimeAction,
+  highlight = "conciergerie",
   showConciergeBanner,
-  plusDescription,
 }: {
-  lifetimePriceLabel: string | null;
   oneTimeAction: ReactNode;
-  plusAction: ReactNode;
-  lifetimeAction?: ReactNode;
+  conciergerieAction: ReactNode;
+  lifetimeAction: ReactNode;
+  highlight?: OfferId;
   showConciergeBanner?: boolean;
-  // Paywall-only copy override for the Plus card. Landing and /pricing don't
-  // pass it, so their copy stays exactly as it was.
-  plusDescription?: string;
 }) {
-  const lifetimePlan: PlanContent | null =
-    lifetimePriceLabel && lifetimeAction ? { ...LIFETIME_PLAN_BASE, priceLabel: lifetimePriceLabel } : null;
-  const plusPlan: PlanContent = plusDescription ? { ...PLUS_PLAN, description: plusDescription } : PLUS_PLAN;
-
   return (
     <div>
       {showConciergeBanner && (
         <p className="mx-auto mb-5 max-w-md rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-hover">
-          Tu gères plusieurs logements ? GuestMirror Plus est généralement plus adapté.
+          Tu gères plusieurs logements ? L&apos;offre Conciergerie est généralement plus adaptée.
         </p>
       )}
-      <div className={cn("mx-auto grid max-w-5xl gap-5", lifetimePlan ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
-        <PricingCard plan={ONE_TIME_PLAN} action={oneTimeAction} />
-        <PricingCard plan={plusPlan} highlighted action={plusAction} />
-        {lifetimePlan && (
-          <PricingCard
-            plan={lifetimePlan}
-            action={lifetimeAction}
-            extraNote={
-              <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-muted-2">
-                Offre de lancement — disponibilité limitée
-              </p>
-            }
-          />
-        )}
+      <div className="mx-auto grid max-w-5xl gap-5 md:grid-cols-3">
+        <PricingCard plan={ONE_TIME_PLAN} highlighted={highlight === "one_time"} action={oneTimeAction} />
+        <PricingCard plan={CONCIERGERIE_PLAN} highlighted={highlight === "conciergerie"} action={conciergerieAction} />
+        <PricingCard plan={LIFETIME_PLAN} highlighted={highlight === "lifetime"} action={lifetimeAction} />
       </div>
     </div>
   );

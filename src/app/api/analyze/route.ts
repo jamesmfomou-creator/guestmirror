@@ -13,6 +13,7 @@ import { DEMO_MODE } from "@/lib/env";
 import { DEMO_IMAGES, DEMO_RESULT, DEMO_RESULT_AFTER } from "@/lib/demo-data";
 import { extractAirbnbListing, downloadImageAsBase64 } from "@/lib/airbnbExtract";
 import { optimizeImages } from "@/lib/imageOptimize";
+import { isEligibleForLegacyRetest } from "@/lib/access/accessStore";
 
 const AIRBNB_EXTRACTION_FAILED_MESSAGE =
   "Impossible d'analyser automatiquement ce lien Airbnb. Importe une capture d'écran de ton annonce pour continuer.";
@@ -262,6 +263,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Legacy promise of the 4,90 € offer: "1 re-test après correction" -- the
+    // first re-test of a report bought at that price is unlocked for free.
+    let legacyRetest = false;
+    if (previousAnalysis?.is_unlocked) {
+      try {
+        legacyRetest = await isEligibleForLegacyRetest(previousAnalysis.id);
+      } catch (err) {
+        console.error(`[analyze] legacy re-test check failed, re-test stays locked ${attemptTag}:`, err);
+      }
+    }
+
     if (DEMO_MODE) {
       const result = previousAnalysis ? DEMO_RESULT_AFTER : DEMO_RESULT;
       const record = await createAnalysis({
@@ -272,7 +284,7 @@ export async function POST(req: NextRequest) {
         previousAnalysisId: data.previous_analysis_id || null,
         userType: data.user_type || null,
         propertyCountRange: data.property_count_range || null,
-        isUnlocked: Boolean(promoCodeToRecord),
+        isUnlocked: Boolean(promoCodeToRecord) || legacyRetest,
         promoCode: promoCodeToRecord,
         attemptId: data.attempt_id ?? null,
         goal: data.goal ?? null,
@@ -352,7 +364,7 @@ export async function POST(req: NextRequest) {
         previousAnalysisId: data.previous_analysis_id || null,
         userType: data.user_type || null,
         propertyCountRange: data.property_count_range || null,
-        isUnlocked: Boolean(promoCodeToRecord),
+        isUnlocked: Boolean(promoCodeToRecord) || legacyRetest,
         promoCode: promoCodeToRecord,
         attemptId: data.attempt_id ?? null,
         goal: data.goal ?? null,

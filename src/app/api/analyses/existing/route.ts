@@ -1,39 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { randomUUID } from "crypto";
 import { getLatestUnlockedAnalysisByEmail } from "@/lib/store";
-import { getSubscriptionByEmail, isPlusActive, isLifetimeActive } from "@/lib/subscriptions";
+import { sendExistingReportEmail } from "@/lib/email";
+import { SUPABASE_CONFIGURED } from "@/lib/env";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-const querySchema = z.object({ email: z.string().trim().email() });
+// "I already paid for a report": emails the link of the latest unlocked
+// report to that address. The response is identical whether or not a report
+// exists, and never contains a report id: a report id is the access token to
+// a paid report, and this used to return it to anyone who typed an email.
+// Limited to one email per address per hour.
 
-/**
- * Lets the analyze form nudge a returning customer toward their existing
- * unlocked report instead of unknowingly starting (and possibly paying
- * for) a brand new one -- see the support case where a customer forgot
- * she already had a paid analysis and reran the test.
- *
- * Deliberately returns as little as possible (just enough to link to the
- * report): this app has no auth, so an analysisId already doubles as the
- * sole access token for viewing a report anywhere else (share links,
- * Stripe success redirects) -- this endpoint doesn't introduce a new
- * capability beyond that, but there's no reason to also leak the score.
- */
-export async function GET(req: NextRequest) {
-  const parsed = querySchema.safeParse({ email: req.nextUrl.searchParams.get("email") });
-  if (!parsed.success) {
-    return NextResponse.json({ found: false });
+const bodySchema = z.object({ email: z.string().trim().email() });
+const SENT_EVENT = "existing_report_link_sent";
+
+async function sentRecently(email: string): Promise<boolean> {
+  if (!SUPABASE_CONFIGURED) return false;
+  const { count } = await getSupabaseAdmin()!
+    .from("analytics_events")
+    .select("id", { count: "exact", head: true })
+    .eq("event_name", SENT_EVENT)
+    .eq("email", email)
+    .gte("created_at", new Date(Date.now() - 3_600_000).toISOString());
+  return (count ?? 0) > 0;
+}
+
+export async function POST(req: NextRequest) {
+  const parsed = bodySchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ ok: false }, { status: 400 });
+  const email = parsed.data.email.toLowerCase();
+
+  try {
+    if (!(await sentRecently(email))) {
+      const latest = await getLatestUnlockedAnalysisByEmail(email);
+      if (latest) {
+        await sendExistingReportEmail({ to: email, analysisId: latest.id });
+        if (SUPABASE_CONFIGURED) {
+          await getSupabaseAdmin()!.from("analytics_events").insert({
+            id: randomUUID(),
+            event_name: SENT_EVENT,
+            source: "server",
+            email,
+            metadata: {},
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[existing-report] send failed:", err instanceof Error ? err.message : err);
   }
-  const { email } = parsed.data;
-
-  const subscription = await getSubscriptionByEmail(email);
-  if (isPlusActive(subscription) || isLifetimeActive(subscription)) {
-    const latest = await getLatestUnlockedAnalysisByEmail(email);
-    if (latest) return NextResponse.json({ found: true, analysisId: latest.id });
-    // Active Plus but no unlocked analysis on file yet (edge case, e.g.
-    // subscribed without ever running a test) -- nothing to link to.
-    return NextResponse.json({ found: false });
-  }
-
-  const latest = await getLatestUnlockedAnalysisByEmail(email);
-  if (!latest) return NextResponse.json({ found: false });
-  return NextResponse.json({ found: true, analysisId: latest.id });
+  // Same answer in every case: no way to learn who has paid.
+  return NextResponse.json({ ok: true });
 }

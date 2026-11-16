@@ -70,6 +70,10 @@ export interface Database {
           stripe_payment_intent_id: string | null;
           amount: number | null;
           status: string;
+          plan: string | null;
+          stripe_price_id: string | null;
+          refunded_at: string | null;
+          disputed_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -80,6 +84,10 @@ export interface Database {
           stripe_payment_intent_id?: string | null;
           amount?: number | null;
           status?: string;
+          plan?: string | null;
+          stripe_price_id?: string | null;
+          refunded_at?: string | null;
+          disputed_at?: string | null;
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["payments"]["Insert"]>;
@@ -193,6 +201,121 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["email_campaign_sends"]["Insert"]>;
         Relationships: [];
       };
+      // ---- Pricing v2 (supabase/migrations/0010_pricing_v2.sql) ----
+      stripe_events: {
+        Row: {
+          id: string;
+          type: string;
+          livemode: boolean;
+          stripe_created_at: string;
+          received_at: string;
+          processed_at: string | null;
+          outcome: string | null;
+        };
+        Insert: {
+          id: string;
+          type: string;
+          livemode: boolean;
+          stripe_created_at: string;
+          received_at?: string;
+          processed_at?: string | null;
+          outcome?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["stripe_events"]["Insert"]>;
+        Relationships: [];
+      };
+      access_grants: {
+        Row: {
+          id: string;
+          email: string;
+          kind: string;
+          status: string;
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
+          stripe_checkout_session_id: string | null;
+          stripe_payment_intent_id: string | null;
+          stripe_price_id: string | null;
+          quota_per_period: number | null;
+          paid_period_start: string | null;
+          paid_period_end: string | null;
+          cancel_at_period_end: boolean;
+          pending_unlock_analysis_id: string | null;
+          status_event_at: string | null;
+          revoked_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          kind: string;
+          status: string;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          stripe_checkout_session_id?: string | null;
+          stripe_payment_intent_id?: string | null;
+          stripe_price_id?: string | null;
+          quota_per_period?: number | null;
+          paid_period_start?: string | null;
+          paid_period_end?: string | null;
+          cancel_at_period_end?: boolean;
+          pending_unlock_analysis_id?: string | null;
+          status_event_at?: string | null;
+          revoked_reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["access_grants"]["Insert"]>;
+        Relationships: [];
+      };
+      credit_usages: {
+        Row: { id: string; grant_id: string; analysis_id: string; period_start: string; created_at: string };
+        Insert: { id?: string; grant_id: string; analysis_id: string; period_start: string; created_at?: string };
+        Update: Partial<Database["public"]["Tables"]["credit_usages"]["Insert"]>;
+        Relationships: [];
+      };
+      email_verifications: {
+        Row: {
+          id: string;
+          email: string;
+          code_hash: string;
+          expires_at: string;
+          attempts: number;
+          consumed_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          code_hash: string;
+          expires_at: string;
+          attempts?: number;
+          consumed_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["email_verifications"]["Insert"]>;
+        Relationships: [];
+      };
+      access_sessions: {
+        Row: {
+          id: string;
+          token_hash: string;
+          email: string;
+          scope_checkout_session_id: string | null;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          token_hash: string;
+          email: string;
+          scope_checkout_session_id?: string | null;
+          expires_at: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["access_sessions"]["Insert"]>;
+        Relationships: [];
+      };
       promo_codes: {
         Row: {
           id: string;
@@ -213,6 +336,12 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      // supabase/migrations/0010_pricing_v2.sql
+      consume_grant_credit: {
+        Args: { p_grant_id: string; p_analysis_id: string };
+        Returns: { outcome: string; used: number; quota: number }[];
+      };
+    };
   };
 }

@@ -1,86 +1,64 @@
-// Shared, client-safe pricing copy -- no prices are computed here beyond
-// the two existing fixed offers (never changed by this feature). Lifetime
-// has no hardcoded price: its label is fetched server-side from Stripe
-// (see lib/lifetimePrice.ts) and passed in wherever it's rendered.
+// Client-safe copy for the three offers (pricing v2, see lib/plans.ts for the
+// amounts and Stripe prices). Every feature listed here must exist in the
+// product: no fake urgency, no crossed-out prices, no counters.
+
+import { OFFERS, formatEur, type OfferId } from "@/lib/plans";
 
 export interface PlanContent {
-  id: "one_time" | "plus" | "lifetime";
+  id: OfferId;
   name: string;
   description: string;
   priceLabel: string;
   period?: string;
+  /** One line shown right under the price, e.g. "20 analyses par mois". */
+  keyLine?: string;
   features: string[];
   badge?: string;
   note: string;
-  concierge?: string;
 }
 
 export const ONE_TIME_PLAN: PlanContent = {
   id: "one_time",
-  name: "Analyse unique",
-  description: "Pour optimiser une annonce maintenant.",
-  priceLabel: "4,90 €",
-  features: ["Analyse complète", "Recommandations prioritaires", "Titres et description", "1 re-test après correction"],
+  name: OFFERS.one_time.name,
+  description: "Pour découvrir ce qui freine ton annonce.",
+  priceLabel: formatEur(OFFERS.one_time.amountEur),
+  keyLine: "1 rapport complet",
+  features: [
+    "Score sur 100 et diagnostic détaillé",
+    "Analyse des photos, du titre et de la description",
+    "Points de friction identifiés",
+    "Recommandations personnalisées",
+    "Plan d'amélioration priorisé",
+  ],
   note: "Paiement unique",
 };
 
-export const PLUS_PLAN: PlanContent = {
-  id: "plus",
-  name: "GuestMirror Plus",
-  description: "Idéal si tu gères plusieurs annonces ou veux tester régulièrement tes améliorations.",
-  priceLabel: "6,90 €",
+export const CONCIERGERIE_PLAN: PlanContent = {
+  id: "conciergerie",
+  name: OFFERS.conciergerie.name,
+  description: "Pour optimiser plusieurs annonces chaque mois.",
+  priceLabel: formatEur(OFFERS.conciergerie.amountEur),
   period: "/ mois",
-  features: ["Plusieurs analyses", "Comparaisons A/B", "Re-tests", "Historique", "Plusieurs annonces"],
-  badge: "Recommandé",
-  note: "Annulable à tout moment",
-  concierge: "Idéal pour les conciergeries et multi-propriétaires",
+  keyLine: `${OFFERS.conciergerie.quotaPerPeriod} analyses par mois`,
+  features: [
+    "Diagnostics complets",
+    "Recommandations personnalisées",
+    "Plusieurs annonces Airbnb",
+    "Accès à tes rapports déjà débloqués",
+  ],
+  badge: "Pour les professionnels",
+  note: "Renouvelées chaque mois, non cumulables • Résiliable à tout moment",
 };
 
-export const LIFETIME_PLAN_BASE: Omit<PlanContent, "priceLabel"> = {
+export const LIFETIME_PLAN: PlanContent = {
   id: "lifetime",
-  name: "GuestMirror Lifetime",
-  description: "Accès complet, une fois pour toutes. Offre de lancement, disponibilité limitée.",
-  features: ["Accès complet à vie", "Aucun abonnement", "Mêmes avantages que GuestMirror Plus"],
-  note: "Paiement unique • Accès à vie",
+  name: OFFERS.lifetime.name,
+  description: "Analyse tes annonces sans abonnement.",
+  priceLabel: formatEur(OFFERS.lifetime.amountEur),
+  period: "une seule fois",
+  keyLine: "Analyses illimitées",
+  features: ["Accès à vie", "Diagnostics détaillés illimités", "Recommandations personnalisées", "Aucun renouvellement automatique"],
+  note: "Paiement unique • Aucun abonnement",
 };
 
-// Future credit-based pricing (funnel optimization mission, section 3) --
-// copy/structure only, NOT rendered anywhere yet and no Stripe Price IDs
-// exist for these. Do not wire this into PricingCards or any checkout
-// flow until the credits system (consumption, balance, ledger) and the
-// matching Stripe products are actually built -- see the mission's
-// section on credit-system readiness. ONE_TIME_PLAN/PLUS_PLAN/
-// LIFETIME_PLAN_BASE above remain the only plans in production.
-export interface FuturePlanContent {
-  id: "discovery" | "optimization" | "concierge_pro";
-  name: string;
-  description: string;
-  credits: number;
-  period?: string;
-  features: string[];
-}
-
-export const FUTURE_PLANS: FuturePlanContent[] = [
-  {
-    id: "discovery",
-    name: "Découverte",
-    description: "Pour tester GuestMirror sur une annonce.",
-    credits: 1,
-    features: ["1 analyse complète"],
-  },
-  {
-    id: "optimization",
-    name: "Optimisation",
-    description: "Pour corriger et re-tester une annonce jusqu'à ce qu'elle convertisse.",
-    credits: 3,
-    features: ["3 crédits d'analyse"],
-  },
-  {
-    id: "concierge_pro",
-    name: "Conciergerie Pro",
-    description: "Pour les conciergeries et multi-propriétaires qui gèrent plusieurs annonces.",
-    credits: 20,
-    period: "/ mois",
-    features: ["20 crédits d'analyse par mois"],
-  },
-];
+export const PLANS: PlanContent[] = [ONE_TIME_PLAN, CONCIERGERIE_PLAN, LIFETIME_PLAN];

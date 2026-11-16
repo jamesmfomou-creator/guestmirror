@@ -5,7 +5,7 @@ import { createFeedback } from "@/lib/feedback";
 
 const bodySchema = z.object({
   analysisId: z.string().uuid().nullable().optional(),
-  plan: z.enum(["one_time", "plus", "lifetime"]).nullable().optional(),
+  plan: z.enum(["one_time", "plus", "lifetime", "conciergerie"]).nullable().optional(),
   userType: z.enum(["host", "concierge", "cohost", "other"]).nullable().optional(),
   propertyCountRange: z.enum(["1", "2-5", "6-20", "21+"]).nullable().optional(),
   feedbackRating: z.enum(["positive", "negative"]).nullable().optional(),
