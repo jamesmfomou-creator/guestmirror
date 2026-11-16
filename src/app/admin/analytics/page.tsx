@@ -751,6 +751,66 @@ export default async function AdminAnalyticsPage({
         </p>
       </section>
 
+      {/* Analysis loader experiment: control vs immersive */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Test loader — contrôle vs immersif</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Expérience indépendante des deux tests ci-dessus. Contrôle = écran d&apos;attente du bras A/B
+          du visiteur, inchangé. Immersif = les vraies photos, le vrai titre et des extraits de la
+          description de l&apos;annonce pendant l&apos;analyse. Chaque ligne compte des tentatives
+          d&apos;analyse (attemptId). Une tentative n&apos;est comptée « abandonnée » que si la page a
+          été quittée pendant l&apos;attente ET qu&apos;elle ne s&apos;est jamais terminée ni n&apos;a
+          échoué ensuite. Les fourchettes sont des intervalles de confiance à 95 %.
+        </p>
+        <p
+          className={`mt-3 rounded-xl px-4 py-3 text-sm ${
+            data.loaderExperiment.verdict === "difference" ? "bg-accent-soft text-accent-hover" : "bg-background-alt text-muted"
+          }`}
+        >
+          {data.loaderExperiment.verdict === "insufficient_data" &&
+            `Données insuffisantes pour conclure : il faut au moins ${data.loaderExperiment.minAttempts} tentatives dans chaque variante (contrôle : ${data.loaderExperiment.control.attempts}, immersif : ${data.loaderExperiment.immersive.attempts} sur la période). Les écarts ci-dessous sont des observations, pas des résultats.`}
+          {data.loaderExperiment.verdict === "inconclusive" &&
+            "Écart non concluant : les intervalles de confiance des deux variantes se chevauchent sur le taux d'analyses menées jusqu'au résultat."}
+          {data.loaderExperiment.verdict === "difference" &&
+            "Écart net sur le taux d'analyses menées jusqu'au résultat : les intervalles de confiance à 95 % ne se chevauchent pas."}
+        </p>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Métrique</th>
+                <th className="px-4 py-2.5 font-medium">Contrôle</th>
+                <th className="px-4 py-2.5 font-medium">Immersif</th>
+              </tr>
+            </thead>
+            <tbody>
+              <AbRow label="Tentatives (écran d'attente vu)" a={data.loaderExperiment.control.attempts} b={data.loaderExperiment.immersive.attempts} />
+              <AbRow label="Terminées (résultat obtenu)" a={data.loaderExperiment.control.completed} b={data.loaderExperiment.immersive.completed} />
+              <AbRow label="Échouées" a={data.loaderExperiment.control.failed} b={data.loaderExperiment.immersive.failed} />
+              <AbRow label="Abandonnées (confirmé)" a={data.loaderExperiment.control.abandoned} b={data.loaderExperiment.immersive.abandoned} />
+              <AbRow label="Sans issue connue" a={data.loaderExperiment.control.unresolved} b={data.loaderExperiment.immersive.unresolved} />
+              <AbRow
+                label="Menées jusqu'au résultat (métrique principale)"
+                a={proportionLabel(data.loaderExperiment.control.completionRate)}
+                b={proportionLabel(data.loaderExperiment.immersive.completionRate)}
+              />
+              <AbRow
+                label="Taux d'abandon"
+                a={proportionLabel(data.loaderExperiment.control.abandonmentRate)}
+                b={proportionLabel(data.loaderExperiment.immersive.abandonmentRate)}
+              />
+              <AbRow
+                label="Durée réelle de l'analyse (médiane)"
+                a={seconds(data.loaderExperiment.control.medianDurationS)}
+                b={seconds(data.loaderExperiment.immersive.medianDurationS)}
+              />
+              <AbRow label="Annonce affichée pendant l'attente" a="—" b={data.loaderExperiment.immersive.visualsStarted} />
+              <AbRow label="Délai avant affichage de l'annonce (médiane)" a="—" b={seconds(data.loaderExperiment.immersive.medianTimeToVisualS)} />
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       {/* Pricing: one-time vs Plus */}
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Pricing — Analyse unique vs Plus</h2>

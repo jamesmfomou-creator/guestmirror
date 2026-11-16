@@ -1,6 +1,7 @@
 import { captureAttribution, getAnonymousId, getFirstTouch, getLastTouch, getSessionId } from "@/lib/tracking/identity";
 import { getAbVariant } from "@/lib/ab";
 import { getPaywallVariant } from "@/lib/paywallExperiment";
+import { getLoaderVariant } from "@/lib/loaderExperiment";
 
 /**
  * Full set of event names this app can emit. Exported as a plain array
@@ -137,6 +138,21 @@ export const ANALYTICS_EVENTS = [
   "onboarding_goal_viewed",
   "onboarding_goal_selected",
   "onboarding_completed",
+  // Analysis loader experiment (lib/loaderExperiment.ts). loader_variant is
+  // attached to every event by track() below.
+  //  - analysis_loader_viewed: the waiting screen was shown for an attempt
+  //    (both variants: the denominator of the abandonment rate).
+  //  - analysis_visual_started / analysis_visual_completed: immersive only,
+  //    the first real listing element was shown / the visual sequence ended.
+  //    Never the end of the AI processing (that is analysis_completed).
+  //  - analysis_loader_abandoned: the page was left while the analysis was
+  //    still running. TENTATIVE by definition: the dashboard only counts it
+  //    as an abandonment when the same attempt never completed or failed
+  //    afterwards (closing a tab is not proof the visitor gave up).
+  "analysis_loader_viewed",
+  "analysis_visual_started",
+  "analysis_visual_completed",
+  "analysis_loader_abandoned",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];
@@ -169,7 +185,14 @@ export function track(event: AnalyticsEvent, props?: Props) {
   // for (it only counts events that carry one).
   // paywall_variant: same reasoning, for the paywall presentation
   // experiment (lib/paywallExperiment.ts).
-  const enrichedProps: Props = { ...props, ab_variant: getAbVariant(), paywall_variant: getPaywallVariant() };
+  // loader_variant: same again, for the analysis loader experiment
+  // (lib/loaderExperiment.ts).
+  const enrichedProps: Props = {
+    ...props,
+    ab_variant: getAbVariant(),
+    paywall_variant: getPaywallVariant(),
+    loader_variant: getLoaderVariant(),
+  };
 
   try {
     window.posthog?.capture(event, enrichedProps);
