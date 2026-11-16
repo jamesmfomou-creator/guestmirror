@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -14,6 +14,7 @@ import {
 import { SUPABASE_CONFIGURED } from "@/lib/env";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { BRAND_SLUG } from "@/lib/brand";
+import { normalizeAnalysisResult } from "@/lib/resultShape";
 
 // Filesystem-backed fallback store. Works for local dev / demo mode where
 // no database is configured yet. An in-memory Map does NOT survive here:
@@ -31,7 +32,9 @@ function recordPath(id: string) {
 
 function readLocalRecord(id: string): AnalysisRecord | null {
   try {
-    return JSON.parse(fs.readFileSync(recordPath(id), "utf-8")) as AnalysisRecord;
+    const record = JSON.parse(fs.readFileSync(recordPath(id), "utf-8")) as AnalysisRecord;
+    // Same read-path repair as the Supabase path (mapAnalysisRow).
+    return { ...record, result: normalizeAnalysisResult(record.result) };
   } catch {
     return null;
   }
@@ -40,6 +43,23 @@ function readLocalRecord(id: string): AnalysisRecord | null {
 function writeLocalRecord(record: AnalysisRecord) {
   fs.mkdirSync(STORE_DIR, { recursive: true });
   fs.writeFileSync(recordPath(record.id), JSON.stringify(record), "utf-8");
+}
+
+// attempt_id -> analysis id, for the filesystem fallback only (Supabase has
+// the attempt_id column + unique index). Kept as its own tiny file so the
+// AnalysisRecord shape doesn't have to change for a dev/demo-only concern.
+// Hashing the attempt id keeps a client-supplied string out of a file path.
+function attemptIndexPath(attemptId: string) {
+  return path.join(STORE_DIR, `attempt-${createHash("sha256").update(attemptId).digest("hex").slice(0, 32)}.json`);
+}
+
+function readLocalAttemptIndex(attemptId: string): string | null {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(attemptIndexPath(attemptId), "utf-8")) as { id?: unknown };
+    return typeof parsed.id === "string" ? parsed.id : null;
+  } catch {
+    return null;
+  }
 }
 
 function deleteLocalRecord(id: string) {
@@ -69,7 +89,10 @@ function mapAnalysisRow(row: Record<string, unknown>): AnalysisRecord {
     guest_capacity: (row.guest_capacity as string) ?? null,
     nightly_price: (row.nightly_price as string) ?? null,
     overall_score: row.overall_score as number,
-    result: row.result_json as AnalysisResult,
+    // Type-repairing, identity for well-formed rows -- see
+    // lib/resultShape.ts (rows stored before the generation-time shape gate
+    // can hold strings where the UI expects arrays/objects).
+    result: normalizeAnalysisResult(row.result_json),
     images,
     is_unlocked: row.is_unlocked as boolean,
     payment_status: row.payment_status as PaymentStatus,
@@ -98,24 +121,16 @@ export async function createAnalysis(params: {
   goal?: Goal | null;
 }): Promise<AnalysisRecord> {
   // A double submission (double-click, client retry after a slow
-  // response) would otherwise pay for a second full AI call and create a
-  // second analysis row for the exact same attempt. The client already
-  // guards against this (AnalyzeWizard disables the button while
-  // submitting), but nothing enforced it server-side -- check-then-insert
-  // here, same dedup pattern already used for Stripe events, so a
-  // same-attempt resubmission returns the existing analysis instead of
-  // creating a duplicate. Requires the attempt_id column + unique index
-  // from supabase/migrations/0008_reliability.sql to fully close the race
-  // between two concurrent requests; this check alone already covers the
-  // much more common sequential-retry case.
-  if (params.attemptId && SUPABASE_CONFIGURED) {
-    const supabase = getSupabaseAdmin()!;
-    const { data: existing } = await supabase
-      .from("analyses")
-      .select("*, analysis_images(storage_path, position)")
-      .eq("attempt_id", params.attemptId)
-      .maybeSingle();
-    if (existing) return mapAnalysisRow(existing as Record<string, unknown>);
+  // response) must never create a second analysis row for the same
+  // attempt. /api/analyze now checks this *before* paying for the AI call
+  // (findAnalysisByAttemptId); this second check covers the window in
+  // between -- two requests for the same attempt that both passed the early
+  // check -- and the unique-violation handling below closes the last race
+  // (both inserting at once), relying on the unique index from
+  // supabase/migrations/0008_reliability.sql.
+  if (params.attemptId) {
+    const existing = await findAnalysisByAttemptId(params.attemptId);
+    if (existing) return existing;
   }
 
   const record: AnalysisRecord = {
@@ -163,7 +178,16 @@ export async function createAnalysis(params: {
       attempt_id: params.attemptId ?? null,
       goal: record.goal,
     });
-    if (error) throw new Error(`Supabase insert failed: ${error.message}`);
+    if (error) {
+      // 23505 = unique_violation: a concurrent request for the same attempt
+      // inserted first. That row is the analysis; return it rather than
+      // failing a request whose work was, in effect, already saved.
+      if (error.code === "23505" && params.attemptId) {
+        const winner = await findAnalysisByAttemptId(params.attemptId);
+        if (winner) return winner;
+      }
+      throw new Error(`Supabase insert failed: ${error.message}`);
+    }
 
     if (record.images.length) {
       await supabase.from("analysis_images").insert(
@@ -178,7 +202,33 @@ export async function createAnalysis(params: {
   }
 
   writeLocalRecord(record);
+  if (params.attemptId) {
+    fs.writeFileSync(attemptIndexPath(params.attemptId), JSON.stringify({ id: record.id }), "utf-8");
+  }
   return record;
+}
+
+/**
+ * The analysis a given client attempt already produced, if any. This is
+ * what makes an attempt idempotent and recoverable: /api/analyze calls it
+ * before spending anything, and /api/analyze/status calls it so a browser
+ * that lost its connection mid-request can still be handed its result.
+ * Returns null on a lookup error as well as on "not found" -- callers treat
+ * both as "no known result yet", which is the safe reading.
+ */
+export async function findAnalysisByAttemptId(attemptId: string): Promise<AnalysisRecord | null> {
+  if (SUPABASE_CONFIGURED) {
+    const supabase = getSupabaseAdmin()!;
+    const { data, error } = await supabase
+      .from("analyses")
+      .select("*, analysis_images(storage_path, position)")
+      .eq("attempt_id", attemptId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return mapAnalysisRow(data as Record<string, unknown>);
+  }
+  const id = readLocalAttemptIndex(attemptId);
+  return id ? readLocalRecord(id) : null;
 }
 
 export async function getAnalysis(id: string): Promise<AnalysisRecord | null> {

@@ -20,6 +20,7 @@ import { BRAND_NAME } from "@/lib/brand";
 import { CtaTrackedButton } from "@/components/landing/CtaTrackedButton";
 import { getLifetimePriceLabel } from "@/lib/lifetimePrice";
 import { Eyebrow } from "@/components/landing/Eyebrow";
+import { ResumeAnalysisBanner } from "@/components/analyze/ResumeAnalysisBanner";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
@@ -66,6 +67,10 @@ export default async function LandingPage() {
   return (
     <>
       <AnalyticsBeacon event="landing_view" />
+
+      {/* Renders nothing unless this browser started an analysis it never
+          saw the result of (see lib/analysisRecovery.ts). */}
+      <ResumeAnalysisBanner className="mx-auto max-w-lg px-5 pt-6" />
 
       {/* HERO */}
       <section className="mx-auto max-w-6xl overflow-x-clip px-5 pt-14 pb-16 sm:pt-20 sm:pb-24">

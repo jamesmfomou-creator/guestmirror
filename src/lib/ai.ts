@@ -12,6 +12,7 @@ import { DEMO_MODE } from "@/lib/env";
 import { DEMO_RESULT } from "@/lib/demo-data";
 import { BRAND_NAME } from "@/lib/brand";
 import { AIRBNB_TITLE_MAX_LENGTH, sanitizeAirbnbTitles, titleCharCount } from "@/lib/titles";
+import { aiResultSchema, describeShapeIssues } from "@/lib/resultShape";
 
 export class AnalysisError extends Error {
   code: string;
@@ -81,6 +82,17 @@ export function validateAiResponse(response: Anthropic.Message): ResponseValidat
   // not-null violation instead of the existing, fast "réessaie" retry path.
   if (typeof input.overall_score !== "number" || !input.summary) {
     return { ok: false, code: "ai_schema_mismatch", reason: "missing overall_score/summary" };
+  }
+  // Full-shape gate. The two-field check above let through responses whose
+  // nested fields had all come back as strings of leaked `<parameter ...>`
+  // markup (8 of the 59 analyses stored in the 7 days before this was
+  // added) -- stored and counted as successes, but with nothing usable
+  // behind the score. See lib/resultShape.ts for what is and isn't
+  // enforced. Same code as above on purpose: it is the same failure class
+  // and already has the one-retry policy (RETRYABLE_VALIDATION_CODES).
+  const shape = aiResultSchema.safeParse(input);
+  if (!shape.success) {
+    return { ok: false, code: "ai_schema_mismatch", reason: `shape: ${describeShapeIssues(shape.error)}` };
   }
   return { ok: true, input };
 }
@@ -276,7 +288,7 @@ CE QUE TU N'ES PAS : tu n'es pas un outil de SEO Airbnb, ni un expert de l'algor
 // instead, byte-for-byte guaranteed correct every time.
 export const DISCLAIMER = `${BRAND_NAME} est une estimation produite à partir des éléments visibles de l'annonce. Il ne prédit ni ne garantit les clics ou les réservations.`;
 
-const RESULT_SCHEMA = {
+export const RESULT_SCHEMA = {
   type: "object",
   properties: {
     overall_score: { type: "integer", minimum: 0, maximum: 100 },
@@ -405,6 +417,36 @@ const RESULT_SCHEMA = {
   ],
 };
 
+// Strict tool use (`strict: true`) makes the API constrain generation to the
+// schema, so the nested-field-as-string failure described in
+// lib/resultShape.ts cannot be produced in the first place -- the shape
+// gate in validateAiResponse stays as the backstop. Strict mode accepts a
+// subset of JSON Schema: every object needs `additionalProperties: false`,
+// and numeric/string bounds (minimum, maximum, maxLength) are not
+// supported. Derived from RESULT_SCHEMA rather than written twice so the
+// two can never drift; the dropped bounds are all still enforced in code
+// (scores are clamped by display helpers, titles by sanitizeAirbnbTitles).
+const STRICT_UNSUPPORTED_KEYWORDS = new Set(["minimum", "maximum", "maxLength", "minLength", "multipleOf"]);
+
+export function toStrictSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(toStrictSchema);
+  if (typeof schema !== "object" || schema === null) return schema;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
+    if (STRICT_UNSUPPORTED_KEYWORDS.has(key)) continue;
+    // `properties` maps field names to sub-schemas -- recurse into the
+    // values, but never treat a field *named* e.g. "maximum" as a keyword.
+    out[key] =
+      key === "properties" && typeof value === "object" && value !== null
+        ? Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, toStrictSchema(v)]))
+        : toStrictSchema(value);
+  }
+  if (out.type === "object") out.additionalProperties = false;
+  return out;
+}
+
+export const STRICT_RESULT_SCHEMA = toStrictSchema(RESULT_SCHEMA);
+
 // The SDK defaults to a 10-minute timeout with 2 retries -- in the worst
 // case that lets a single request hang for ~30 minutes with zero feedback.
 // Bounding both keeps the longest possible wait predictable.
@@ -452,7 +494,7 @@ function getClient() {
   return anthropicClient;
 }
 
-export async function analyzeListing(params: {
+export interface AnalyzeListingParams {
   images: { base64: string; mediaType: string }[];
   input: AnalysisInput;
   // Title/description read from the Airbnb page itself when the analysis
@@ -476,32 +518,41 @@ export async function analyzeListing(params: {
   // log correlation between a specific user-visible attempt and the raw
   // model call(s) it triggered. Never persisted, never sent to Anthropic.
   attemptId?: string | null;
-}): Promise<{
-  result: AnalysisResult;
-  aiInputTokens: number | null;
-  aiOutputTokens: number | null;
-  parsingDurationMs: number;
-  retryCount: number;
-  stopReason: string | null;
-}> {
-  if (DEMO_MODE) {
-    return {
-      result: { ...DEMO_RESULT },
-      aiInputTokens: null,
-      aiOutputTokens: null,
-      parsingDurationMs: 0,
-      retryCount: 0,
-      stopReason: null,
-    };
-  }
+}
 
-  if (params.images.length === 0 && !params.input.listing_url) {
-    throw new AnalysisError(
-      "Nous n'avons pas assez d'informations pour analyser correctement cette annonce. Ajoute 2 ou 3 captures supplémentaires.",
-      "insufficient_input"
-    );
-  }
+// Everything about the request that an experiment may vary. Production uses
+// PRODUCTION_REQUEST_OPTIONS below and nothing else; the benchmark
+// (scripts/ai-benchmark) builds its variants through the same function so a
+// variant is always "production's request with exactly this difference",
+// never a hand-copied prompt that can drift.
+export interface AnalysisRequestOptions {
+  model: string;
+  // Constrain the tool input to the schema at generation time (see
+  // STRICT_RESULT_SCHEMA above).
+  strict: boolean;
+  // "forced" names the tool in tool_choice. Claude Sonnet 5.5 / Opus 5.5
+  // reject that with a 400 and need "auto" (the system prompt already
+  // requires the tool call).
+  toolChoice: "forced" | "auto";
+  // Appended to the system prompt. Benchmark-only: production sends none.
+  systemSuffix?: string;
+  // Extra top-level request fields (thinking / output_config) for models
+  // that need them. Benchmark-only: production sends none.
+  extra?: Record<string, unknown>;
+}
 
+export const ANALYSIS_TOOL_NAME = "submit_guestmirror_analysis";
+
+export const PRODUCTION_REQUEST_OPTIONS: AnalysisRequestOptions = {
+  model: MODEL,
+  strict: false,
+  toolChoice: "forced",
+};
+
+export function buildAnalysisRequest(
+  params: Pick<AnalyzeListingParams, "images" | "input" | "extractedListingText">,
+  options: AnalysisRequestOptions = PRODUCTION_REQUEST_OPTIONS
+): Anthropic.MessageCreateParamsNonStreaming {
   const contextLines = [
     params.input.listing_url ? `Lien de l'annonce : ${params.input.listing_url}` : null,
     params.input.city ? `Ville / destination : ${params.input.city}` : null,
@@ -533,7 +584,7 @@ export async function analyzeListing(params: {
       type: "text",
       text: `Voici les informations fournies par le propriétaire :\n${
         contextLines.join("\n") || "(aucune information complémentaire fournie)"
-      }\n\nVoici ${params.images.length} capture(s) d'écran de l'annonce, dans l'ordre où elles apparaissent. Analyse la présentation de cette annonce et renvoie un ${BRAND_NAME} complet via l'outil submit_guestmirror_analysis.`,
+      }\n\nVoici ${params.images.length} capture(s) d'écran de l'annonce, dans l'ordre où elles apparaissent. Analyse la présentation de cette annonce et renvoie un ${BRAND_NAME} complet via l'outil ${ANALYSIS_TOOL_NAME}.`,
     },
     ...params.images.map(
       (img): Anthropic.ImageBlockParam => ({
@@ -543,6 +594,56 @@ export async function analyzeListing(params: {
     ),
   ];
 
+  return {
+    model: options.model,
+    max_tokens: MAX_OUTPUT_TOKENS,
+    system: options.systemSuffix ? `${SYSTEM_PROMPT}\n\n${options.systemSuffix}` : SYSTEM_PROMPT,
+    tools: [
+      {
+        name: ANALYSIS_TOOL_NAME,
+        description: `Soumet le résultat structuré de l'analyse ${BRAND_NAME}.`,
+        input_schema: (options.strict ? STRICT_RESULT_SCHEMA : RESULT_SCHEMA) as Anthropic.Tool["input_schema"],
+        ...(options.strict ? { strict: true } : {}),
+      },
+    ],
+    tool_choice: options.toolChoice === "forced" ? { type: "tool", name: ANALYSIS_TOOL_NAME } : { type: "auto" },
+    messages: [{ role: "user", content }],
+    ...(options.extra ?? {}),
+  };
+}
+
+export async function analyzeListing(params: AnalyzeListingParams): Promise<{
+  result: AnalysisResult;
+  aiInputTokens: number | null;
+  aiOutputTokens: number | null;
+  parsingDurationMs: number;
+  retryCount: number;
+  stopReason: string | null;
+  // Model id that actually produced the result (observability: recorded on
+  // analysis_server_completed so cost/latency can be compared per model).
+  model: string | null;
+}> {
+  if (DEMO_MODE) {
+    return {
+      result: { ...DEMO_RESULT },
+      aiInputTokens: null,
+      aiOutputTokens: null,
+      parsingDurationMs: 0,
+      retryCount: 0,
+      stopReason: null,
+      model: null,
+    };
+  }
+
+  if (params.images.length === 0 && !params.input.listing_url) {
+    throw new AnalysisError(
+      "Nous n'avons pas assez d'informations pour analyser correctement cette annonce. Ajoute 2 ou 3 captures supplémentaires.",
+      "insufficient_input"
+    );
+  }
+
+  const request = buildAnalysisRequest(params);
+
   const logTag = `attempt_id=${params.attemptId ?? "none"}`;
   const sourceNumbers = buildSourceNumberSet({ input: params.input, extractedListingText: params.extractedListingText });
 
@@ -550,20 +651,7 @@ export async function analyzeListing(params: {
     const aiStartedAt = Date.now();
     let response: Anthropic.Message;
     try {
-      response = await getClient().messages.create({
-        model: MODEL,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        system: SYSTEM_PROMPT,
-        tools: [
-          {
-            name: "submit_guestmirror_analysis",
-            description: `Soumet le résultat structuré de l'analyse ${BRAND_NAME}.`,
-            input_schema: RESULT_SCHEMA as Anthropic.Tool["input_schema"],
-          },
-        ],
-        tool_choice: { type: "tool", name: "submit_guestmirror_analysis" },
-        messages: [{ role: "user", content }],
-      });
+      response = await getClient().messages.create(request);
     } catch (err) {
       // SDK-level failures (network/5xx/timeout/auth/rate-limit) already
       // got the SDK's own AI_MAX_RETRIES retry internally -- never retried
@@ -652,6 +740,7 @@ export async function analyzeListing(params: {
       parsingDurationMs,
       retryCount: attempt,
       stopReason: response.stop_reason,
+      model: response.model ?? MODEL,
     };
   }
 

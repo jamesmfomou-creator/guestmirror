@@ -18,6 +18,7 @@ export function ScoreHeader({
   result,
   locked,
   shortSummary,
+  hideBreakdown,
 }: {
   result: AnalysisResult;
   locked: boolean;
@@ -26,6 +27,10 @@ export function ScoreHeader({
   // sentence. Variant A's locked view (and the unlocked view, for anyone)
   // is untouched -- this prop defaults to false/unset everywhere else.
   shortSummary?: boolean;
+  // Incomplete analyses only (see lib/resultShape.ts): their sub-scores
+  // were never produced, and seven bars at 0 would state something the
+  // analysis did not find.
+  hideBreakdown?: boolean;
 }) {
   const verdict = verdictFor(result.overall_score);
 
@@ -58,11 +63,13 @@ export function ScoreHeader({
       ) : (
         <>
           <p className="mx-auto mt-6 max-w-md text-balance text-lg text-foreground">{result.summary}</p>
-          <div className="mt-8 w-full max-w-md space-y-3 text-left">
-            {ALL_KEYS.map((key) => (
-              <ScoreBar key={key} label={SCORE_LABELS[key]} score={result.scores[key]} />
-            ))}
-          </div>
+          {!hideBreakdown && (
+            <div className="mt-8 w-full max-w-md space-y-3 text-left">
+              {ALL_KEYS.map((key) => (
+                <ScoreBar key={key} label={SCORE_LABELS[key]} score={result.scores[key]} />
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>

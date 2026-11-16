@@ -8,6 +8,7 @@ import {
   ProfileSegmentStats,
   ErrorBreakdownRow,
 } from "@/lib/admin/analytics";
+import type { Proportion } from "@/lib/admin/paywallExperimentStats";
 import { listFeedback } from "@/lib/feedback";
 import { BRAND_NAME } from "@/lib/brand";
 
@@ -57,9 +58,23 @@ const ERROR_CODE_LABELS: Record<string, string> = {
   database_failed: "Écriture base de données échouée",
   airbnb_url_extraction_failed: "Extraction du lien Airbnb échouée",
   response_parse_failed: "Réponse serveur illisible",
-  timeout: "Délai dépassé (client)",
-  network_error: "Connexion coupée (réseau, avant réponse serveur)",
+  timeout: "Délai dépassé côté navigateur, analyse non récupérée",
+  // Not "the visitor's network": the 2026-11 audit found a finished, stored
+  // analysis behind every one of these. The browser lost the request; what
+  // caused the loss is not known from this event alone.
+  network_error: "Requête perdue par le navigateur, analyse non récupérée",
+  server_timeout: "Serveur — fonction interrompue avant la fin (limite de durée)",
   unknown: "Inconnu",
+};
+
+// Where in /api/analyze a server-side failure happened (AnalysisPhase).
+const PHASE_LABELS: Record<string, string> = {
+  url_extraction: "Extraction du lien",
+  image_preprocessing: "Préparation des images",
+  ai_call: "Appel IA",
+  image_storage: "Stockage des images",
+  database: "Base de données",
+  unknown: "Inconnue",
 };
 
 function pct(n: number | null): string {
@@ -74,6 +89,14 @@ function eur(n: number): string {
 function seconds(n: number | null): string {
   if (n === null) return "—";
   return `${n.toFixed(1)}s`;
+}
+
+// "8 % (3–21 %) · 3/38": the observed share, its 95 % interval and the
+// raw counts, so a rate is never read without its sample size.
+function proportionLabel(p: Proportion): string {
+  if (p.rate === null || p.low === null || p.high === null) return "—";
+  const percent = (n: number) => Math.round(n * 100);
+  return `${percent(p.rate)} % (${percent(p.low)}–${percent(p.high)} %) · ${p.successes}/${p.trials}`;
 }
 
 function money(n: number | null): string {
@@ -217,6 +240,72 @@ export default async function AdminAnalyticsPage({
         </div>
       </section>
 
+      {/* Reliability: what the server did vs what the visitor got. Server
+          numbers come from events written by /api/analyze itself (see
+          lib/analysisAttempts.ts); they exist only from the day that
+          instrumentation shipped. */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Fiabilité — serveur et récupération</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          <strong>Côté serveur</strong> : une ligne de vérité par tentative, écrite par le serveur
+          lui-même, que le navigateur soit encore là ou non. Le taux de succès serveur ={" "}
+          terminées ÷ (terminées + échouées + interrompues) ; les échecs d&apos;extraction du lien
+          Airbnb (aucune analyse lancée) et les tentatives encore en cours n&apos;y entrent pas.
+          Disponible uniquement depuis la mise en place de ce suivi.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Kpi label="Tentatives reçues (serveur)" value={data.reliability.serverAttempts} />
+          <Kpi label="Terminées (serveur)" value={data.reliability.serverCompleted} />
+          <Kpi label="Taux de succès serveur" value={pct(data.reliability.serverSuccessRate)} />
+          <Kpi label="Échouées (serveur)" value={data.reliability.serverFailed} />
+          <Kpi label="Interrompues (limite de durée)" value={data.reliability.serverTimedOut} />
+          <Kpi label="Extraction Airbnb échouée" value={data.reliability.serverExtractionFailed} />
+          <Kpi label="Doublons évités — déjà terminée" value={data.reliability.duplicateRequestsAlreadyCompleted} />
+          <Kpi label="Doublons évités — déjà en cours" value={data.reliability.duplicateRequestsInFlight} />
+        </div>
+
+        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">
+          Requêtes perdues par le navigateur et récupération
+        </p>
+        <p className="mt-1 text-sm text-muted-2">
+          Une « requête perdue » = le navigateur n&apos;a jamais reçu la réponse (page suspendue,
+          changement de réseau, délai dépassé). Elle est « récupérée » si le visiteur a quand même
+          fini sur son résultat (même tentative, sans nouvelle analyse). Les tentatives récupérées
+          comptent dans « Tentatives complétées » ci-dessus mais pas dans les durées.
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Kpi label="Requêtes perdues" value={data.reliability.connectionLostAttempts} />
+          <Kpi label="Récupérées" value={data.reliability.recoveredAttempts} />
+          <Kpi label="Taux de récupération" value={pct(data.reliability.recoveryRate)} />
+          <Kpi label="Perdues non récupérées" value={data.reliability.lostUnrecoveredAttempts} />
+          <Kpi label="Renvois automatiques (même tentative)" value={data.reliability.autoResubmits} />
+          <Kpi label="Réessais manuels (même tentative)" value={data.reliability.manualSameAttemptRetries} />
+        </div>
+
+        {data.reliability.serverErrors.length > 0 && (
+          <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+            <table className="w-full min-w-[420px] text-sm">
+              <thead>
+                <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                  <th className="px-4 py-2.5 font-medium">Erreur serveur</th>
+                  <th className="px-4 py-2.5 font-medium">Phase</th>
+                  <th className="px-4 py-2.5 font-medium">Tentatives</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.reliability.serverErrors.map((row) => (
+                  <tr key={`${row.code}|${row.phase}`} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2.5">{ERROR_CODE_LABELS[row.code] ?? row.code}</td>
+                    <td className="px-4 py-2.5 text-muted-2">{PHASE_LABELS[row.phase] ?? row.phase}</td>
+                    <td className="px-4 py-2.5">{row.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       {/* Error breakdown: which causes actually produce the failures (see
           categorizeAnthropicError in lib/ai.ts and the codes set in
           api/analyze/route.ts / AnalyzeWizard.tsx). */}
@@ -264,7 +353,8 @@ export default async function AdminAnalyticsPage({
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Répartition du temps par étape</h2>
         <p className="mt-1 text-sm text-muted-2">
-          Mesuré côté serveur pour chaque analyse complétée. &quot;n&quot; = nombre d&apos;analyses
+          Mesuré côté serveur pour chaque analyse complétée (y compris celles récupérées après une
+          requête perdue, via l&apos;événement serveur). &quot;n&quot; = nombre d&apos;analyses
           couvertes par cette instrumentation dans la période sélectionnée.
         </p>
         <div className="mt-3 overflow-x-auto rounded-xl border border-border">
@@ -540,6 +630,125 @@ export default async function AdminAnalyticsPage({
             </tbody>
           </table>
         </div>
+      </section>
+
+      {/* Paywall presentation experiment: control vs v2 */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Test paywall — contrôle vs v2</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Expérience indépendante du test A/B ci-dessus (un visiteur est dans A ou B, et séparément
+          dans « contrôle » ou « v2 »). Contrôle = page verrouillée d&apos;origine. v2 = aperçu
+          construit à partir des résultats de l&apos;analyse + bouton « Débloquer mes
+          recommandations — 4,90 € ». Chaque ligne compte des visiteurs distincts ; seuls les
+          événements portant une variante paywall sont comptés. Les fourchettes entre parenthèses
+          sont des intervalles de confiance à 95 %.
+        </p>
+        <p
+          className={`mt-3 rounded-xl px-4 py-3 text-sm ${
+            data.paywallExperiment.verdict === "difference"
+              ? "bg-accent-soft text-accent-hover"
+              : "bg-background-alt text-muted"
+          }`}
+        >
+          {data.paywallExperiment.verdict === "insufficient_data" &&
+            `Données insuffisantes pour conclure : il faut au moins ${data.paywallExperiment.minPaywallViewers} visiteurs ayant vu le paywall dans chaque variante (contrôle : ${data.paywallExperiment.control.paywallsViewed}, v2 : ${data.paywallExperiment.v2.paywallsViewed} sur la période). Les écarts ci-dessous sont des observations, pas des résultats.`}
+          {data.paywallExperiment.verdict === "inconclusive" &&
+            "Écart non concluant : les intervalles de confiance des deux variantes se chevauchent sur le taux de clic du paywall. L'écart observé peut être dû au hasard."}
+          {data.paywallExperiment.verdict === "difference" &&
+            "Écart net sur le taux de clic du paywall : les intervalles de confiance à 95 % des deux variantes ne se chevauchent pas. À confirmer sur les paiements, plus rares, avant de généraliser."}
+        </p>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Métrique</th>
+                <th className="px-4 py-2.5 font-medium">Contrôle</th>
+                <th className="px-4 py-2.5 font-medium">v2</th>
+              </tr>
+            </thead>
+            <tbody>
+              <AbRow label="Visiteurs assignés" a={data.paywallExperiment.control.visitors} b={data.paywallExperiment.v2.visitors} />
+              <AbRow label="Analyses complétées" a={data.paywallExperiment.control.analysesCompleted} b={data.paywallExperiment.v2.analysesCompleted} />
+              <AbRow label="Résultats vus (visiteurs exposés)" a={data.paywallExperiment.control.resultsViewed} b={data.paywallExperiment.v2.resultsViewed} />
+              <AbRow label="Aperçu verrouillé vu" a={data.paywallExperiment.control.previewsViewed} b={data.paywallExperiment.v2.previewsViewed} />
+              <AbRow label="Paywall vu" a={data.paywallExperiment.control.paywallsViewed} b={data.paywallExperiment.v2.paywallsViewed} />
+              <AbRow label="Clics sur une offre" a={data.paywallExperiment.control.unlockClicks} b={data.paywallExperiment.v2.unlockClicks} />
+              <AbRow label="Checkouts démarrés" a={data.paywallExperiment.control.checkoutsStarted} b={data.paywallExperiment.v2.checkoutsStarted} />
+              <AbRow label="Paiements" a={data.paywallExperiment.control.paymentsCompleted} b={data.paywallExperiment.v2.paymentsCompleted} />
+              <AbRow label="Revenue" a={eur(data.paywallExperiment.control.revenue)} b={eur(data.paywallExperiment.v2.revenue)} />
+              <AbRow
+                label="Clic offre / paywall vu (métrique principale)"
+                a={proportionLabel(data.paywallExperiment.control.unlockPerPaywallViewer)}
+                b={proportionLabel(data.paywallExperiment.v2.unlockPerPaywallViewer)}
+              />
+              <AbRow
+                label="Checkout / paywall vu"
+                a={proportionLabel(data.paywallExperiment.control.checkoutPerPaywallViewer)}
+                b={proportionLabel(data.paywallExperiment.v2.checkoutPerPaywallViewer)}
+              />
+              <AbRow
+                label="Paiement / visiteur exposé"
+                a={proportionLabel(data.paywallExperiment.control.paymentPerResultViewer)}
+                b={proportionLabel(data.paywallExperiment.v2.paymentPerResultViewer)}
+              />
+              <AbRow
+                label="Paiement / analyse terminée"
+                a={proportionLabel(data.paywallExperiment.control.paymentPerAnalysis)}
+                b={proportionLabel(data.paywallExperiment.v2.paymentPerAnalysis)}
+              />
+              <AbRow
+                label="Paiement / paywall vu"
+                a={proportionLabel(data.paywallExperiment.control.paymentPerPaywallViewer)}
+                b={proportionLabel(data.paywallExperiment.v2.paymentPerPaywallViewer)}
+              />
+              <AbRow
+                label="Revenue / visiteur exposé"
+                a={money(data.paywallExperiment.control.revenuePerResultViewer)}
+                b={money(data.paywallExperiment.v2.revenuePerResultViewer)}
+              />
+            </tbody>
+          </table>
+        </div>
+        <h3 className="mt-5 text-sm font-semibold">Croisement avec le test A/B</h3>
+        <div className="mt-2 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Cellule</th>
+                <th className="px-4 py-2.5 font-medium">Résultats vus</th>
+                <th className="px-4 py-2.5 font-medium">Paywall vu</th>
+                <th className="px-4 py-2.5 font-medium">Clics offre</th>
+                <th className="px-4 py-2.5 font-medium">Paiements</th>
+                <th className="px-4 py-2.5 font-medium">Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(["A", "B"] as const).flatMap((ab) =>
+                (["control", "v2"] as const).map((pw) => {
+                  const cell = data.paywallExperiment.byAbVariant[ab][pw];
+                  return (
+                    <tr key={`${ab}-${pw}`} className="border-b border-border last:border-0">
+                      <td className="px-4 py-2.5">
+                        Variante {ab} × {pw === "control" ? "contrôle" : "v2"}
+                      </td>
+                      <td className="px-4 py-2.5 font-medium tabular-nums">{cell.resultsViewed}</td>
+                      <td className="px-4 py-2.5 font-medium tabular-nums">{cell.paywallsViewed}</td>
+                      <td className="px-4 py-2.5 font-medium tabular-nums">{cell.unlockClicks}</td>
+                      <td className="px-4 py-2.5 font-medium tabular-nums">{cell.paymentsCompleted}</td>
+                      <td className="px-4 py-2.5 font-medium tabular-nums">{eur(cell.revenue)}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-xs text-muted-2">
+          Dans la variante B, le paywall de contrôle n&apos;apparaît qu&apos;après un clic sur
+          « Débloquer mon plan complet » ; en v2 il est affiché directement. « Paywall vu » n&apos;y
+          a donc pas la même signification : pour B, compare d&apos;abord « Paiement / visiteur
+          exposé ».
+        </p>
       </section>
 
       {/* Pricing: one-time vs Plus */}

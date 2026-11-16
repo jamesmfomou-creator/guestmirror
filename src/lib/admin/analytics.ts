@@ -1,6 +1,19 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { SUPABASE_CONFIGURED } from "@/lib/env";
 import { Goal } from "@/lib/types";
+import {
+  computeReliabilityStats,
+  effectiveFailedRows,
+  EMPTY_RELIABILITY_STATS,
+  isRecoveryAffected,
+  ReliabilityStats,
+  stepTimingRows,
+} from "./attemptStats";
+import {
+  computePaywallExperimentStats,
+  emptyPaywallExperimentStats,
+  type PaywallExperimentStats,
+} from "./paywallExperimentStats";
 
 export type Period = "today" | "7d" | "30d";
 
@@ -285,11 +298,15 @@ export interface AnalyticsDashboard {
   users: UserRow[];
   pricing: PricingStats;
   analysisPerformance: AnalysisPerformanceStats;
+  reliability: ReliabilityStats;
   errorBreakdown: ErrorBreakdownRow[];
   stepTimings: StepTimings;
   methodBreakdown: MethodBreakdown;
   userProfile: UserProfileStats;
   abTest: AbTestStats;
+  // Paywall presentation experiment (lib/paywallExperiment.ts), independent
+  // of abTest above. See lib/admin/paywallExperimentStats.ts.
+  paywallExperiment: PaywallExperimentStats;
   repeatUsage: {
     uniqueAnalysisUsers: number;
     totalAnalyses: number;
@@ -487,6 +504,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       abandonedBeforeFinalizing: 0,
       abandonedDuringFinalizing: 0,
     },
+    reliability: EMPTY_RELIABILITY_STATS,
     errorBreakdown: [],
     stepTimings: {
       urlExtraction: emptyStepTimingStats(),
@@ -521,6 +539,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       },
     },
     abTest: { A: emptyAbVariantStats(), B: emptyAbVariantStats() },
+    paywallExperiment: emptyPaywallExperimentStats(),
     pricing: {
       oneTimeOfferClicks: 0,
       plusOfferClicks: 0,
@@ -570,7 +589,16 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     ),
   ]);
 
-  const rows = events as EventRow[];
+  // Server-written attempt state (analysis_server_*, see
+  // lib/analysisAttempts.ts) lives in the same table but is not visitor
+  // behaviour: it has no anonymous_id and its source is "server". It is
+  // split off here, before anything is counted, so it can never appear as
+  // a phantom visitor, a "server" traffic source or a funnel step -- every
+  // aggregate below keeps exactly the meaning it had before those rows
+  // existed.
+  const fetchedRows = events as EventRow[];
+  const serverRows = fetchedRows.filter((r) => r.event_name.startsWith("analysis_server_"));
+  const rows = fetchedRows.filter((r) => !r.event_name.startsWith("analysis_server_"));
   const allAnalyses = analyses as AnalysisRow[];
 
   // ---- Funnel: distinct visitors per step, in order ----
@@ -708,7 +736,11 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
   // breaks down across retries and rescans within the same session. ----
   const startedRows = rows.filter((r) => r.event_name === "analysis_started");
   const completedRows = rows.filter((r) => r.event_name === "analysis_completed");
-  const failedRows = rows.filter((r) => r.event_name === "analysis_failed");
+  // Completed wins over failed for the same attempt (see effectiveFailedRows).
+  const failedRows = effectiveFailedRows(
+    completedRows,
+    rows.filter((r) => r.event_name === "analysis_failed")
+  );
   const progress90Rows = rows.filter((r) => r.event_name === "analysis_progress_90");
 
   function distinctAttemptCount(rowsForEvent: EventRow[]): number {
@@ -757,6 +789,9 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
   const finalizingDurationsSuccessS: number[] = [];
   const finalizingDurationsFailedS: number[] = [];
   for (const r of [...completedRows, ...failedRows]) {
+    // Outcomes reached through connection recovery say how long the browser
+    // was cut off, not how long finalizing takes.
+    if (isRecoveryAffected(r)) continue;
     const id = metadataString(r.metadata, ["attemptId"]);
     const p90At = id ? progress90AtByAttempt.get(id) : undefined;
     if (p90At != null) {
@@ -830,22 +865,25 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
   // value, forwarded into analysis_completed's metadata) -- where the
   // total analysis time is actually spent, independent of the client-side
   // 90%-cap progress bar used above. ----
+  const reliability = computeReliabilityStats(rows, serverRows, nowMs);
+  const timingRows = stepTimingRows(completedRows, serverRows);
+
   const stepTimings: StepTimings = {
-    urlExtraction: stepTimingStatsFor(completedRows, "url_extraction_duration_ms"),
-    imagePreprocessing: stepTimingStatsFor(completedRows, "image_preprocessing_duration_ms"),
-    aiCall: stepTimingStatsFor(completedRows, "ai_call_duration_ms"),
-    parsing: stepTimingStatsFor(completedRows, "parsing_duration_ms"),
-    imageStorage: stepTimingStatsFor(completedRows, "image_storage_duration_ms"),
-    database: stepTimingStatsFor(completedRows, "database_duration_ms"),
-    finalization: stepTimingStatsFor(completedRows, "finalization_duration_ms"),
-    total: stepTimingStatsFor(completedRows, "total_duration_ms"),
-    aiInputTokens: numberStatsFor(completedRows, "ai_input_tokens"),
-    aiOutputTokens: numberStatsFor(completedRows, "ai_output_tokens"),
+    urlExtraction: stepTimingStatsFor(timingRows, "url_extraction_duration_ms"),
+    imagePreprocessing: stepTimingStatsFor(timingRows, "image_preprocessing_duration_ms"),
+    aiCall: stepTimingStatsFor(timingRows, "ai_call_duration_ms"),
+    parsing: stepTimingStatsFor(timingRows, "parsing_duration_ms"),
+    imageStorage: stepTimingStatsFor(timingRows, "image_storage_duration_ms"),
+    database: stepTimingStatsFor(timingRows, "database_duration_ms"),
+    finalization: stepTimingStatsFor(timingRows, "finalization_duration_ms"),
+    total: stepTimingStatsFor(timingRows, "total_duration_ms"),
+    aiInputTokens: numberStatsFor(timingRows, "ai_input_tokens"),
+    aiOutputTokens: numberStatsFor(timingRows, "ai_output_tokens"),
     // sampleSize here is the actually useful number: how many completed
     // analyses needed the one allowed application-level retry (see
     // APP_MAX_RETRIES in lib/ai.ts) -- avg/median are trivially 1 since
     // retry_count can only be 0 or 1, but the count itself is the signal.
-    aiRetryCount: numberStatsFor(completedRows, "ai_retry_count"),
+    aiRetryCount: numberStatsFor(timingRows, "ai_retry_count"),
   };
 
   // ---- Per-method breakdown (lien Airbnb / capture / capture+lien).
@@ -1057,6 +1095,12 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
 
   const abTest: AbTestStats = { A: computeAbVariantStats("A"), B: computeAbVariantStats("B") };
 
+  // ---- Paywall presentation experiment (control vs v2) ----
+  const paywallExperiment = computePaywallExperimentStats(rows, {
+    isPayment: isPaymentEvent,
+    revenueEur: paymentEventRevenueEur,
+  });
+
   // ---- Repeat usage + user list (all-time, from the analyses table itself) ----
   const perEmail = new Map<string, AnalysisRow[]>();
   for (const a of allAnalyses) {
@@ -1095,11 +1139,13 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     users,
     pricing,
     analysisPerformance,
+    reliability,
     errorBreakdown,
     stepTimings,
     methodBreakdown,
     userProfile,
     abTest,
+    paywallExperiment,
     repeatUsage: {
       uniqueAnalysisUsers,
       totalAnalyses,
