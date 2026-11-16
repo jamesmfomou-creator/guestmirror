@@ -17,7 +17,6 @@ import { FAQAccordion } from "@/components/landing/FAQAccordion";
 import { Reveal } from "@/components/landing/Reveal";
 import { BRAND_NAME } from "@/lib/brand";
 import { CtaTrackedButton } from "@/components/landing/CtaTrackedButton";
-import { getLifetimePriceLabel } from "@/lib/lifetimePrice";
 import { Eyebrow } from "@/components/landing/Eyebrow";
 import { ResumeAnalysisBanner } from "@/components/analyze/ResumeAnalysisBanner";
 
@@ -55,12 +54,11 @@ const FAQ = [
   },
   {
     q: "Combien coûte l'analyse complète ?",
-    a: "4,90 € en paiement unique pour une analyse, ou 6,90 €/mois avec GuestMirror Plus pour tester et améliorer régulièrement. L'abonnement est annulable à tout moment.",
+    a: "7,90 € en paiement unique pour le rapport complet d'une annonce. 34,90 €/mois avec l'offre Conciergerie pour 20 analyses par mois (résiliable à tout moment). Ou 89 € une seule fois pour l'accès à vie, avec des analyses illimitées et sans abonnement.",
   },
 ];
 
 export default async function LandingPage() {
-  const lifetimePriceLabel = await getLifetimePriceLabel();
   const showcaseItems = await getShowcaseItems();
 
   return (
@@ -162,47 +160,47 @@ export default async function LandingPage() {
             Découvre exactement quoi améliorer
           </h2>
           <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
-            Une analyse ponctuelle pour corriger maintenant, ou un accès régulier pour tester et
-            comparer tes améliorations.
+            Un rapport pour ton annonce, 20 analyses par mois pour tes logements, ou un accès à vie
+            sans abonnement.
           </p>
-
-          <div className="mt-8">
-            <PricingCards
-              lifetimePriceLabel={lifetimePriceLabel}
-              oneTimeAction={
-                <CtaTrackedButton
-                  href="/analyze"
-                  size="lg"
-                  variant="outline"
-                  className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
-                  ctaLocation="pricing_one_time"
-                >
-                  Débloquer mon analyse — 4,90&nbsp;€
-                </CtaTrackedButton>
-              }
-              plusAction={
-                <CtaTrackedButton
-                  href="/analyze"
-                  size="lg"
-                  className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
-                  ctaLocation="pricing_plus"
-                >
-                  Passer à GuestMirror Plus — 6,90&nbsp;€/mois
-                </CtaTrackedButton>
-              }
-              lifetimeAction={
-                <CtaTrackedButton
-                  href="/analyze"
-                  size="lg"
-                  variant="outline"
-                  className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
-                  ctaLocation="pricing_lifetime"
-                >
-                  Débloquer l&apos;accès à vie
-                </CtaTrackedButton>
-              }
-            />
-          </div>
+        </Reveal>
+        <Reveal className="mx-auto mt-8 max-w-5xl px-5 text-center">
+          {/* Every CTA starts with a free analysis; the offer is chosen on the
+              diagnostic page (the paywall), where checkout happens. */}
+          <PricingCards
+            oneTimeAction={
+              <CtaTrackedButton
+                href="/analyze"
+                size="lg"
+                variant="outline"
+                className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
+                ctaLocation="pricing_one_time"
+              >
+                Analyser mon annonce
+              </CtaTrackedButton>
+            }
+            conciergerieAction={
+              <CtaTrackedButton
+                href="/analyze"
+                size="lg"
+                className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
+                ctaLocation="pricing_conciergerie"
+              >
+                Choisir Conciergerie
+              </CtaTrackedButton>
+            }
+            lifetimeAction={
+              <CtaTrackedButton
+                href="/analyze"
+                size="lg"
+                variant="outline"
+                className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
+                ctaLocation="pricing_lifetime"
+              >
+                Obtenir l&apos;accès à vie
+              </CtaTrackedButton>
+            }
+          />
         </Reveal>
       </section>
 

@@ -6,6 +6,7 @@ import { track } from "@/lib/analytics";
 import { useInViewOnce } from "@/lib/tracking/useInViewOnce";
 import { severityEmoji, severityLabel } from "@/lib/utils";
 import { PaywallPreview, paywallPreviewContents } from "@/lib/paywallPreview";
+import { OFFERS, formatEur } from "@/lib/plans";
 
 /**
  * Head of the paywall in the "v2" presentation (lib/paywallExperiment.ts):
@@ -109,10 +110,10 @@ export function PaywallPreviewV2({
       )}
 
       <Button size="lg" className="mt-6 w-full sm:w-full" onClick={onUnlock} disabled={disabled}>
-        {loading ? "Redirection…" : "Débloquer mes recommandations — 4,90 €"}
+        {loading ? "Redirection…" : `Débloquer mes recommandations — ${formatEur(OFFERS.one_time.amountEur)}`}
       </Button>
       <p className="mt-3 text-center text-xs leading-relaxed text-muted-2">
-        Paiement unique de 4,90 €, sans abonnement, sécurisé par Stripe. Juste après le paiement, tu reviens sur
+        Paiement unique de {formatEur(OFFERS.one_time.amountEur)}, sans abonnement, sécurisé par Stripe. Juste après le paiement, tu reviens sur
         cette page et ton rapport complet s&apos;affiche
         {emailsReportLink ? " ; tu reçois aussi son lien par e-mail." : "."}
       </p>

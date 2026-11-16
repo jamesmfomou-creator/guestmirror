@@ -14,6 +14,8 @@ import {
   emptyPaywallExperimentStats,
   type PaywallExperimentStats,
 } from "./paywallExperimentStats";
+import { computeOfferStats, emptyOfferStats, type OfferStats } from "./offerStats";
+import { OFFERS, PRICING_VERSION } from "@/lib/plans";
 import {
   computeLoaderExperimentStats,
   emptyLoaderExperimentStats,
@@ -315,6 +317,9 @@ export interface AnalyticsDashboard {
   // Analysis loader experiment (lib/loaderExperiment.ts). See
   // lib/admin/loaderExperimentStats.ts.
   loaderExperiment: LoaderExperimentStats;
+  // Pricing v2 per-offer figures (lib/admin/offerStats.ts), plus a live
+  // snapshot of active rights read from access_grants.
+  offers: OfferStats & { activeConciergerie: number; conciergerieMrr: number; activeLifetime: number; grantsReadable: boolean };
   repeatUsage: {
     uniqueAnalysisUsers: number;
     totalAnalyses: number;
@@ -549,6 +554,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     abTest: { A: emptyAbVariantStats(), B: emptyAbVariantStats() },
     paywallExperiment: emptyPaywallExperimentStats(),
     loaderExperiment: emptyLoaderExperimentStats(),
+    offers: { ...emptyOfferStats(), activeConciergerie: 0, conciergerieMrr: 0, activeLifetime: 0, grantsReadable: false },
     pricing: {
       oneTimeOfferClicks: 0,
       plusOfferClicks: 0,
@@ -577,7 +583,15 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
   const supabase = getSupabaseAdmin()!;
   const since = periodSince(period);
 
-  const [events, analyses, activeSubs] = await Promise.all([
+  // Snapshot of v2 rights. Tolerant: before supabase/migrations/0010 is
+  // applied the table does not exist yet, and the dashboard must still load.
+  const grantsSnapshot = supabase
+    .from("access_grants")
+    .select("kind, status, paid_period_end")
+    .in("status", ["active", "trialing"])
+    .then(({ data, error }) => (error ? null : (data ?? [])));
+
+  const [events, analyses, activeSubs, grants] = await Promise.all([
     fetchAllRows<EventRow>((from, to) =>
       supabase
         .from("analytics_events")
@@ -596,6 +610,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
         .in("subscription_status", ["active", "trialing"])
         .range(from, to)
     ),
+    grantsSnapshot,
   ]);
 
   // Server-written attempt state (analysis_server_*, see
@@ -713,7 +728,9 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
   const oneTimePaymentRows = rows.filter((r) => r.event_name === "one_time_payment_completed");
   const oneTimeRevenue = oneTimePaymentRows.reduce((sum, r) => sum + metadataNumber(r.metadata, "amount") / 100, 0);
   const newSubscriptions = countEvent("subscription_started");
-  const newSubscriptionRevenue = newSubscriptions * PLUS_PRICE_EUR;
+  const newSubscriptionRevenue = rows
+    .filter((r) => r.event_name === "subscription_started")
+    .reduce((sum, r) => sum + (metadataNumber(r.metadata, "price") || PLUS_PRICE_EUR), 0);
 
   const pricingFunnel: PricingFunnelStep[] = [
     { key: "paywall_viewed", label: "Paywall vu", count: countEvent("paywall_viewed") },
@@ -1105,10 +1122,32 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
   const abTest: AbTestStats = { A: computeAbVariantStats("A"), B: computeAbVariantStats("B") };
 
   // ---- Paywall presentation experiment (control vs v2) ----
-  const paywallExperiment = computePaywallExperimentStats(rows, {
+  // Restarted with pricing v2: comparing conversion across a price change
+  // would mix two different offers. Client events carry pricing_version;
+  // webhook payment events carry the v2 offer they were bought with.
+  const pricingV2Rows = rows.filter(
+    (r) =>
+      r.metadata?.pricing_version === PRICING_VERSION ||
+      (typeof r.metadata?.offer === "string" && r.metadata.offer in OFFERS)
+  );
+  const paywallExperiment = computePaywallExperimentStats(pricingV2Rows, {
     isPayment: isPaymentEvent,
     revenueEur: paymentEventRevenueEur,
   });
+
+  // ---- Pricing v2: per offer + live rights snapshot ----
+  const snapshotAtMs = Date.now();
+  const liveGrants = (grants ?? []).filter(
+    (g) => g.kind === "lifetime" || (g.paid_period_end !== null && new Date(g.paid_period_end).getTime() > snapshotAtMs)
+  );
+  const activeConciergerie = liveGrants.filter((g) => g.kind === "conciergerie").length;
+  const offers = {
+    ...computeOfferStats(rows),
+    activeConciergerie,
+    conciergerieMrr: activeConciergerie * OFFERS.conciergerie.amountEur,
+    activeLifetime: liveGrants.filter((g) => g.kind === "lifetime").length,
+    grantsReadable: grants !== null,
+  };
 
   // ---- Analysis loader experiment (control vs immersive) ----
   const loaderExperiment = computeLoaderExperimentStats(rows);
@@ -1159,6 +1198,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     abTest,
     paywallExperiment,
     loaderExperiment,
+    offers,
     repeatUsage: {
       uniqueAnalysisUsers,
       totalAnalyses,

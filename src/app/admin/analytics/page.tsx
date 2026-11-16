@@ -634,7 +634,7 @@ export default async function AdminAnalyticsPage({
 
       {/* Paywall presentation experiment: control vs v2 */}
       <section className="mt-10">
-        <h2 className="text-lg font-semibold">Test paywall — contrôle vs v2</h2>
+        <h2 className="text-lg font-semibold">Test paywall — contrôle vs v2 (depuis les nouveaux tarifs)</h2>
         <p className="mt-1 text-sm text-muted-2">
           Expérience indépendante du test A/B ci-dessus (un visiteur est dans A ou B, et séparément
           dans « contrôle » ou « v2 »). Contrôle = page verrouillée d&apos;origine. v2 = aperçu
@@ -811,9 +811,69 @@ export default async function AdminAnalyticsPage({
         </div>
       </section>
 
+      {/* Pricing v2: the three offers */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Offres — Analyse unique, Conciergerie, Accès à vie</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Depuis le changement de prix uniquement (version {data.offers.pricingVersion}). Un achat est
+          un paiement confirmé par Stripe (webhook), jamais un simple retour de paiement. La
+          conversion rapporte les visiteurs ayant acheté l&apos;offre aux visiteurs ayant vu le
+          paywall. Abonnements actifs, MRR et accès à vie sont un instantané actuel.
+          {!data.offers.grantsReadable && " (Instantané indisponible : la migration 0010 n'est pas encore appliquée.)"}
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Kpi label="Conciergerie actifs" value={data.offers.activeConciergerie} />
+          <Kpi label="MRR Conciergerie" value={eur(data.offers.conciergerieMrr)} />
+          <Kpi label="Accès à vie actifs" value={data.offers.activeLifetime} />
+          <Kpi label="Analyses Conciergerie utilisées" value={data.offers.creditsUsed} />
+          <Kpi label="Paywalls vus" value={data.offers.paywallViewers} />
+          <Kpi label="Échecs de paiement" value={data.offers.paymentFailures} />
+          <Kpi label="Remboursements" value={data.offers.refunds} />
+          <Kpi label="Litiges" value={data.offers.disputes} />
+        </div>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Offre</th>
+                <th className="px-4 py-2.5 font-medium">Clics</th>
+                <th className="px-4 py-2.5 font-medium">Paiements commencés</th>
+                <th className="px-4 py-2.5 font-medium">Achats</th>
+                <th className="px-4 py-2.5 font-medium">Revenu</th>
+                <th className="px-4 py-2.5 font-medium">Achat / paywall vu</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(
+                [
+                  ["one_time", "Analyse unique — 7,90 €"],
+                  ["conciergerie", "Conciergerie — 34,90 €/mois"],
+                  ["lifetime", "Accès à vie — 89 €"],
+                ] as const
+              ).map(([key, label]) => {
+                const o = data.offers.byOffer[key];
+                return (
+                  <tr key={key} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2.5 font-medium">{label}</td>
+                    <td className="px-4 py-2.5 tabular-nums">{o.clicks}</td>
+                    <td className="px-4 py-2.5 tabular-nums">{o.checkoutsStarted}</td>
+                    <td className="px-4 py-2.5 tabular-nums">
+                      {o.purchases}
+                      {key === "conciergerie" && o.renewals > 0 ? ` (+${o.renewals} renouvellement${o.renewals > 1 ? "s" : ""})` : ""}
+                    </td>
+                    <td className="px-4 py-2.5 tabular-nums">{eur(o.revenue)}</td>
+                    <td className="px-4 py-2.5 tabular-nums">{proportionLabel(o.conversionPerPaywallViewer)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       {/* Pricing: one-time vs Plus */}
       <section className="mt-10">
-        <h2 className="text-lg font-semibold">Pricing — Analyse unique vs Plus</h2>
+        <h2 className="text-lg font-semibold">Pricing historique — anciens tarifs inclus</h2>
         <p className="mt-1 text-sm text-muted-2">
           <strong>Abonnements Plus actifs</strong> et <strong>MRR</strong> sont un instantané
           actuel de l&apos;état réel des abonnements (indépendant de la période sélectionnée) — un
@@ -824,8 +884,8 @@ export default async function AdminAnalyticsPage({
           récurrent actuel, pas une somme encaissée.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Kpi label="Abonnements Plus actifs" value={data.pricing.activePlusSubscriptions} />
-          <Kpi label="MRR" value={eur(data.pricing.mrr)} />
+          <Kpi label="Abonnements Plus actifs (6,90 €)" value={data.pricing.activePlusSubscriptions} />
+          <Kpi label="MRR Plus" value={eur(data.pricing.mrr)} />
           <Kpi label="Nouveaux abonnements" value={data.pricing.newSubscriptions} />
           <Kpi label="Annulations" value={data.pricing.cancellations} />
           <Kpi label="Paiements analyse unique" value={data.pricing.oneTimePayments} />

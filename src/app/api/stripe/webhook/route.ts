@@ -1,24 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { unlockAnalysis, getAnalysis } from "@/lib/store";
-import { SUPABASE_CONFIGURED } from "@/lib/env";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import {
-  upsertSubscriptionFromCheckout,
-  upsertLifetimeFromCheckout,
-  updateSubscriptionByStripeId,
-} from "@/lib/subscriptions";
 import { sendUnlockEmail } from "@/lib/email";
+import { claimStripeEvent, completeStripeEvent } from "@/lib/access/accessStore";
+import { handleStripeEvent } from "@/lib/stripe/webhookHandlers";
 import { randomUUID } from "crypto";
 import type Stripe from "stripe";
 
-/**
- * As of this Stripe API version, `current_period_end` lives on each
- * subscription item, not on the top-level Subscription object.
- */
-function subscriptionPeriodEnd(subscription: Stripe.Subscription): number | null {
-  return subscription.items.data[0]?.current_period_end ?? null;
-}
+// Stripe webhook (pricing v2). This route only:
+//  1. verifies the signature (STRIPE_WEBHOOK_SECRET) -- nothing unsigned is
+//     ever trusted;
+//  2. journals the event id (stripe_events), so a redelivered event that was
+//     already processed is acknowledged without being applied twice;
+//  3. hands the event to lib/stripe/webhookHandlers.ts, which grants rights
+//     only on confirmed payments and ignores non-GuestMirror events.
+// A handler failure returns 500 so Stripe retries; the event stays
+// unprocessed in the journal and is applied in full on the retry.
 
 /**
  * Records an authoritative analytics event once Stripe confirms something
@@ -109,243 +106,6 @@ async function trackServerEvent(params: {
   });
 }
 
-async function handleOneTimeCheckout(session: Stripe.Checkout.Session) {
-  const analysisId = session.metadata?.analysisId;
-  if (!analysisId) return;
-  // Lifetime is also mode=payment (see api/checkout/route.ts), so it lands
-  // in this same webhook branch as the regular one-time unlock -- the only
-  // signal distinguishing them is this metadata field.
-  const isLifetime = session.metadata?.plan === "lifetime";
-  const plan = isLifetime ? "lifetime" : "one_time";
-
-  await unlockAnalysis(analysisId, "paid");
-
-  if (isLifetime) {
-    const email = session.customer_details?.email || session.customer_email;
-    const customerId = typeof session.customer === "string" ? session.customer : (session.customer?.id ?? null);
-    if (email) {
-      await upsertLifetimeFromCheckout({ email, stripeCustomerId: customerId });
-    }
-  }
-
-  if (!SUPABASE_CONFIGURED) return;
-  const supabase = getSupabaseAdmin()!;
-
-  // Stripe redelivers webhooks it doesn't get a 2xx for (at-least-once
-  // delivery) -- check-then-insert by stripe_session_id first, same
-  // dedup pattern trackServerEvent already uses, so a redelivery of an
-  // already-processed session can't insert a second payments row (which
-  // would also mean a second "your report is unlocked" email below).
-  const { data: existingPayment } = await supabase
-    .from("payments")
-    .select("id")
-    .eq("stripe_session_id", session.id)
-    .maybeSingle();
-
-  if (!existingPayment) {
-    const { error: paymentInsertError } = await supabase.from("payments").insert({
-      id: randomUUID(),
-      analysis_id: analysisId,
-      stripe_session_id: session.id,
-      stripe_payment_intent_id: (session.payment_intent as string) ?? null,
-      amount: session.amount_total ?? null,
-      status: "paid",
-    });
-    if (paymentInsertError) {
-      console.error(`[stripe] payments insert failed session=${session.id} analysis=${analysisId}: ${paymentInsertError.message}`);
-    }
-  }
-
-  try {
-    const dedupeKey = { field: "stripe_session_id", value: session.id };
-    const metadata = {
-      analysis_id: analysisId,
-      plan,
-      amount: session.amount_total ?? null,
-      currency: "EUR",
-      payment_status: "paid",
-      stripe_session_id: session.id,
-      stripe_payment_intent_id: (session.payment_intent as string) ?? null,
-    };
-    // Keep firing the original generic event so the existing funnel table
-    // in /admin/analytics keeps working unchanged, plus the plan-specific
-    // event for the one-time-vs-plus-vs-lifetime comparison.
-    await trackServerEvent({ eventName: "payment_completed", analysisId, dedupeKey, metadata });
-    await trackServerEvent({
-      eventName: isLifetime ? "lifetime_payment_completed" : "one_time_payment_completed",
-      analysisId,
-      dedupeKey,
-      metadata,
-    });
-  } catch {
-    // analytics must never break payment confirmation handling
-  }
-
-  // Gated on !existingPayment: a redelivery of an already-processed
-  // session must not resend the unlock email a second time.
-  if (existingPayment) return;
-
-  try {
-    const analysis = await getAnalysis(analysisId);
-    if (analysis?.email) {
-      await sendUnlockEmail({ to: analysis.email, analysisId });
-    }
-  } catch {
-    // email must never break payment confirmation handling -- the report
-    // is unlocked regardless of whether the notification email sends
-  }
-}
-
-async function handleSubscriptionCheckout(session: Stripe.Checkout.Session) {
-  const analysisId = session.metadata?.analysisId ?? null;
-  const email = session.customer_details?.email || session.customer_email;
-  const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
-  const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
-  if (!email || !subscriptionId || !customerId) return;
-
-  const stripe = getStripe();
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  const periodEnd = subscriptionPeriodEnd(subscription);
-
-  await upsertSubscriptionFromCheckout({
-    email,
-    stripeCustomerId: customerId,
-    stripeSubscriptionId: subscriptionId,
-    status: subscription.status,
-    currentPeriodEnd: periodEnd,
-  });
-
-  try {
-    await trackServerEvent({
-      eventName: "subscription_started",
-      analysisId,
-      email,
-      dedupeKey: { field: "stripe_subscription_id", value: subscriptionId },
-      metadata: {
-        plan: "plus",
-        price: 6.9,
-        currency: "EUR",
-        stripe_customer_id: customerId,
-        stripe_subscription_id: subscriptionId,
-      },
-    });
-  } catch {
-    // analytics must never break subscription confirmation handling
-  }
-
-  if (analysisId) {
-    try {
-      await sendUnlockEmail({ to: email, analysisId });
-    } catch {
-      // email must never break subscription confirmation handling
-    }
-  }
-}
-
-async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
-  const periodEnd = subscriptionPeriodEnd(subscription);
-  await updateSubscriptionByStripeId({
-    stripeSubscriptionId: subscription.id,
-    status: subscription.status,
-    currentPeriodEnd: periodEnd,
-  });
-}
-
-async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
-  const record = await updateSubscriptionByStripeId({
-    stripeSubscriptionId: subscription.id,
-    status: "canceled",
-    currentPeriodEnd: null,
-  });
-
-  try {
-    await trackServerEvent({
-      eventName: "subscription_cancelled",
-      email: record?.email ?? null,
-      dedupeKey: { field: "stripe_subscription_id", value: subscription.id },
-      metadata: { plan: "plus", stripe_subscription_id: subscription.id },
-    });
-  } catch {
-    // analytics must never break webhook handling
-  }
-}
-
-/**
- * Monthly subscription renewals are billed by Stripe directly on the
- * existing subscription -- no checkout.session.completed fires for them,
- * only this invoice event. Without this handler, every renewal after the
- * first was real money collected but invisible everywhere in our own
- * analytics (funnel, revenue, A/B stats) even though Stripe's own records
- * always had it -- confirmed via the Stripe API directly (not assumed).
- */
-async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
-  // The very first invoice of a new subscription (billing_reason
-  // "subscription_create") is already recorded via checkout.session.completed
-  // -> handleSubscriptionCheckout's subscription_started event. Only
-  // renewals (and any other reason besides the initial creation) are new
-  // money this handler needs to record -- otherwise the first payment would
-  // be double-counted.
-  if (invoice.billing_reason === "subscription_create") return;
-
-  const subscriptionId =
-    typeof (invoice as unknown as { subscription?: string | { id: string } }).subscription === "string"
-      ? (invoice as unknown as { subscription?: string }).subscription
-      : (invoice as unknown as { subscription?: { id: string } }).subscription?.id;
-  if (!subscriptionId) return;
-
-  try {
-    const dedupeKey = { field: "stripe_invoice_id", value: invoice.id };
-    const metadata = {
-      plan: "plus",
-      amount: invoice.amount_paid ?? null,
-      currency: (invoice.currency || "eur").toUpperCase(),
-      payment_status: "paid",
-      stripe_subscription_id: subscriptionId,
-      stripe_invoice_id: invoice.id,
-      billing_reason: invoice.billing_reason ?? null,
-    };
-    // Same generic-event + plan-specific-event pattern as
-    // handleOneTimeCheckout -- picked up by every existing
-    // payment_completed-based aggregation (funnel, revenue KPI, by-source,
-    // A/B stats, isPaymentEvent in admin/analytics.ts) with no further
-    // changes needed there.
-    await trackServerEvent({ eventName: "payment_completed", email: invoice.customer_email ?? null, dedupeKey, metadata });
-    await trackServerEvent({
-      eventName: "subscription_renewed",
-      email: invoice.customer_email ?? null,
-      dedupeKey,
-      metadata,
-    });
-  } catch {
-    // analytics must never break payment confirmation handling
-  }
-}
-
-async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
-  const subscriptionId =
-    typeof (invoice as unknown as { subscription?: string | { id: string } }).subscription === "string"
-      ? (invoice as unknown as { subscription?: string }).subscription
-      : (invoice as unknown as { subscription?: { id: string } }).subscription?.id;
-  if (!subscriptionId || !SUPABASE_CONFIGURED) return;
-
-  const supabase = getSupabaseAdmin()!;
-  const { data: sub } = await supabase
-    .from("subscriptions")
-    .select("email")
-    .eq("stripe_subscription_id", subscriptionId)
-    .maybeSingle();
-
-  try {
-    await trackServerEvent({
-      eventName: "subscription_payment_failed",
-      email: sub?.email ?? null,
-      metadata: { plan: "plus", stripe_subscription_id: subscriptionId },
-    });
-  } catch {
-    // analytics must never break webhook handling
-  }
-}
-
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("stripe-signature");
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -365,41 +125,27 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    switch (event.type) {
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        if (session.mode === "subscription") {
-          await handleSubscriptionCheckout(session);
-        } else {
-          await handleOneTimeCheckout(session);
-        }
-        break;
-      }
-      case "customer.subscription.updated":
-        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
-        break;
-      case "customer.subscription.deleted":
-        await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
-        break;
-      case "invoice.payment_failed":
-        await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
-        break;
-      case "invoice.payment_succeeded":
-        await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
-        break;
-      default:
-        break;
+    const claim = await claimStripeEvent(event);
+    if (claim === "already_processed") {
+      return NextResponse.json({ received: true, duplicate: true });
     }
+    const outcome = await handleStripeEvent(event, {
+      track: (params) =>
+        trackServerEvent(params).catch((err: unknown) => {
+          // analytics must never break payment handling
+          console.error(`[stripe] analytics failed event=${event.id}:`, err instanceof Error ? err.message : err);
+        }),
+      sendUnlockEmail,
+      retrieveSubscription: (id) => stripe.subscriptions.retrieve(id),
+    });
+    await completeStripeEvent(event.id, outcome);
+    console.log(`[stripe] event=${event.id} type=${event.type} outcome=${outcome}`);
   } catch (err) {
-    // A real handler failure (e.g. unlockAnalysis's write failing) used to
-    // be swallowed here with a 200 returned regardless, which told Stripe
-    // delivery had succeeded -- so a genuinely failed unlock was never
-    // retried and was lost silently. Returning 500 lets Stripe's own
-    // retry-with-backoff do its job; the handlers above are now
-    // redelivery-safe (unlockAnalysis is idempotent, payments/analytics
-    // writes are deduped), so a retry is safe to re-run in full.
-    console.error(`[stripe] webhook handler failed event=${event.id} type=${event.type}:`, err);
-    return NextResponse.json({ error: "Webhook handler failed." }, { status: 500 });
+    // Real failure (e.g. a database write): 500 so Stripe redelivers. The
+    // journal row stays unprocessed, so the retry applies the event in full;
+    // every write in the handlers is idempotent.
+    console.error(`[stripe] webhook handling failed event=${event.id} type=${event.type}:`, err);
+    return NextResponse.json({ error: "Traitement du webhook échoué." }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });

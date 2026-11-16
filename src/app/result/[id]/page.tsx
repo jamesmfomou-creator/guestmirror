@@ -28,10 +28,12 @@ import { OptionalInfoCard } from "@/components/result/OptionalInfoCard";
 import { ManageSubscriptionLink } from "@/components/result/ManageSubscriptionLink";
 import { lockedRecommendationCount } from "@/lib/utils";
 import { BRAND_NAME } from "@/lib/brand";
-import { getSubscriptionByEmail, isPlusActive, isLifetimeActive } from "@/lib/subscriptions";
+import { getAccessForEmail } from "@/lib/access/reportAccess";
+import { AccessPanel } from "@/components/result/AccessPanel";
+import { PaymentPending } from "@/components/result/PaymentPending";
+import type { FeedbackPlan } from "@/lib/feedback";
 import { getAbVariantServer } from "@/lib/ab-server";
 import { getInputMethodForAnalysis } from "@/lib/inputMethod";
-import { getLifetimePriceLabel } from "@/lib/lifetimePrice";
 import { PostPurchaseFeedback } from "@/components/result/PostPurchaseFeedback";
 import { IncompleteResultNotice } from "@/components/result/IncompleteResultNotice";
 import { isIncompleteResult } from "@/lib/resultShape";
@@ -49,7 +51,14 @@ export default async function ResultPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ canceled?: string; unlocked?: string; plus?: string; lifetime?: string }>;
+  searchParams: Promise<{
+    canceled?: string;
+    unlocked?: string;
+    plus?: string;
+    lifetime?: string;
+    checkout?: string;
+    offer?: string;
+  }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -58,10 +67,22 @@ export default async function ResultPage({
   if (!analysis) notFound();
 
   const images = await resolveImageUrls(analysis.images);
-  const subscription = await getSubscriptionByEmail(analysis.email);
-  const plusActive = isPlusActive(subscription);
-  const lifetimeActive = isLifetimeActive(subscription);
-  const unlocked = analysis.is_unlocked || plusActive || lifetimeActive;
+  // Rights tied to the report's email (pricing v2, lib/access): a report
+  // bought on its own is readable by its link as before; subscription and
+  // lifetime rights apply only once this browser has verified the email.
+  const access = await getAccessForEmail(analysis.email);
+  const unlocked = analysis.is_unlocked || access.unlimited !== null;
+  // A verified Conciergerie subscriber with analyses left unlocks with a
+  // credit instead: the paywall would sell them a report already covered.
+  const creditUsable = !unlocked && access.conciergerie?.usable === true;
+  const purchasedPlan: FeedbackPlan =
+    sp.offer === "conciergerie" || sp.offer === "lifetime"
+      ? sp.offer
+      : sp.lifetime === "1"
+        ? "lifetime"
+        : sp.plus === "1"
+          ? "plus"
+          : "one_time";
   const variant = await getAbVariantServer();
   // Legacy rows stored with a score but none of the detail (see
   // lib/resultShape.ts). Shown as what they are, in both A/B arms alike,
@@ -77,7 +98,6 @@ export default async function ResultPage({
   const resultInputMethod =
     (await getInputMethodForAnalysis(id)) ??
     (analysis.listing_url ? (analysis.images.length > 0 ? "mixed" : "airbnb_url") : "screenshot");
-  const lifetimePriceLabel = await getLifetimePriceLabel();
 
   // Paywall presentation experiment (lib/paywallExperiment.ts), independent
   // of the A/B variant above. null = control: the page below renders as it
@@ -100,7 +120,7 @@ export default async function ResultPage({
       {unlocked && sp.unlocked === "1" && (
         <PostPurchaseFeedback
           analysisId={id}
-          plan={sp.lifetime === "1" ? "lifetime" : sp.plus === "1" ? "plus" : "one_time"}
+          plan={purchasedPlan}
           userType={analysis.user_type}
           propertyCountRange={analysis.property_count_range}
         />
@@ -159,7 +179,23 @@ export default async function ResultPage({
         <IncompleteResultNotice
           listingUrl={analysis.listing_url}
           unlocked={unlocked}
-          canRerunUnlocked={plusActive || lifetimeActive}
+          canRerunUnlocked={access.unlimited !== null || access.conciergerie?.usable === true}
+        />
+      )}
+
+      {!unlocked && !incomplete && sp.checkout === "success" && <PaymentPending />}
+      {!unlocked && !incomplete && sp.checkout !== "success" && access.needsVerification && (
+        <AccessPanel mode="verify" analysisId={id} />
+      )}
+      {!unlocked && !incomplete && access.conciergerie && (
+        <AccessPanel
+          mode="credit"
+          analysisId={id}
+          remaining={access.conciergerie.remaining}
+          quota={access.conciergerie.quota}
+          periodEnd={access.conciergerie.periodEnd}
+          blockedReason={access.conciergerie.blockedReason}
+          canManage={access.hasManageableSubscription}
         />
       )}
 
@@ -175,11 +211,11 @@ export default async function ResultPage({
             propertyCountRange={analysis.property_count_range}
           />
           {paywallPreview ? (
-            <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} />
+            !creditUsable ? <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} /> : null
           ) : (
             <>
               <LockedTeaser count={lockedRecommendationCount(analysis.result)} analysisId={id} />
-              <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />
+              {!creditUsable && <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />}
             </>
           )}
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
@@ -192,10 +228,10 @@ export default async function ResultPage({
       {!unlocked && !incomplete && variant === "B" && (
         <>
           {paywallPreview ? (
-            <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} />
+            !creditUsable ? <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} /> : null
           ) : (
             <LockedPreviewB analysisId={id} count={lockedRecommendationCount(analysis.result)}>
-              <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />
+              {!creditUsable && <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />}
             </LockedPreviewB>
           )}
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
@@ -229,19 +265,28 @@ export default async function ResultPage({
         </>
       )}
 
-      {unlocked && plusActive && analysis.email && (
+      {unlocked && access.unlimited === "legacy_plus" && (
         <p className="mx-auto mt-10 flex max-w-xl items-center justify-center gap-2 text-xs text-muted-2">
           <span className="inline-flex items-center rounded-full bg-accent-soft px-2.5 py-1 font-medium text-accent-hover">
             GuestMirror Plus actif
           </span>
-          <ManageSubscriptionLink email={analysis.email} />
+          <ManageSubscriptionLink analysisId={id} />
         </p>
       )}
-      {unlocked && lifetimeActive && (
+      {unlocked && (access.unlimited === "lifetime" || access.unlimited === "legacy_lifetime") && (
         <p className="mx-auto mt-10 flex max-w-xl items-center justify-center gap-2 text-xs text-muted-2">
           <span className="inline-flex items-center rounded-full bg-accent-soft px-2.5 py-1 font-medium text-accent-hover">
-            GuestMirror Lifetime actif
+            Accès à vie actif
           </span>
+        </p>
+      )}
+      {unlocked && access.conciergerie && (
+        <p className="mx-auto mt-10 flex max-w-xl flex-wrap items-center justify-center gap-2 text-xs text-muted-2">
+          <span className="inline-flex items-center rounded-full bg-accent-soft px-2.5 py-1 font-medium text-accent-hover">
+            Conciergerie — {access.conciergerie.remaining} analyse{access.conciergerie.remaining > 1 ? "s" : ""} restante
+            {access.conciergerie.remaining > 1 ? "s" : ""} ce mois-ci
+          </span>
+          {access.hasManageableSubscription && <ManageSubscriptionLink analysisId={id} />}
         </p>
       )}
 
@@ -249,7 +294,7 @@ export default async function ResultPage({
           unlocked for free, no payment -- once they've seen the full
           report, propose Lifetime as the natural next step. Never shown
           to a real Plus/Lifetime subscriber (nothing to upsell there). */}
-      {unlocked && analysis.promo_code && !plusActive && !lifetimeActive && (
+      {unlocked && analysis.promo_code && !access.unlimited && !access.conciergerie && (
         <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-accent/30 bg-accent-soft px-5 py-4 text-center">
           <p className="text-sm font-medium text-accent-hover">
             🎁 Cette analyse t&apos;a été offerte par {BRAND_NAME}.
@@ -261,7 +306,7 @@ export default async function ResultPage({
             href="/pricing"
             className="mt-3 inline-block text-sm font-semibold text-accent-hover underline underline-offset-2"
           >
-            Découvrir {BRAND_NAME} Lifetime →
+            Découvrir l&apos;accès à vie →
           </a>
         </div>
       )}

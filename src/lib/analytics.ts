@@ -2,6 +2,7 @@ import { captureAttribution, getAnonymousId, getFirstTouch, getLastTouch, getSes
 import { getAbVariant } from "@/lib/ab";
 import { getPaywallVariant } from "@/lib/paywallExperiment";
 import { getLoaderVariant } from "@/lib/loaderExperiment";
+import { PRICING_VERSION } from "@/lib/plans";
 
 /**
  * Full set of event names this app can emit. Exported as a plain array
@@ -153,6 +154,14 @@ export const ANALYTICS_EVENTS = [
   "analysis_visual_started",
   "analysis_visual_completed",
   "analysis_loader_abandoned",
+  // Pricing v2 (lib/plans.ts): Conciergerie offer, email verification before
+  // using a subscription / lifetime right, and a report unlocked with one
+  // Conciergerie analysis. pricing_version is attached to every event.
+  "conciergerie_offer_clicked",
+  "conciergerie_checkout_started",
+  "access_code_requested",
+  "access_verified",
+  "subscription_credit_used",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];
@@ -192,6 +201,9 @@ export function track(event: AnalyticsEvent, props?: Props) {
     ab_variant: getAbVariant(),
     paywall_variant: getPaywallVariant(),
     loader_variant: getLoaderVariant(),
+    // Prices changed on this version: experiments and conversion rates are
+    // compared within one pricing version only.
+    pricing_version: PRICING_VERSION,
   };
 
   try {

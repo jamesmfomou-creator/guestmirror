@@ -25,24 +25,24 @@ export function PricingCard({
   return (
     <div
       className={cn(
-        "card relative h-full p-6 text-center sm:p-7",
-        highlighted && "border-2 border-accent shadow-[0_20px_50px_-24px_rgba(217,103,63,0.35)]"
+        "card relative flex h-full flex-col p-6 text-center sm:p-7",
+        // "!": .card (globals.css) sits outside Tailwind's layers and would
+        // otherwise win over these utilities.
+        highlighted && "border-2! border-accent! shadow-[0_20px_50px_-24px_rgba(217,103,63,0.35)]"
       )}
     >
       {plan.badge && (
-        <span className="inline-flex items-center rounded-full bg-accent px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-foreground">
+        <span className="inline-flex items-center self-center whitespace-nowrap rounded-full bg-accent-soft px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-hover">
           {plan.badge}
         </span>
       )}
-      <h3 className="mt-4 text-lg font-semibold tracking-tight">{plan.name}</h3>
+      <h3 className={cn("text-lg font-semibold tracking-tight", plan.badge ? "mt-4" : "mt-0")}>{plan.name}</h3>
       <p className="mt-1.5 text-sm text-muted">{plan.description}</p>
       <p className="mt-4 text-4xl font-semibold tracking-tight">
         {plan.priceLabel}
         {plan.period && <span className="text-base font-medium text-muted"> {plan.period}</span>}
       </p>
-      {plan.concierge && (
-        <p className="mt-1.5 text-xs font-medium text-accent-hover">{plan.concierge}</p>
-      )}
+      {plan.keyLine && <p className="mt-2 text-sm font-semibold text-accent-hover">{plan.keyLine}</p>}
       <ul className="mx-auto mt-5 max-w-[220px] space-y-2.5 text-left">
         {plan.features.map((f) => (
           <li key={f} className="flex items-start gap-3 text-sm text-foreground">
@@ -51,8 +51,10 @@ export function PricingCard({
           </li>
         ))}
       </ul>
-      {action}
-      <p className="mt-3 text-xs text-muted-2">{plan.note}</p>
+      <div className="mt-auto">
+        {action}
+        <p className="mt-3 text-xs text-muted-2">{plan.note}</p>
+      </div>
       {extraNote}
     </div>
   );

@@ -73,27 +73,9 @@ export function isLifetimeActive(subscription: SubscriptionRecord | null): boole
   );
 }
 
-export async function hasActivePlusSubscription(
-  email: string | null | undefined
-): Promise<boolean> {
-  return isPlusActive(await getSubscriptionByEmail(email));
-}
-
-export async function hasActiveLifetimeAccess(
-  email: string | null | undefined
-): Promise<boolean> {
-  return isLifetimeActive(await getSubscriptionByEmail(email));
-}
-
-/** ONE_TIME_UNLOCKED (this specific analysis was paid for) OR PLUS_ACTIVE OR LIFETIME_ACTIVE. */
-export async function hasFullAccess(analysis: {
-  is_unlocked: boolean;
-  email: string | null;
-}): Promise<boolean> {
-  if (analysis.is_unlocked) return true;
-  const subscription = await getSubscriptionByEmail(analysis.email);
-  return isPlusActive(subscription) || isLifetimeActive(subscription);
-}
+// Rights are no longer read directly from here by pages or routes: see
+// lib/access/reportAccess.ts, which also requires the visitor to have
+// verified the email before a subscription / lifetime right applies.
 
 function toIso(unixSeconds: number | null | undefined): string | null {
   return typeof unixSeconds === "number" ? new Date(unixSeconds * 1000).toISOString() : null;
