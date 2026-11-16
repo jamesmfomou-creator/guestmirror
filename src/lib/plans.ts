@@ -48,10 +48,11 @@ const CURRENT_PRICES: Record<StripeMode, Record<OfferId, string | null>> = {
     conciergerie: "price_1UcTwoAV5mFz3N4JQYUbaTPp",
     lifetime: "price_1UcU09AV5mFz3N4JYNji7dIG",
   },
+  // Created in Stripe test mode (2026-11-16) for end-to-end tests; no money.
   test: {
-    one_time: null,
-    conciergerie: null,
-    lifetime: null,
+    one_time: "price_1UcUuCAV5mFz3N4J9TJ9eKXL",
+    conciergerie: "price_1UcUuCAV5mFz3N4JQeP49r9B",
+    lifetime: "price_1UcUuDAV5mFz3N4J6XWZAgDW",
   },
 };
 

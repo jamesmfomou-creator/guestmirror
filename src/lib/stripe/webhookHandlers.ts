@@ -50,7 +50,15 @@ export interface WebhookDeps {
   sendUnlockEmail: (params: { to: string; analysisId: string }) => Promise<void>;
   /** Legacy Plus checkout needs the subscription's period end from Stripe. */
   retrieveSubscription?: (id: string) => Promise<Stripe.Subscription>;
+  /**
+   * Who a payment belongs to, when a refund/dispute arrives before the
+   * checkout event that records the payment (events are not ordered).
+   */
+  retrievePaymentIntentMetadata?: (id: string) => Promise<Record<string, string>>;
 }
+
+/** Thrown so the route answers 500 and Stripe redelivers the event later. */
+export class RetryLaterError extends Error {}
 
 type Outcome = string;
 
@@ -254,8 +262,11 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, deps: Webho
         metadata: { plan: "conciergerie", offer: "conciergerie", price: OFFERS.conciergerie.amountEur, currency: "EUR", stripe_subscription_id: subscriptionId },
       });
     }
-    // If the first invoice was already processed, the period is open: unlock now.
-    await unlockPendingReport(grant, deps);
+    // Re-read: the first invoice may have been processed concurrently. Either
+    // this read sees its paid period (unlock here), or the invoice handler's
+    // update sees the pending report written above (it unlocks there).
+    const fresh = (await getGrantBySubscriptionId(subscriptionId)) ?? grant;
+    await unlockPendingReport(fresh, deps);
     return "conciergerie_checkout_recorded";
   }
 
@@ -422,7 +433,17 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, eventCreated: num
 async function onPaymentReversal(paymentIntentId: string | null, action: "refund" | "dispute_opened" | "dispute_won" | "dispute_lost", deps: WebhookDeps): Promise<Outcome> {
   if (!paymentIntentId) return "ignored_no_payment_intent";
   const payment = await findPaymentByIntent(paymentIntentId);
-  if (!payment) return "ignored_not_guestmirror_or_subscription";
+  if (!payment) {
+    // Refunds and disputes can arrive before checkout.session.completed has
+    // recorded the payment. If Stripe says the payment is ours, ask for a
+    // redelivery instead of dropping it: applying it now would be undone by
+    // the unlock that follows.
+    const metadata = deps.retrievePaymentIntentMetadata ? await deps.retrievePaymentIntentMetadata(paymentIntentId) : {};
+    if (metadata.app === "guestmirror") {
+      throw new RetryLaterError(`payment ${paymentIntentId} not recorded yet; retry ${action} later`);
+    }
+    return "ignored_not_guestmirror_or_subscription";
+  }
   const lifetime = await getGrantByPaymentIntent(paymentIntentId);
   const restore = action === "dispute_won";
 

@@ -137,6 +137,7 @@ export async function POST(req: NextRequest) {
         }),
       sendUnlockEmail,
       retrieveSubscription: (id) => stripe.subscriptions.retrieve(id),
+      retrievePaymentIntentMetadata: async (id) => (await stripe.paymentIntents.retrieve(id)).metadata ?? {},
     });
     await completeStripeEvent(event.id, outcome);
     console.log(`[stripe] event=${event.id} type=${event.type} outcome=${outcome}`);

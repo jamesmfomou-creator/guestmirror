@@ -231,9 +231,12 @@ export async function ensureConciergerieGrant(params: {
       stripe_checkout_session_id: params.checkoutSessionId ?? null,
     });
   } catch (err) {
-    // A concurrent delivery inserted it first (unique subscription id).
+    // A concurrent delivery (Stripe sends checkout.session.completed and the
+    // first invoice.paid at the same moment) inserted it first. Apply this
+    // event's references to that row instead of dropping them -- notably the
+    // report to unlock, which only the checkout event knows.
     const winner = await getGrantBySubscriptionId(params.subscriptionId);
-    if (winner) return winner;
+    if (winner) return ensureConciergerieGrant(params);
     throw err;
   }
 }

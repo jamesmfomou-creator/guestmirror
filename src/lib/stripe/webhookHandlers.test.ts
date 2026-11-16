@@ -238,6 +238,22 @@ describe("safety", () => {
     expect((await m.access.listGrantsByEmail("other@example.com")).length).toBe(before);
   });
 
+  it("a dispute arriving before the payment is recorded is retried later, not dropped", async () => {
+    const id = await report();
+    const early = event("charge.dispute.created", { payment_intent: "pi_early", status: "needs_response" });
+    const withLookup = { ...deps, retrievePaymentIntentMetadata: async () => ({ app: "guestmirror" }) };
+    await expect(m.handlers.handleStripeEvent(early, withLookup)).rejects.toBeInstanceOf(m.handlers.RetryLaterError);
+    // The checkout event then records and unlocks the payment...
+    await handle(event("checkout.session.completed", paymentSession({ offer: "one_time", analysisId: id, pi: "pi_early" })));
+    expect(await isUnlocked(id)).toBe(true);
+    // ...and Stripe's redelivery of the dispute now applies.
+    expect(await m.handlers.handleStripeEvent(early, withLookup)).toBe("dispute_opened_applied");
+    expect(await isUnlocked(id)).toBe(false);
+    // A payment that is not ours is still ignored.
+    const foreign = { ...deps, retrievePaymentIntentMetadata: async () => ({}) };
+    expect(await m.handlers.handleStripeEvent(event("charge.dispute.created", { payment_intent: "pi_other_biz" }), foreign)).toBe("ignored_not_guestmirror_or_subscription");
+  });
+
   it("legacy Plus renewals keep their original handling", async () => {
     expect(await handle(event("invoice.paid", invoice({ sub: "sub_legacy", start: 1, end: 2, price: LIVE.legacyPlus })))).toBe("legacy_plus_renewed");
     expect(await handle(event("invoice.paid", invoice({ sub: "sub_legacy", start: 1, end: 2, price: LIVE.legacyPlus, reason: "subscription_create" })))).toBe("legacy_plus_first_invoice");
