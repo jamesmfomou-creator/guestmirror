@@ -9,7 +9,6 @@ import { LandingCompareTeaser } from "@/components/landing/LandingCompareTeaser"
 import { WhatWeSee } from "@/components/landing/WhatWeSee";
 import { ReportMockup } from "@/components/landing/ReportMockup";
 import { SocialProof } from "@/components/landing/SocialProof";
-import { TestimonialsSection } from "@/components/landing/TestimonialsSection";
 import { ScrollingShowcase } from "@/components/landing/ScrollingShowcase";
 import { CaseStudiesCarousel } from "@/components/landing/CaseStudiesCarousel";
 import { getShowcaseItems } from "@/lib/showcase";
@@ -26,9 +25,9 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-// Social proof count and testimonials are real DB reads (see
-// SocialProof/TestimonialsSection) -- revalidate periodically instead of
-// on every request so the landing page stays effectively static.
+// The social proof count is a real DB read (see SocialProof) -- revalidate
+// periodically instead of on every request so the landing page stays
+// effectively static.
 export const revalidate = 3600;
 
 const CHECKS = [
@@ -207,7 +206,10 @@ export default async function LandingPage() {
         </Reveal>
       </section>
 
-      <TestimonialsSection />
+      {/* Testimonials section removed from the landing on the owner's request
+          (2026-11-16) while there is only one short testimonial. To bring it
+          back: render <TestimonialsSection /> here again (it still only shows
+          real, consented testimonials). */}
 
       {/* FAQ */}
       <section className="border-t border-border/70 py-20 sm:py-28">

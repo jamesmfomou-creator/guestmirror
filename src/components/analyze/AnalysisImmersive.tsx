@@ -201,6 +201,9 @@ export function AnalysisImmersive({
       <p className="mt-2 max-w-sm text-sm text-muted sm:text-base">
         Découvre comment ton annonce se présente aux voyageurs.
       </p>
+      {/* An honest expectation instead of a progress percentage: measured
+          analyses take about a minute (server total ~56-61 s). */}
+      {!done && <p className="mt-1.5 text-xs text-muted-2">Ça prend environ une minute.</p>}
 
       <div className="mt-7 w-full">
         {done ? (
