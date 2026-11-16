@@ -59,6 +59,25 @@ async function trackServerEvent(params: {
   }
   const priorMetadata = (priorEvent?.metadata as Record<string, unknown> | null) ?? null;
 
+  // Paywall presentation experiment (lib/paywallExperiment.ts): a payment
+  // belongs to the paywall that was on screen when checkout started. That
+  // is the latest checkout_started of this analysis, not its earliest
+  // event -- an analysis can be created in one browser and paid from
+  // another, each with its own assignment.
+  let paywallVariant: unknown = priorMetadata?.paywall_variant ?? null;
+  if (params.analysisId) {
+    const { data: checkoutEvent } = await supabase
+      .from("analytics_events")
+      .select("metadata")
+      .eq("analysis_id", params.analysisId)
+      .eq("event_name", "checkout_started")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const checkoutMetadata = (checkoutEvent?.metadata as Record<string, unknown> | null) ?? null;
+    paywallVariant = checkoutMetadata?.paywall_variant ?? paywallVariant;
+  }
+
   await supabase.from("analytics_events").insert({
     id: randomUUID(),
     event_name: params.eventName,
@@ -76,6 +95,7 @@ async function trackServerEvent(params: {
       // from the earliest client-side event tracked against this analysis
       // (e.g. aha_moment_viewed / free_result_viewed on first page view).
       ab_variant: priorMetadata?.ab_variant ?? null,
+      paywall_variant: paywallVariant,
       // Same idea for airbnb_url vs screenshot vs mixed (see
       // AnalyzeWizard's inputMethod()) -- lets /admin/analytics compare
       // payment_completed by method without a second lookup.

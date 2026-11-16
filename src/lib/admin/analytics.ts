@@ -9,6 +9,11 @@ import {
   ReliabilityStats,
   stepTimingRows,
 } from "./attemptStats";
+import {
+  computePaywallExperimentStats,
+  emptyPaywallExperimentStats,
+  type PaywallExperimentStats,
+} from "./paywallExperimentStats";
 
 export type Period = "today" | "7d" | "30d";
 
@@ -299,6 +304,9 @@ export interface AnalyticsDashboard {
   methodBreakdown: MethodBreakdown;
   userProfile: UserProfileStats;
   abTest: AbTestStats;
+  // Paywall presentation experiment (lib/paywallExperiment.ts), independent
+  // of abTest above. See lib/admin/paywallExperimentStats.ts.
+  paywallExperiment: PaywallExperimentStats;
   repeatUsage: {
     uniqueAnalysisUsers: number;
     totalAnalyses: number;
@@ -531,6 +539,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
       },
     },
     abTest: { A: emptyAbVariantStats(), B: emptyAbVariantStats() },
+    paywallExperiment: emptyPaywallExperimentStats(),
     pricing: {
       oneTimeOfferClicks: 0,
       plusOfferClicks: 0,
@@ -1086,6 +1095,12 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
 
   const abTest: AbTestStats = { A: computeAbVariantStats("A"), B: computeAbVariantStats("B") };
 
+  // ---- Paywall presentation experiment (control vs v2) ----
+  const paywallExperiment = computePaywallExperimentStats(rows, {
+    isPayment: isPaymentEvent,
+    revenueEur: paymentEventRevenueEur,
+  });
+
   // ---- Repeat usage + user list (all-time, from the analyses table itself) ----
   const perEmail = new Map<string, AnalysisRow[]>();
   for (const a of allAnalyses) {
@@ -1130,6 +1145,7 @@ export async function getAnalyticsDashboard(period: Period): Promise<AnalyticsDa
     methodBreakdown,
     userProfile,
     abTest,
+    paywallExperiment,
     repeatUsage: {
       uniqueAnalysisUsers,
       totalAnalyses,

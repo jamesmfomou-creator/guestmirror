@@ -8,6 +8,7 @@ import {
   ProfileSegmentStats,
   ErrorBreakdownRow,
 } from "@/lib/admin/analytics";
+import type { Proportion } from "@/lib/admin/paywallExperimentStats";
 import { listFeedback } from "@/lib/feedback";
 import { BRAND_NAME } from "@/lib/brand";
 
@@ -88,6 +89,14 @@ function eur(n: number): string {
 function seconds(n: number | null): string {
   if (n === null) return "—";
   return `${n.toFixed(1)}s`;
+}
+
+// "8 % (3–21 %) · 3/38": the observed share, its 95 % interval and the
+// raw counts, so a rate is never read without its sample size.
+function proportionLabel(p: Proportion): string {
+  if (p.rate === null || p.low === null || p.high === null) return "—";
+  const percent = (n: number) => Math.round(n * 100);
+  return `${percent(p.rate)} % (${percent(p.low)}–${percent(p.high)} %) · ${p.successes}/${p.trials}`;
 }
 
 function money(n: number | null): string {
@@ -621,6 +630,125 @@ export default async function AdminAnalyticsPage({
             </tbody>
           </table>
         </div>
+      </section>
+
+      {/* Paywall presentation experiment: control vs v2 */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Test paywall — contrôle vs v2</h2>
+        <p className="mt-1 text-sm text-muted-2">
+          Expérience indépendante du test A/B ci-dessus (un visiteur est dans A ou B, et séparément
+          dans « contrôle » ou « v2 »). Contrôle = page verrouillée d&apos;origine. v2 = aperçu
+          construit à partir des résultats de l&apos;analyse + bouton « Débloquer mes
+          recommandations — 4,90 € ». Chaque ligne compte des visiteurs distincts ; seuls les
+          événements portant une variante paywall sont comptés. Les fourchettes entre parenthèses
+          sont des intervalles de confiance à 95 %.
+        </p>
+        <p
+          className={`mt-3 rounded-xl px-4 py-3 text-sm ${
+            data.paywallExperiment.verdict === "difference"
+              ? "bg-accent-soft text-accent-hover"
+              : "bg-background-alt text-muted"
+          }`}
+        >
+          {data.paywallExperiment.verdict === "insufficient_data" &&
+            `Données insuffisantes pour conclure : il faut au moins ${data.paywallExperiment.minPaywallViewers} visiteurs ayant vu le paywall dans chaque variante (contrôle : ${data.paywallExperiment.control.paywallsViewed}, v2 : ${data.paywallExperiment.v2.paywallsViewed} sur la période). Les écarts ci-dessous sont des observations, pas des résultats.`}
+          {data.paywallExperiment.verdict === "inconclusive" &&
+            "Écart non concluant : les intervalles de confiance des deux variantes se chevauchent sur le taux de clic du paywall. L'écart observé peut être dû au hasard."}
+          {data.paywallExperiment.verdict === "difference" &&
+            "Écart net sur le taux de clic du paywall : les intervalles de confiance à 95 % des deux variantes ne se chevauchent pas. À confirmer sur les paiements, plus rares, avant de généraliser."}
+        </p>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Métrique</th>
+                <th className="px-4 py-2.5 font-medium">Contrôle</th>
+                <th className="px-4 py-2.5 font-medium">v2</th>
+              </tr>
+            </thead>
+            <tbody>
+              <AbRow label="Visiteurs assignés" a={data.paywallExperiment.control.visitors} b={data.paywallExperiment.v2.visitors} />
+              <AbRow label="Analyses complétées" a={data.paywallExperiment.control.analysesCompleted} b={data.paywallExperiment.v2.analysesCompleted} />
+              <AbRow label="Résultats vus (visiteurs exposés)" a={data.paywallExperiment.control.resultsViewed} b={data.paywallExperiment.v2.resultsViewed} />
+              <AbRow label="Aperçu verrouillé vu" a={data.paywallExperiment.control.previewsViewed} b={data.paywallExperiment.v2.previewsViewed} />
+              <AbRow label="Paywall vu" a={data.paywallExperiment.control.paywallsViewed} b={data.paywallExperiment.v2.paywallsViewed} />
+              <AbRow label="Clics sur une offre" a={data.paywallExperiment.control.unlockClicks} b={data.paywallExperiment.v2.unlockClicks} />
+              <AbRow label="Checkouts démarrés" a={data.paywallExperiment.control.checkoutsStarted} b={data.paywallExperiment.v2.checkoutsStarted} />
+              <AbRow label="Paiements" a={data.paywallExperiment.control.paymentsCompleted} b={data.paywallExperiment.v2.paymentsCompleted} />
+              <AbRow label="Revenue" a={eur(data.paywallExperiment.control.revenue)} b={eur(data.paywallExperiment.v2.revenue)} />
+              <AbRow
+                label="Clic offre / paywall vu (métrique principale)"
+                a={proportionLabel(data.paywallExperiment.control.unlockPerPaywallViewer)}
+                b={proportionLabel(data.paywallExperiment.v2.unlockPerPaywallViewer)}
+              />
+              <AbRow
+                label="Checkout / paywall vu"
+                a={proportionLabel(data.paywallExperiment.control.checkoutPerPaywallViewer)}
+                b={proportionLabel(data.paywallExperiment.v2.checkoutPerPaywallViewer)}
+              />
+              <AbRow
+                label="Paiement / visiteur exposé"
+                a={proportionLabel(data.paywallExperiment.control.paymentPerResultViewer)}
+                b={proportionLabel(data.paywallExperiment.v2.paymentPerResultViewer)}
+              />
+              <AbRow
+                label="Paiement / analyse terminée"
+                a={proportionLabel(data.paywallExperiment.control.paymentPerAnalysis)}
+                b={proportionLabel(data.paywallExperiment.v2.paymentPerAnalysis)}
+              />
+              <AbRow
+                label="Paiement / paywall vu"
+                a={proportionLabel(data.paywallExperiment.control.paymentPerPaywallViewer)}
+                b={proportionLabel(data.paywallExperiment.v2.paymentPerPaywallViewer)}
+              />
+              <AbRow
+                label="Revenue / visiteur exposé"
+                a={money(data.paywallExperiment.control.revenuePerResultViewer)}
+                b={money(data.paywallExperiment.v2.revenuePerResultViewer)}
+              />
+            </tbody>
+          </table>
+        </div>
+        <h3 className="mt-5 text-sm font-semibold">Croisement avec le test A/B</h3>
+        <div className="mt-2 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Cellule</th>
+                <th className="px-4 py-2.5 font-medium">Résultats vus</th>
+                <th className="px-4 py-2.5 font-medium">Paywall vu</th>
+                <th className="px-4 py-2.5 font-medium">Clics offre</th>
+                <th className="px-4 py-2.5 font-medium">Paiements</th>
+                <th className="px-4 py-2.5 font-medium">Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(["A", "B"] as const).flatMap((ab) =>
+                (["control", "v2"] as const).map((pw) => {
+                  const cell = data.paywallExperiment.byAbVariant[ab][pw];
+                  return (
+                    <tr key={`${ab}-${pw}`} className="border-b border-border last:border-0">
+                      <td className="px-4 py-2.5">
+                        Variante {ab} × {pw === "control" ? "contrôle" : "v2"}
+                      </td>
+                      <td className="px-4 py-2.5 font-medium tabular-nums">{cell.resultsViewed}</td>
+                      <td className="px-4 py-2.5 font-medium tabular-nums">{cell.paywallsViewed}</td>
+                      <td className="px-4 py-2.5 font-medium tabular-nums">{cell.unlockClicks}</td>
+                      <td className="px-4 py-2.5 font-medium tabular-nums">{cell.paymentsCompleted}</td>
+                      <td className="px-4 py-2.5 font-medium tabular-nums">{eur(cell.revenue)}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-xs text-muted-2">
+          Dans la variante B, le paywall de contrôle n&apos;apparaît qu&apos;après un clic sur
+          « Débloquer mon plan complet » ; en v2 il est affiché directement. « Paywall vu » n&apos;y
+          a donc pas la même signification : pour B, compare d&apos;abord « Paiement / visiteur
+          exposé ».
+        </p>
       </section>
 
       {/* Pricing: one-time vs Plus */}

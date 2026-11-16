@@ -1,5 +1,6 @@
 import { captureAttribution, getAnonymousId, getFirstTouch, getLastTouch, getSessionId } from "@/lib/tracking/identity";
 import { getAbVariant } from "@/lib/ab";
+import { getPaywallVariant } from "@/lib/paywallExperiment";
 
 /**
  * Full set of event names this app can emit. Exported as a plain array
@@ -125,6 +126,10 @@ export const ANALYTICS_EVENTS = [
   // against both tells apart "never rendered" from "rendered but never
   // scrolled into view."
   "paywall_mounted",
+  // Paywall presentation experiment (lib/paywallExperiment.ts), variant
+  // "v2" only: the summary built from the analysis' own results came into
+  // view. paywall_variant is attached to every event by track() below.
+  "paywall_preview_viewed",
   // Onboarding "objectif" question (funnel optimization mission, variant B
   // only -- see StepGoal.tsx). onboarding_completed fires once the user
   // continues past it (a choice is required, see StepGoal), right before
@@ -162,7 +167,9 @@ export function track(event: AnalyticsEvent, props?: Props) {
   // on a new event by omission. Old events predating this simply have no
   // ab_variant key, which admin/analytics's A/B section already accounts
   // for (it only counts events that carry one).
-  const enrichedProps: Props = { ...props, ab_variant: getAbVariant() };
+  // paywall_variant: same reasoning, for the paywall presentation
+  // experiment (lib/paywallExperiment.ts).
+  const enrichedProps: Props = { ...props, ab_variant: getAbVariant(), paywall_variant: getPaywallVariant() };
 
   try {
     window.posthog?.capture(event, enrichedProps);

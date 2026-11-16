@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AB_COOKIE_NAME } from "@/lib/ab";
+import { PAYWALL_COOKIE_NAME, drawPaywallVariant, isPaywallVariant } from "@/lib/paywallExperiment";
 
 /**
  * Gates /admin/* behind HTTP Basic Auth. Deliberately minimal -- this is a
@@ -30,25 +31,41 @@ function adminAuth(req: NextRequest): NextResponse {
   });
 }
 
+const EXPERIMENT_COOKIE_OPTIONS = {
+  maxAge: 60 * 60 * 24 * 365,
+  path: "/",
+  sameSite: "lax",
+} as const;
+
 /**
- * Assigns the "Aha moment" A/B test variant (see lib/ab.ts) on first visit
- * so it's available server-side from the very first render of
- * /result/[id] -- no flash, no client/server mismatch. A no-op once the
- * cookie already exists.
+ * Assigns, on first visit, the variant of each running experiment: the
+ * "Aha moment" A/B test (lib/ab.ts) and the paywall presentation test
+ * (lib/paywallExperiment.ts). The two draws are independent. A no-op once
+ * both cookies exist; an existing assignment is never redrawn.
+ *
+ * A new assignment is written twice: on the response, so the browser keeps
+ * it, and on the request forwarded to the page, so the render of this very
+ * request already reads it. Without the second write, a visitor whose first
+ * request is /result/[id] (a link opened in another browser, for instance)
+ * was rendered with the default variant while their cookie -- and so every
+ * event they sent -- said the other one.
  */
-function assignAbVariant(req: NextRequest): NextResponse {
-  const existing = req.cookies.get(AB_COOKIE_NAME)?.value;
-  if (existing === "A" || existing === "B") {
-    return NextResponse.next();
+function assignExperiments(req: NextRequest): NextResponse {
+  const assignments: { name: string; value: string }[] = [];
+
+  const ab = req.cookies.get(AB_COOKIE_NAME)?.value;
+  if (ab !== "A" && ab !== "B") {
+    assignments.push({ name: AB_COOKIE_NAME, value: Math.random() < 0.5 ? "A" : "B" });
+  }
+  if (!isPaywallVariant(req.cookies.get(PAYWALL_COOKIE_NAME)?.value)) {
+    assignments.push({ name: PAYWALL_COOKIE_NAME, value: drawPaywallVariant() });
   }
 
-  const variant = Math.random() < 0.5 ? "A" : "B";
-  const res = NextResponse.next();
-  res.cookies.set(AB_COOKIE_NAME, variant, {
-    maxAge: 60 * 60 * 24 * 365,
-    path: "/",
-    sameSite: "lax",
-  });
+  if (assignments.length === 0) return NextResponse.next();
+
+  for (const { name, value } of assignments) req.cookies.set(name, value);
+  const res = NextResponse.next({ request: { headers: req.headers } });
+  for (const { name, value } of assignments) res.cookies.set(name, value, EXPERIMENT_COOKIE_OPTIONS);
   return res;
 }
 
@@ -56,11 +73,11 @@ export function proxy(req: NextRequest) {
   if (req.nextUrl.pathname.startsWith("/admin")) {
     return adminAuth(req);
   }
-  return assignAbVariant(req);
+  return assignExperiments(req);
 }
 
 export const config = {
   // /admin/* for the Basic Auth gate; everything else except API routes
-  // and static assets for the A/B cookie assignment.
+  // and static assets for the experiment cookie assignment.
   matcher: ["/admin/:path*", "/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
 };

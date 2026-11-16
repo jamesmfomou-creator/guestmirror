@@ -7,6 +7,8 @@ import { track } from "@/lib/analytics";
 import { getAbVariant } from "@/lib/ab";
 import { useInViewOnce } from "@/lib/tracking/useInViewOnce";
 import { UserType, PropertyCountRange } from "@/lib/types";
+import type { PaywallPreview } from "@/lib/paywallPreview";
+import { PaywallPreviewV2 } from "./PaywallPreviewV2";
 
 const PLAN_PRICES: Record<Plan, number | null> = { one_time: 4.9, plus: 6.9, lifetime: null };
 
@@ -34,6 +36,8 @@ export function Paywall({
   lifetimePriceLabel,
   userType,
   propertyCountRange,
+  preview,
+  emailsReportLink,
 }: {
   analysisId: string;
   canceled?: boolean;
@@ -42,6 +46,12 @@ export function Paywall({
   lifetimePriceLabel?: string | null;
   userType?: UserType | null;
   propertyCountRange?: PropertyCountRange | null;
+  // Paywall presentation experiment (lib/paywallExperiment.ts). Passed only
+  // to visitors in its "v2" variant; when absent, this component renders
+  // exactly what it did before the experiment (the control). Names and
+  // counts only -- see lib/paywallPreview.ts.
+  preview?: PaywallPreview;
+  emailsReportLink?: boolean;
 }) {
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,27 +128,40 @@ export function Paywall({
 
   return (
     <div ref={ref} id="paywall" className="mx-auto mt-6 max-w-3xl scroll-mt-20">
-      <div className="text-center">
-        <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          {abVariant === "B" ? "Passe du diagnostic à l'action." : "Débloque ton analyse complète"}
-        </h2>
-        <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
-          {abVariant === "B"
-            ? "Découvre les points faibles de ton annonce et les recommandations concrètes pour l'améliorer."
-            : "Découvre exactement quoi améliorer sur ton annonce."}
-        </p>
-      </div>
+      {preview ? (
+        <PaywallPreviewV2
+          analysisId={analysisId}
+          preview={preview}
+          emailsReportLink={emailsReportLink === true}
+          loading={loadingPlan === "one_time"}
+          disabled={loadingPlan !== null}
+          onUnlock={() => handleSelect("one_time")}
+        />
+      ) : (
+        <>
+          <div className="text-center">
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              {abVariant === "B" ? "Passe du diagnostic à l'action." : "Débloque ton analyse complète"}
+            </h2>
+            <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
+              {abVariant === "B"
+                ? "Découvre les points faibles de ton annonce et les recommandations concrètes pour l'améliorer."
+                : "Découvre exactement quoi améliorer sur ton annonce."}
+            </p>
+          </div>
 
-      <ul className="card mx-auto mt-6 grid max-w-xl gap-2.5 p-5 text-sm text-foreground sm:grid-cols-2">
-        {UNLOCK_BENEFITS.map((benefit) => (
-          <li key={benefit} className="flex items-start gap-2.5">
-            <span aria-hidden="true" className="mt-0.5 font-semibold text-accent-hover">
-              ✓
-            </span>
-            <span>{benefit}</span>
-          </li>
-        ))}
-      </ul>
+          <ul className="card mx-auto mt-6 grid max-w-xl gap-2.5 p-5 text-sm text-foreground sm:grid-cols-2">
+            {UNLOCK_BENEFITS.map((benefit) => (
+              <li key={benefit} className="flex items-start gap-2.5">
+                <span aria-hidden="true" className="mt-0.5 font-semibold text-accent-hover">
+                  ✓
+                </span>
+                <span>{benefit}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
 
       {canceled && (
         <p className="mx-auto mt-5 max-w-md rounded-xl bg-score-mid/10 px-4 py-3 text-center text-sm text-score-mid">
@@ -151,7 +174,12 @@ export function Paywall({
         </p>
       )}
 
-      <div className="mt-7">
+      {preview && (
+        <p className="mt-10 text-center text-sm font-semibold text-foreground">
+          Toutes les formules
+        </p>
+      )}
+      <div className={preview ? "mt-4" : "mt-7"}>
         <PricingCards
           lifetimePriceLabel={lifetimePriceLabel ?? null}
           showConciergeBanner={showConciergeBanner}
@@ -164,7 +192,11 @@ export function Paywall({
               onClick={() => handleSelect("one_time")}
               disabled={loadingPlan !== null}
             >
-              {loadingPlan === "one_time" ? "Redirection…" : "Débloquer mon analyse complète — 4,90 €"}
+              {loadingPlan === "one_time"
+                ? "Redirection…"
+                : preview
+                  ? "Débloquer mes recommandations — 4,90 €"
+                  : "Débloquer mon analyse complète — 4,90 €"}
             </Button>
           }
           plusAction={

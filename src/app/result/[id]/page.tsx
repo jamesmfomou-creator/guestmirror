@@ -35,6 +35,9 @@ import { getLifetimePriceLabel } from "@/lib/lifetimePrice";
 import { PostPurchaseFeedback } from "@/components/result/PostPurchaseFeedback";
 import { IncompleteResultNotice } from "@/components/result/IncompleteResultNotice";
 import { isIncompleteResult } from "@/lib/resultShape";
+import { getPaywallVariantServer } from "@/lib/paywallExperiment-server";
+import { buildPaywallPreview } from "@/lib/paywallPreview";
+import { EMAIL_CONFIGURED } from "@/lib/env";
 
 export const metadata: Metadata = {
   title: `Ton ${BRAND_NAME}`,
@@ -75,6 +78,15 @@ export default async function ResultPage({
     (await getInputMethodForAnalysis(id)) ??
     (analysis.listing_url ? (analysis.images.length > 0 ? "mixed" : "airbnb_url") : "screenshot");
   const lifetimePriceLabel = await getLifetimePriceLabel();
+
+  // Paywall presentation experiment (lib/paywallExperiment.ts), independent
+  // of the A/B variant above. null = control: the page below renders as it
+  // did before the experiment. The preview holds names and counts only, and
+  // is built only for a visitor who is about to see the paywall.
+  const paywallVariant = await getPaywallVariantServer();
+  const paywallPreview =
+    paywallVariant === "v2" && !unlocked && !incomplete ? buildPaywallPreview(analysis.result) : null;
+  const emailsReportLink = EMAIL_CONFIGURED && Boolean(analysis.email);
 
   const previous = analysis.previous_analysis_id
     ? await getAnalysis(analysis.previous_analysis_id)
@@ -162,8 +174,14 @@ export default async function ResultPage({
             userType={analysis.user_type}
             propertyCountRange={analysis.property_count_range}
           />
-          <LockedTeaser count={lockedRecommendationCount(analysis.result)} analysisId={id} />
-          <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />
+          {paywallPreview ? (
+            <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} />
+          ) : (
+            <>
+              <LockedTeaser count={lockedRecommendationCount(analysis.result)} analysisId={id} />
+              <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />
+            </>
+          )}
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
             {analysis.result.disclaimer}
           </p>
@@ -173,9 +191,13 @@ export default async function ResultPage({
 
       {!unlocked && !incomplete && variant === "B" && (
         <>
-          <LockedPreviewB analysisId={id} count={lockedRecommendationCount(analysis.result)}>
-            <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />
-          </LockedPreviewB>
+          {paywallPreview ? (
+            <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} />
+          ) : (
+            <LockedPreviewB analysisId={id} count={lockedRecommendationCount(analysis.result)}>
+              <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} lifetimePriceLabel={lifetimePriceLabel} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />
+            </LockedPreviewB>
+          )}
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
             {analysis.result.disclaimer}
           </p>
