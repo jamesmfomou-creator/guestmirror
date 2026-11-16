@@ -8,6 +8,9 @@ import { StepEmail } from "./StepEmail";
 import { StepGoal } from "./StepGoal";
 import { StepAnalyzing } from "./StepAnalyzing";
 import { AnalysisAhaFlow } from "./AnalysisAhaFlow";
+import { AnalysisImmersive, type ListingPreviewState, type VisualStartedInfo } from "./AnalysisImmersive";
+import { getLoaderVariant } from "@/lib/loaderExperiment";
+import { parseListingPreview } from "@/lib/listingPreview";
 import { PendingImage, fileToBase64 } from "@/lib/files";
 import { track } from "@/lib/analytics";
 import { getAbVariant } from "@/lib/ab";
@@ -161,7 +164,17 @@ export function AnalyzeWizard() {
   // Assigned once per visitor (persisted, see lib/ab.ts) and read once per
   // mount -- never re-rolled mid-session.
   const [abVariant] = useState(() => getAbVariant());
+  // Analysis loader experiment (lib/loaderExperiment.ts): read once per
+  // mount, never assigned here (proxy.ts does that).
+  const [loaderVariant] = useState(() => getLoaderVariant());
   const pendingResult = useRef<AnalyzeResponse | null>(null);
+  // The visitor's own listing for the immersive loader, fetched as soon as
+  // the link is submitted so it is ready when the wait starts. Never sent to
+  // /api/analyze, which reads the listing itself.
+  const [listingPreview, setListingPreview] = useState<ListingPreviewState>({ status: "idle" });
+  const previewRequest = useRef<{ url: string; controller: AbortController } | null>(null);
+  const loaderViewedAt = useRef<number | null>(null);
+  const abandonTrackedFor = useRef<string | null>(null);
 
   const previousAnalysisId = searchParams.get("previous");
   // Free-trial link (see api/analyze/route.ts) -- read once, never
@@ -204,12 +217,45 @@ export function AnalyzeWizard() {
     setImages((prev) => prev.filter((i) => i.id !== id));
   }
 
+  /**
+   * Immersive loader only: fetch the listing's title, description lines and
+   * photos (/api/listing-preview) while the visitor answers the onboarding.
+   * Once per link; a changed link aborts the previous request. Failure is a
+   * normal outcome: the loader then shows its no-photo state.
+   */
+  function prefetchListingPreview(rawUrl: string) {
+    const trimmedUrl = rawUrl.trim();
+    if (loaderVariant !== "immersive" || !isAirbnbUrl(trimmedUrl)) return;
+    if (previewRequest.current?.url === trimmedUrl) return;
+    previewRequest.current?.controller.abort();
+    const controller = new AbortController();
+    previewRequest.current = { url: trimmedUrl, controller };
+    setListingPreview({ status: "loading" });
+    fetch("/api/listing-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: trimmedUrl }),
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        const json = (await res.json()) as { ok?: boolean; preview?: unknown };
+        if (previewRequest.current?.controller !== controller) return;
+        const preview = json.ok ? parseListingPreview(json.preview) : null;
+        setListingPreview(preview ? { status: "ready", preview } : { status: "unavailable" });
+      })
+      .catch(() => {
+        if (controller.signal.aborted || previewRequest.current?.controller !== controller) return;
+        setListingPreview({ status: "unavailable" });
+      });
+  }
+
   function goToProfile() {
     const trimmedUrl = url.trim();
     if (trimmedUrl && images.length === 0 && !isAirbnbUrl(trimmedUrl)) {
       setError("Ce lien Airbnb ne semble pas valide.");
       return;
     }
+    if (trimmedUrl) prefetchListingPreview(trimmedUrl);
     setStep("profile");
   }
 
@@ -380,7 +426,7 @@ export function AnalyzeWizard() {
     activeRequest.current?.abort();
 
     setAnalysisDone(true);
-    if (abVariant === "B") {
+    if (abVariant === "B" || loaderVariant === "immersive") {
       // AnalysisAhaFlow drives its own short "Ta première impression est
       // prête." beat once `done` flips true, then calls onTransitionEnd.
       pendingResult.current = json;
@@ -732,6 +778,14 @@ export function AnalyzeWizard() {
         ...clientContext(),
       });
     }
+    loaderViewedAt.current = Date.now();
+    if (url.trim()) prefetchListingPreview(url);
+    track("analysis_loader_viewed", {
+      attemptId: attemptId.current,
+      loader: loaderVariant === "immersive" ? "immersive" : abVariant === "B" ? "aha_flow" : "step_analyzing",
+      input_method: method,
+      preview_status: loaderVariant === "immersive" ? (url.trim() ? listingPreview.status : "screenshots") : null,
+    });
     track("analysis_started", {
       attemptId: attemptId.current,
       image_count: images.length,
@@ -775,11 +829,27 @@ export function AnalyzeWizard() {
     function onOnline() {
       if (recovery.current.active && !finished.current) latest.current.checkStatus("online");
     }
+    // Leaving the page while the analysis still runs. Tentative by
+    // definition (see analytics.ts): the dashboard only counts it as an
+    // abandonment if the same attempt never completed or failed afterwards.
+    function onPageHide() {
+      const id = attemptId.current;
+      const waiting = latest.current.inFlight || recovery.current.active;
+      if (!id || !waiting || finished.current || abandonTrackedFor.current === id) return;
+      abandonTrackedFor.current = id;
+      track("analysis_loader_abandoned", {
+        attemptId: id,
+        tentative: true,
+        elapsed_ms: loaderViewedAt.current != null ? Date.now() - loaderViewedAt.current : null,
+      });
+    }
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("online", onOnline);
+    window.addEventListener("pagehide", onPageHide);
     return () => {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("online", onOnline);
+      window.removeEventListener("pagehide", onPageHide);
       if (pollTimer.current) clearTimeout(pollTimer.current);
       wakeLock.current?.release().catch(() => {});
     };
@@ -794,7 +864,32 @@ export function AnalyzeWizard() {
   }
 
   function handleTransitionEnd() {
-    if (pendingResult.current) finishAndRedirect(pendingResult.current);
+    if (!pendingResult.current) return;
+    if (loaderVariant === "immersive") {
+      // End of the visual sequence -- distinct from analysis_completed (the
+      // real end of the processing), which finishAndRedirect fires next.
+      // Deliberately WITHOUT analysisId: the Stripe webhook attributes a
+      // payment from the earliest event carrying the analysis id, which must
+      // stay analysis_completed (it carries input method and profile).
+      track("analysis_visual_completed", {
+        attemptId: attemptId.current,
+        visual_ms: loaderViewedAt.current != null ? Date.now() - loaderViewedAt.current : null,
+      });
+    }
+    finishAndRedirect(pendingResult.current);
+  }
+
+  function handleVisualStarted(info: VisualStartedInfo) {
+    const preview = listingPreview.status === "ready" ? listingPreview.preview : null;
+    track("analysis_visual_started", {
+      attemptId: attemptId.current,
+      first_element: info.first_element,
+      preview_status: url.trim() ? listingPreview.status : "screenshots",
+      photo_count: preview ? preview.imageUrls.length : images.length,
+      has_title: Boolean(preview?.title),
+      description_lines: preview?.descriptionLines.length ?? 0,
+      ms_since_loader: loaderViewedAt.current != null ? Date.now() - loaderViewedAt.current : null,
+    });
   }
 
   return (
@@ -849,7 +944,23 @@ export function AnalyzeWizard() {
       {step === "goal" && (
         <StepGoal goal={goal} onSelect={handleSelectGoal} onContinue={handleGoalContinue} error={apiError} />
       )}
-      {step === "analyzing" && abVariant === "B" && (
+      {step === "analyzing" && loaderVariant === "immersive" && (
+        <AnalysisImmersive
+          done={analysisDone}
+          preview={
+            url.trim()
+              ? listingPreview.status === "idle"
+                ? { status: "unavailable" }
+                : listingPreview
+              : { status: "idle" }
+          }
+          screenshotUrls={images.map((img) => img.previewUrl)}
+          onVisualStarted={handleVisualStarted}
+          onFinalizing={handleFinalizing}
+          onTransitionEnd={handleTransitionEnd}
+        />
+      )}
+      {step === "analyzing" && loaderVariant !== "immersive" && abVariant === "B" && (
         <AnalysisAhaFlow
           done={analysisDone}
           imageUrl={images[0]?.previewUrl}
@@ -858,7 +969,7 @@ export function AnalyzeWizard() {
           onTransitionEnd={handleTransitionEnd}
         />
       )}
-      {step === "analyzing" && abVariant === "A" && (
+      {step === "analyzing" && loaderVariant !== "immersive" && abVariant === "A" && (
         <StepAnalyzing done={analysisDone} onFinalizing={handleFinalizing} />
       )}
     </div>

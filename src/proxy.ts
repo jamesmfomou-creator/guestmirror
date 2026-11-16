@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AB_COOKIE_NAME } from "@/lib/ab";
 import { PAYWALL_COOKIE_NAME, drawPaywallVariant, isPaywallVariant } from "@/lib/paywallExperiment";
+import { LOADER_COOKIE_NAME, drawLoaderVariant, isLoaderVariant } from "@/lib/loaderExperiment";
 
 /**
  * Gates /admin/* behind HTTP Basic Auth. Deliberately minimal -- this is a
@@ -39,9 +40,10 @@ const EXPERIMENT_COOKIE_OPTIONS = {
 
 /**
  * Assigns, on first visit, the variant of each running experiment: the
- * "Aha moment" A/B test (lib/ab.ts) and the paywall presentation test
- * (lib/paywallExperiment.ts). The two draws are independent. A no-op once
- * both cookies exist; an existing assignment is never redrawn.
+ * "Aha moment" A/B test (lib/ab.ts), the paywall presentation test
+ * (lib/paywallExperiment.ts) and the analysis loader test
+ * (lib/loaderExperiment.ts). The draws are independent. A no-op once every
+ * cookie exists; an existing assignment is never redrawn.
  *
  * A new assignment is written twice: on the response, so the browser keeps
  * it, and on the request forwarded to the page, so the render of this very
@@ -59,6 +61,9 @@ function assignExperiments(req: NextRequest): NextResponse {
   }
   if (!isPaywallVariant(req.cookies.get(PAYWALL_COOKIE_NAME)?.value)) {
     assignments.push({ name: PAYWALL_COOKIE_NAME, value: drawPaywallVariant() });
+  }
+  if (!isLoaderVariant(req.cookies.get(LOADER_COOKIE_NAME)?.value)) {
+    assignments.push({ name: LOADER_COOKIE_NAME, value: drawLoaderVariant() });
   }
 
   if (assignments.length === 0) return NextResponse.next();
