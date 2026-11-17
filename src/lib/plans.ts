@@ -107,12 +107,11 @@ export const ADDON_PACK = {
 /**
  * One-time price of the pack, per Stripe mode. null = the add-on is not
  * offered in that mode (the Conciergerie checkout then works exactly as
- * before). Live: the price created 2026-11-16 on prod_VdmZepPKQfMtlZ is
- * RECURRING (monthly) and must never be used here; set the id of a ONE-TIME
- * 12,90 € price on that product.
+ * before). Never use the archived recurring price price_1UcV0Z… (monthly).
  */
 const ADDON_PACK_PRICES: Record<StripeMode, string | null> = {
-  live: null,
+  // prod_VdmZepPKQfMtlZ, one-time 12,90 € TTC (verified 2026-11-17).
+  live: "price_1UciXzAV5mFz3N4JBykiNjyx",
   // Created in Stripe test mode (2026-11-17), one-time 12,90 € TTC.
   test: "price_1UcbgMAV5mFz3N4J1lsmELos",
 };

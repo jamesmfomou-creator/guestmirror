@@ -113,7 +113,8 @@ describe("catalogue", () => {
   it("only the one-time price is the pack; the recurring live price never is", () => {
     expect(m.plans.isAddonPackPrice(PACK)).toBe(true);
     expect(m.plans.isAddonPackPrice(RECURRING_PACK_LIVE)).toBe(false);
-    expect(m.plans.addonPackPriceId("live")).toBeNull();
+    expect(m.plans.addonPackPriceId("live")).toBe("price_1UciXzAV5mFz3N4JBykiNjyx");
+    expect(m.plans.isAddonPackPrice("price_1UciXzAV5mFz3N4JBykiNjyx")).toBe(true);
     expect(m.plans.classifyPrice(PACK)).toBeNull(); // not an offer: never unlocks a report on its own
   });
 });
