@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { OnboardingProgress } from "./OnboardingUI";
 import { StepImport } from "./StepImport";
 import { StepProfile } from "./StepProfile";
 import { StepEmail } from "./StepEmail";
@@ -892,10 +893,32 @@ export function AnalyzeWizard() {
     });
   }
 
+  // Onboarding progress (the loader keeps its own layout, untouched).
+  const onboardingSteps: { id: Step; label: string }[] = [
+    { id: "import", label: "Ton annonce" },
+    { id: "profile", label: "Ton profil" },
+    { id: "email", label: "Ton email" },
+    ...(abVariant === "B" ? [{ id: "goal" as Step, label: "Ton objectif" }] : []),
+  ];
+  const onboardingIndex = onboardingSteps.findIndex((s) => s.id === step);
+
   return (
-    <div className="mx-auto max-w-lg px-5 py-12 sm:py-16">
+    <div className={step === "analyzing" ? "mx-auto max-w-lg px-5 py-12 sm:py-16" : "relative isolate"}>
+      {step !== "analyzing" && (
+        <>
+          <div aria-hidden className="hero-grid pointer-events-none absolute inset-x-0 -top-24 -z-10 h-[620px]" />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-56 left-1/2 -z-10 h-[520px] w-[min(900px,140vw)] -translate-x-1/2 rounded-full bg-accent/[0.08] blur-[120px]"
+          />
+        </>
+      )}
+      <div className={step === "analyzing" ? undefined : "mx-auto max-w-xl px-5 pt-10 pb-20 sm:pt-16 sm:pb-28"}>
+      {step !== "analyzing" && onboardingIndex >= 0 && (
+        <OnboardingProgress steps={onboardingSteps.map((s) => s.label)} current={onboardingIndex} />
+      )}
       {previousAnalysisId && step !== "analyzing" && (
-        <div className="mb-6 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-hover">
+        <div className="mb-6 rounded-2xl border border-accent/20 bg-accent-soft px-4 py-3 text-sm text-accent-hover">
           Nouvelle analyse après modifications — on comparera ton nouveau {BRAND_NAME} à
           l&apos;ancien.
         </div>
@@ -972,6 +995,7 @@ export function AnalyzeWizard() {
       {step === "analyzing" && loaderVariant !== "immersive" && abVariant === "A" && (
         <StepAnalyzing done={analysisDone} onFinalizing={handleFinalizing} />
       )}
+      </div>
     </div>
   );
 }

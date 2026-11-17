@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { track } from "@/lib/analytics";
 import { Goal } from "@/lib/types";
+import { ErrorNote, OnboardingHeading, OptionTile } from "./OnboardingUI";
 
 const GOAL_OPTIONS: { value: Goal; label: string }[] = [
   { value: "improve_appeal", label: "Améliorer mon annonce pour donner davantage envie de réserver." },
@@ -40,34 +41,31 @@ export function StepGoal({
 
   return (
     <div className="animate-fade-up">
-      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-        Quel est ton objectif avec cette annonce ?
-      </h1>
-      <p className="mt-3 text-muted">Pour mieux comprendre tes priorités.</p>
+      <OnboardingHeading
+        title={
+          <>
+            Quel est ton objectif avec <em>cette annonce</em> ?
+          </>
+        }
+        description="Pour mieux comprendre tes priorités."
+      />
 
-      <div className="mt-8 space-y-2.5">
+      <div className="mt-9 space-y-2.5">
         {GOAL_OPTIONS.map((opt) => (
-          <button
+          <OptionTile
             key={opt.value}
-            type="button"
+            selected={goal === opt.value}
             onClick={() => onSelect(opt.value)}
-            aria-pressed={goal === opt.value}
-            className={`w-full rounded-2xl border px-5 py-4 text-left text-[15px] font-medium transition-colors ${
-              goal === opt.value
-                ? "border-accent bg-accent-soft text-accent-hover"
-                : "border-border bg-card text-foreground hover:border-accent/50"
-            }`}
+            className="px-5 py-4"
           >
             {opt.label}
-          </button>
+          </OptionTile>
         ))}
       </div>
 
-      {error && (
-        <p className="mt-4 rounded-xl bg-score-low/10 px-4 py-3 text-sm text-score-low">{error}</p>
-      )}
+      {error && <ErrorNote>{error}</ErrorNote>}
 
-      <Button size="lg" className="mt-6 w-full" onClick={onContinue} disabled={!goal}>
+      <Button size="lg" className="btn-sheen mt-8 w-full sm:w-full" onClick={onContinue} disabled={!goal}>
         Continuer vers mon diagnostic →
       </Button>
     </div>

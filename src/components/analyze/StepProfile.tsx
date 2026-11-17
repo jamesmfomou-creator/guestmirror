@@ -1,7 +1,9 @@
 "use client";
 
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { UserType, PropertyCountRange } from "@/lib/types";
+import { OnboardingHeading, OptionTile, Surface } from "./OnboardingUI";
 
 const PROPERTY_COUNT_OPTIONS: { value: PropertyCountRange; label: string }[] = [
   { value: "1", label: "1 logement" },
@@ -38,58 +40,49 @@ export function StepProfile({
 }) {
   return (
     <div className="animate-fade-up">
-      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-        Une dernière chose avant ton analyse
-      </h1>
-      <p className="mt-3 text-muted">Ça nous aide à améliorer GuestMirror. Facultatif.</p>
+      <OnboardingHeading
+        title={
+          <>
+            Une dernière chose <em>avant ton analyse</em>
+          </>
+        }
+        description="Ça nous aide à améliorer GuestMirror. Facultatif."
+      />
 
-      <div className="card mt-8 p-6 sm:p-7">
-        <p className="text-sm font-medium text-foreground">Combien de logements Airbnb gères-tu ?</p>
+      <Surface className="mt-9">
+        <p className="text-[16px] font-semibold tracking-tight text-foreground">Combien de logements Airbnb gères-tu ?</p>
         <div className="mt-4 grid grid-cols-2 gap-2.5">
           {PROPERTY_COUNT_OPTIONS.map((opt) => (
-            <button
+            <OptionTile
               key={opt.value}
-              type="button"
+              selected={propertyCountRange === opt.value}
               onClick={() => onSelectPropertyCountRange(opt.value)}
-              className={`rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
-                propertyCountRange === opt.value
-                  ? "border-accent bg-accent-soft text-accent-hover"
-                  : "border-border text-foreground hover:border-accent/50"
-              }`}
             >
               {opt.label}
-            </button>
+            </OptionTile>
           ))}
         </div>
-      </div>
+      </Surface>
 
-      <div className="card mt-5 p-6 sm:p-7">
-        <p className="text-sm font-medium text-foreground">Tu es :</p>
+      <Surface className="mt-4">
+        <p className="text-[16px] font-semibold tracking-tight text-foreground">Tu es :</p>
         <div className="mt-4 grid grid-cols-2 gap-2.5">
           {USER_TYPE_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => onSelectUserType(opt.value)}
-              className={`rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
-                userType === opt.value
-                  ? "border-accent bg-accent-soft text-accent-hover"
-                  : "border-border text-foreground hover:border-accent/50"
-              }`}
-            >
+            <OptionTile key={opt.value} selected={userType === opt.value} onClick={() => onSelectUserType(opt.value)}>
               {opt.label}
-            </button>
+            </OptionTile>
           ))}
         </div>
-      </div>
+      </Surface>
 
-      <Button size="lg" className="mt-6 w-full" onClick={onContinue}>
+      <Button size="lg" className="btn-sheen group mt-8 w-full sm:w-full" onClick={onContinue}>
         Continuer
+        <ArrowRight aria-hidden size={18} className="transition-transform duration-300 group-hover:translate-x-0.5" />
       </Button>
       <button
         type="button"
         onClick={onContinue}
-        className="mt-3 w-full text-center text-sm font-medium text-muted transition-opacity hover:opacity-70"
+        className="mt-4 w-full text-center text-sm font-medium text-muted underline-offset-4 transition-colors hover:text-foreground hover:underline"
       >
         Passer cette étape
       </button>
