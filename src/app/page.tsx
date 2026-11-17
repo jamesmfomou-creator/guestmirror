@@ -78,7 +78,8 @@ export default async function LandingPage() {
           className="pointer-events-none absolute -top-48 left-1/2 h-[560px] w-[min(1000px,140vw)] -translate-x-1/2 rounded-full bg-accent/[0.09] blur-[120px]"
         />
         <div className="relative mx-auto grid max-w-6xl items-center gap-16 px-5 pt-14 pb-20 sm:pt-20 lg:grid-cols-[1.12fr_1fr] lg:gap-10 lg:pt-24 lg:pb-28">
-          <div>
+          {/* Centred on mobile, left-aligned from lg (desktop layout unchanged). */}
+          <div className="flex flex-col items-center text-center lg:block lg:text-left">
             <Reveal y={8}>
               <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card/70 px-3.5 py-2 text-[12.5px] backdrop-blur sm:gap-2 sm:px-4 sm:text-[14px]">
                 <span className="font-bold tracking-tight text-foreground uppercase">Diagnostic IA</span>
@@ -93,18 +94,18 @@ export default async function LandingPage() {
             />
 
             <Reveal delay={0.35}>
-              <p className="mt-7 max-w-lg text-pretty text-lg leading-relaxed text-muted">
+              <p className="mx-auto mt-7 max-w-lg text-pretty text-lg leading-relaxed text-muted lg:mx-0">
                 Colle ton lien Airbnb. {BRAND_NAME} analyse ton annonce, identifie ses points faibles et
                 te montre comment l&apos;améliorer.
               </p>
             </Reveal>
 
-            <Reveal delay={0.45} className="mt-9">
+            <Reveal delay={0.45} className="mt-9 flex w-full justify-center lg:block">
               <HeroForm />
             </Reveal>
 
-            <Reveal delay={0.55} className="mt-9 flex flex-col gap-5">
-              <ul className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] text-muted">
+            <Reveal delay={0.55} className="mt-9 flex flex-col items-center gap-5 lg:items-start">
+              <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[13px] text-muted lg:justify-start">
                 {CHECKS.map((c) => (
                   <li key={c} className="inline-flex items-center gap-2">
                     <span aria-hidden className="h-1 w-1 rounded-full bg-accent" />
@@ -112,7 +113,7 @@ export default async function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <div className="flex flex-wrap items-center gap-4">
+              <div className="flex flex-wrap items-center justify-center gap-4 lg:justify-start">
                 <SocialProof />
                 <a
                   href="#methode"

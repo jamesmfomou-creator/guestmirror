@@ -17,6 +17,7 @@ export function StepImport({
   onContinue,
   canContinue,
   error,
+  continueLabel = "Continuer",
 }: {
   url: string;
   onUrlChange: (v: string) => void;
@@ -26,6 +27,7 @@ export function StepImport({
   onContinue: () => void;
   canContinue: boolean;
   error?: string | null;
+  continueLabel?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -134,7 +136,7 @@ export function StepImport({
       {error && <ErrorNote>{error}</ErrorNote>}
 
       <Button size="lg" className="btn-sheen group mt-8 w-full sm:w-full" onClick={onContinue} disabled={!canContinue}>
-        Continuer
+        {continueLabel}
         <ArrowRight aria-hidden size={18} className="transition-transform duration-300 group-hover:translate-x-0.5" />
       </Button>
     </div>
