@@ -31,6 +31,7 @@ import { BRAND_NAME } from "@/lib/brand";
 import { getAccessForEmail } from "@/lib/access/reportAccess";
 import { AccessPanel, BuyAddonButton } from "@/components/result/AccessPanel";
 import { ADDON_PACK, addonPackAvailable } from "@/lib/plans";
+import { isDirectLinkReport } from "@/lib/contentLink";
 import { PaymentPending } from "@/components/result/PaymentPending";
 import type { FeedbackPlan } from "@/lib/feedback";
 import { getAbVariantServer } from "@/lib/ab-server";
@@ -324,7 +325,7 @@ export default async function ResultPage({
           unlocked for free, no payment -- once they've seen the full
           report, propose Lifetime as the natural next step. Never shown
           to a real Plus/Lifetime subscriber (nothing to upsell there). */}
-      {unlocked && analysis.promo_code && !access.unlimited && !access.conciergerie && (
+      {unlocked && analysis.promo_code && !isDirectLinkReport(analysis.email) && !access.unlimited && !access.conciergerie && (
         <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-accent/30 bg-accent-soft px-5 py-4 text-center">
           <p className="text-sm font-medium text-accent-hover">
             🎁 Cette analyse t&apos;a été offerte par {BRAND_NAME}.

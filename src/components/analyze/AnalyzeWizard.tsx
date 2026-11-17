@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { OnboardingProgress } from "./OnboardingUI";
+import { DIRECT_LINK_EMAIL } from "@/lib/contentLink";
 import { StepImport } from "./StepImport";
 import { StepProfile } from "./StepProfile";
 import { StepEmail } from "./StepEmail";
@@ -181,6 +182,12 @@ export function AnalyzeWizard() {
   // Free-trial link (see api/analyze/route.ts) -- read once, never
   // re-checked against searchParams again, same as previousAnalysisId.
   const promoCode = searchParams.get("promo");
+  // Content link (/analyze?promo=<code>&direct=1): straight from the listing
+  // to the analysis -- no profile, email or goal step. Only honoured with a
+  // promo code, so the normal funnel never loses its email step. The report
+  // is filed under one internal address instead of a visitor's email.
+  const directMode = Boolean(promoCode) && searchParams.get("direct") === "1";
+  const submitEmail = () => (directMode ? DIRECT_LINK_EMAIL : email.trim());
   const urlStartedTracked = useRef(false);
 
   function inputMethod(): "airbnb_url" | "screenshot" | "mixed" {
@@ -257,6 +264,12 @@ export function AnalyzeWizard() {
       return;
     }
     if (trimmedUrl) prefetchListingPreview(trimmedUrl);
+    if (directMode) {
+      const method = inputMethod();
+      track("listing_input_submitted", { image_count: images.length, input_method: method, direct_link: true });
+      void runAnalysis();
+      return;
+    }
     setStep("profile");
   }
 
@@ -343,7 +356,7 @@ export function AnalyzeWizard() {
     return JSON.stringify([
       url.trim(),
       images.map((i) => i.id),
-      email.trim().toLowerCase(),
+      submitEmail().toLowerCase(),
       goal,
       userType,
       propertyCountRange,
@@ -642,7 +655,7 @@ export function AnalyzeWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           listing_url: url.trim() || null,
-          email: email.trim(),
+          email: submitEmail(),
           attempt_id: attemptId.current,
           city: null,
           property_type: null,
@@ -907,7 +920,7 @@ export function AnalyzeWizard() {
         </>
       )}
       <div className={step === "analyzing" ? undefined : "mx-auto max-w-xl px-5 pt-10 pb-20 sm:pt-16 sm:pb-28"}>
-      {step !== "analyzing" && onboardingIndex >= 0 && (
+      {step !== "analyzing" && onboardingIndex >= 0 && !directMode && (
         <OnboardingProgress steps={onboardingSteps.map((s) => s.label)} current={onboardingIndex} />
       )}
       {previousAnalysisId && step !== "analyzing" && (
@@ -935,6 +948,7 @@ export function AnalyzeWizard() {
           onAddFiles={handleAddFiles}
           onRemoveImage={handleRemoveImage}
           onContinue={goToProfile}
+          continueLabel={directMode ? "Lancer l'analyse" : undefined}
           canContinue={url.trim().length > 0 || images.length > 0}
           error={error || apiError}
         />
