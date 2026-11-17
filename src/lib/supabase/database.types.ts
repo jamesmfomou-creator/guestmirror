@@ -269,9 +269,46 @@ export interface Database {
         Relationships: [];
       };
       credit_usages: {
-        Row: { id: string; grant_id: string; analysis_id: string; period_start: string; created_at: string };
-        Insert: { id?: string; grant_id: string; analysis_id: string; period_start: string; created_at?: string };
+        Row: { id: string; grant_id: string; analysis_id: string; period_start: string; created_at: string; pack_id: string | null };
+        Insert: { id?: string; grant_id: string; analysis_id: string; period_start: string; created_at?: string; pack_id?: string | null };
         Update: Partial<Database["public"]["Tables"]["credit_usages"]["Insert"]>;
+        Relationships: [];
+      };
+      // supabase/migrations/0011_addon_packs.sql
+      credit_packs: {
+        Row: {
+          id: string;
+          email: string;
+          grant_id: string | null;
+          source: string;
+          credits: number;
+          status: string;
+          amount: number | null;
+          stripe_price_id: string | null;
+          stripe_checkout_session_id: string | null;
+          stripe_invoice_id: string | null;
+          stripe_payment_intent_id: string | null;
+          revoked_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string | null;
+          grant_id?: string | null;
+          source: string;
+          credits: number;
+          status?: string;
+          amount?: number | null;
+          stripe_price_id?: string | null;
+          stripe_checkout_session_id?: string | null;
+          stripe_invoice_id?: string | null;
+          stripe_payment_intent_id?: string | null;
+          revoked_reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["credit_packs"]["Insert"]>;
         Relationships: [];
       };
       email_verifications: {
@@ -341,6 +378,11 @@ export interface Database {
       consume_grant_credit: {
         Args: { p_grant_id: string; p_analysis_id: string };
         Returns: { outcome: string; used: number; quota: number }[];
+      };
+      // supabase/migrations/0011_addon_packs.sql
+      consume_analysis_credit: {
+        Args: { p_grant_id: string; p_analysis_id: string };
+        Returns: { outcome: string; source: string | null; used: number; quota: number; extra_remaining: number }[];
       };
     };
   };

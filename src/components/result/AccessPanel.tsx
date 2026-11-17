@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { track } from "@/lib/analytics";
+import { ADDON_PACK, formatEur } from "@/lib/plans";
 import { ManageSubscriptionLink } from "./ManageSubscriptionLink";
 
 // Shown on a locked report whose email has a subscription or lifetime right:
@@ -23,6 +24,9 @@ export function AccessPanel(
         analysisId: string;
         remaining: number;
         quota: number;
+        extraRemaining: number;
+        nextSource: "monthly" | "pack" | null;
+        canBuyAddon: boolean;
         periodEnd: string | null;
         blockedReason: CreditBlock;
         canManage: boolean;
@@ -126,6 +130,9 @@ function CreditCard({
   analysisId,
   remaining,
   quota,
+  extraRemaining,
+  nextSource,
+  canBuyAddon,
   periodEnd,
   blockedReason,
   canManage,
@@ -133,6 +140,9 @@ function CreditCard({
   analysisId: string;
   remaining: number;
   quota: number;
+  extraRemaining: number;
+  nextSource: "monthly" | "pack" | null;
+  canBuyAddon: boolean;
   periodEnd: string | null;
   blockedReason: CreditBlock;
   canManage: boolean;
@@ -153,7 +163,7 @@ function CreditCard({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "Le rapport n'a pas pu être débloqué.");
-      track("subscription_credit_used", { analysisId, remaining: json.remaining ?? null });
+      track("subscription_credit_used", { analysisId, remaining: json.remaining ?? null, source: json.source ?? null, extra_remaining: json.extraRemaining ?? null });
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Une erreur est survenue.");
@@ -167,23 +177,34 @@ function CreditCard({
         <span className="inline-flex items-center rounded-full bg-accent-soft px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-hover">
           Conciergerie
         </span>
+        <CreditCounters remaining={remaining} quota={quota} extraRemaining={extraRemaining} />
         {blockedReason === null ? (
           <>
-            <p className="mt-3 text-lg font-semibold text-foreground">
-              Il te reste {remaining} analyse{remaining > 1 ? "s" : ""} sur {quota} ce mois-ci
-            </p>
+            {nextSource === "pack" && (
+              <p className="mx-auto mt-4 max-w-md text-sm text-muted">
+                Tes analyses du mois sont utilisées : ce rapport utilisera une de tes analyses supplémentaires.
+              </p>
+            )}
             <Button size="lg" className="mt-5" onClick={useCredit} disabled={loading}>
               {loading ? "Déblocage…" : "Débloquer ce rapport (1 analyse)"}
             </Button>
           </>
         ) : (
-          <p className="mx-auto mt-3 max-w-md text-sm text-foreground">
+          <p className="mx-auto mt-4 max-w-md text-sm text-foreground">
             {blockedReason === "quota_exhausted" &&
               `Tu as utilisé tes ${quota} analyses de ce mois-ci.${renewal ? ` Elles se renouvellent le ${renewal}.` : ""}`}
             {blockedReason === "payment_failed" &&
               "Le dernier paiement de ton abonnement a échoué : mets à jour ton moyen de paiement pour retrouver tes analyses."}
             {blockedReason === "period_ended" && "Ton abonnement Conciergerie n'est plus actif."}
           </p>
+        )}
+        {canBuyAddon && (
+          <div className="mt-5">
+            <BuyAddonButton
+              analysisId={analysisId}
+              prominent={blockedReason === "quota_exhausted" || (remaining <= 3 && extraRemaining === 0)}
+            />
+          </div>
         )}
         {error && <p className="mt-3 text-sm text-score-low">{error}</p>}
         {canManage && (
@@ -192,6 +213,85 @@ function CreditCard({
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+/** "Analyses mensuelles restantes : X/20" and "Analyses supplémentaires : Y". */
+export function CreditCounters({ remaining, quota, extraRemaining }: { remaining: number; quota: number; extraRemaining: number }) {
+  return (
+    <dl className="mx-auto mt-4 grid max-w-sm grid-cols-2 gap-2.5 text-left">
+      <div className="rounded-2xl border border-border bg-background px-4 py-3">
+        <dt className="text-[12px] text-muted">Analyses mensuelles restantes</dt>
+        <dd className="mt-0.5 text-lg font-semibold text-foreground">
+          {remaining}/{quota}
+        </dd>
+      </div>
+      <div className="rounded-2xl border border-border bg-background px-4 py-3">
+        <dt className="text-[12px] text-muted">Analyses supplémentaires</dt>
+        <dd className="mt-0.5 text-lg font-semibold text-foreground">{extraRemaining}</dd>
+      </div>
+    </dl>
+  );
+}
+
+/**
+ * Buys the one-time pack from the report page (verified Conciergerie
+ * subscriber). The server decides eligibility and price; the credits arrive
+ * with the confirmed payment (webhook).
+ */
+export function BuyAddonButton({ analysisId, prominent = false }: { analysisId: string; prominent?: boolean }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const offered = useRef(false);
+
+  useEffect(() => {
+    if (offered.current) return;
+    offered.current = true;
+    track("addon_offered", { analysisId, source: "account", price: ADDON_PACK.amountEur });
+  }, [analysisId]);
+
+  async function buy() {
+    setLoading(true);
+    setError(null);
+    track("addon_selected", { analysisId, source: "account", price: ADDON_PACK.amountEur });
+    try {
+      const res = await fetch("/api/checkout/addon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ analysisId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.url) throw new Error(json.error || "Le paiement n'a pas pu être initié.");
+      track("addon_checkout_started", { analysisId, source: "account", price: ADDON_PACK.amountEur, currency: "EUR" });
+      window.location.href = json.url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Une erreur est survenue.");
+      setLoading(false);
+    }
+  }
+
+  const label = loading
+    ? "Redirection…"
+    : `Acheter ${ADDON_PACK.credits} analyses supplémentaires — ${formatEur(ADDON_PACK.amountEur)}`;
+  return (
+    <div className="text-center">
+      {prominent ? (
+        <Button size="lg" variant="outline" onClick={buy} disabled={loading}>
+          {label}
+        </Button>
+      ) : (
+        <button
+          type="button"
+          onClick={buy}
+          disabled={loading}
+          className="text-sm font-medium text-accent-hover underline underline-offset-4 transition-opacity hover:opacity-75 disabled:opacity-50"
+        >
+          {label}
+        </button>
+      )}
+      <p className="mt-1.5 text-[12px] text-muted-2">Paiement unique · disponibles jusqu&apos;à leur utilisation</p>
+      {error && <p className="mt-2 text-sm text-score-low">{error}</p>}
     </div>
   );
 }

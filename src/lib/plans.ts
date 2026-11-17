@@ -93,6 +93,44 @@ export function classifyPrice(priceId: string | null | undefined): PriceKind | n
   return LEGACY_PRICES[priceId] ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Add-on: "Pack 10 analyses supplémentaires" (one-time), for Conciergerie
+// subscribers only. Bought with the first subscription payment (order bump)
+// or later from the report page. Never offered with lifetime / legacy Plus.
+
+export const ADDON_PACK = {
+  name: "Pack 10 analyses supplémentaires",
+  amountEur: 12.9,
+  credits: 10,
+} as const;
+
+/**
+ * One-time price of the pack, per Stripe mode. null = the add-on is not
+ * offered in that mode (the Conciergerie checkout then works exactly as
+ * before). Never use the archived recurring price price_1UcV0Z… (monthly).
+ */
+const ADDON_PACK_PRICES: Record<StripeMode, string | null> = {
+  // prod_VdmZepPKQfMtlZ, one-time 12,90 € TTC (verified 2026-11-17).
+  live: "price_1UciXzAV5mFz3N4JBykiNjyx",
+  // Created in Stripe test mode (2026-11-17), one-time 12,90 € TTC.
+  test: "price_1UcbgMAV5mFz3N4J1lsmELos",
+};
+
+export function addonPackPriceId(mode: StripeMode): string | null {
+  return ADDON_PACK_PRICES[mode];
+}
+
+export function isAddonPackPrice(priceId: string | null | undefined): boolean {
+  return Boolean(priceId) && (ADDON_PACK_PRICES.live === priceId || ADDON_PACK_PRICES.test === priceId);
+}
+
+/** Whether the add-on can be sold with the Stripe key configured on this server. */
+export function addonPackAvailable(secretKey: string | undefined | null = process.env.STRIPE_SECRET_KEY): boolean {
+  // Without a Stripe key (local demo) the purchase is simulated.
+  if (!secretKey) return true;
+  return addonPackPriceId(stripeModeOf(secretKey)) !== null;
+}
+
 /** Display label, French format: "7,90 €", "34,90 €", "89 €". */
 export function formatEur(amount: number): string {
   return `${Number.isInteger(amount) ? amount : amount.toFixed(2).replace(".", ",")} €`;

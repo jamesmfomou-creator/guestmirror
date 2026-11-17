@@ -29,7 +29,8 @@ import { ManageSubscriptionLink } from "@/components/result/ManageSubscriptionLi
 import { lockedRecommendationCount } from "@/lib/utils";
 import { BRAND_NAME } from "@/lib/brand";
 import { getAccessForEmail } from "@/lib/access/reportAccess";
-import { AccessPanel } from "@/components/result/AccessPanel";
+import { AccessPanel, BuyAddonButton } from "@/components/result/AccessPanel";
+import { ADDON_PACK, addonPackAvailable } from "@/lib/plans";
 import { PaymentPending } from "@/components/result/PaymentPending";
 import type { FeedbackPlan } from "@/lib/feedback";
 import { getAbVariantServer } from "@/lib/ab-server";
@@ -58,6 +59,7 @@ export default async function ResultPage({
     lifetime?: string;
     checkout?: string;
     offer?: string;
+    addon?: string;
   }>;
 }) {
   const { id } = await params;
@@ -107,6 +109,9 @@ export default async function ResultPage({
   const paywallPreview =
     paywallVariant === "v2" && !unlocked && !incomplete ? buildPaywallPreview(analysis.result) : null;
   const emailsReportLink = EMAIL_CONFIGURED && Boolean(analysis.email);
+  // One-time "10 analyses" pack: offered with Conciergerie only, and only
+  // when its one-time Stripe price is configured for this environment.
+  const addonAvailable = addonPackAvailable();
 
   const previous = analysis.previous_analysis_id
     ? await getAnalysis(analysis.previous_analysis_id)
@@ -184,6 +189,17 @@ export default async function ResultPage({
       )}
 
       {!unlocked && !incomplete && sp.checkout === "success" && <PaymentPending />}
+      {sp.addon === "success" && (
+        <p role="status" className="mx-auto mt-6 max-w-xl rounded-2xl border border-accent/25 bg-accent-soft px-4 py-3 text-center text-sm text-accent-hover">
+          Merci ! Tes {ADDON_PACK.credits} analyses supplémentaires sont ajoutées dès que Stripe confirme le paiement
+          (en général quelques secondes). Actualise la page si elles n&apos;apparaissent pas encore.
+        </p>
+      )}
+      {sp.addon === "canceled" && (
+        <p className="mx-auto mt-6 max-w-xl rounded-2xl bg-score-mid/10 px-4 py-3 text-center text-sm text-score-mid">
+          L&apos;achat du pack a été annulé. Rien n&apos;a été débité.
+        </p>
+      )}
       {!unlocked && !incomplete && sp.checkout !== "success" && access.needsVerification && (
         <AccessPanel mode="verify" analysisId={id} />
       )}
@@ -193,6 +209,9 @@ export default async function ResultPage({
           analysisId={id}
           remaining={access.conciergerie.remaining}
           quota={access.conciergerie.quota}
+          extraRemaining={access.conciergerie.extraRemaining}
+          nextSource={access.conciergerie.nextSource}
+          canBuyAddon={addonAvailable && access.conciergerie.canBuyAddon && !access.unlimited}
           periodEnd={access.conciergerie.periodEnd}
           blockedReason={access.conciergerie.blockedReason}
           canManage={access.hasManageableSubscription}
@@ -211,11 +230,11 @@ export default async function ResultPage({
             propertyCountRange={analysis.property_count_range}
           />
           {paywallPreview ? (
-            !creditUsable ? <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} /> : null
+            !creditUsable ? <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} addonAvailable={addonAvailable} /> : null
           ) : (
             <>
               <LockedTeaser count={lockedRecommendationCount(analysis.result)} analysisId={id} />
-              {!creditUsable && <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />}
+              {!creditUsable && <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} addonAvailable={addonAvailable} />}
             </>
           )}
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
@@ -228,10 +247,10 @@ export default async function ResultPage({
       {!unlocked && !incomplete && variant === "B" && (
         <>
           {paywallPreview ? (
-            !creditUsable ? <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} /> : null
+            !creditUsable ? <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} addonAvailable={addonAvailable} /> : null
           ) : (
             <LockedPreviewB analysisId={id} count={lockedRecommendationCount(analysis.result)}>
-              {!creditUsable && <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} />}
+              {!creditUsable && <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} addonAvailable={addonAvailable} />}
             </LockedPreviewB>
           )}
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
@@ -281,13 +300,24 @@ export default async function ResultPage({
         </p>
       )}
       {unlocked && access.conciergerie && (
-        <p className="mx-auto mt-10 flex max-w-xl flex-wrap items-center justify-center gap-2 text-xs text-muted-2">
-          <span className="inline-flex items-center rounded-full bg-accent-soft px-2.5 py-1 font-medium text-accent-hover">
-            Conciergerie — {access.conciergerie.remaining} analyse{access.conciergerie.remaining > 1 ? "s" : ""} restante
-            {access.conciergerie.remaining > 1 ? "s" : ""} ce mois-ci
-          </span>
-          {access.hasManageableSubscription && <ManageSubscriptionLink analysisId={id} />}
-        </p>
+        <div className="mx-auto mt-10 max-w-xl text-center text-xs text-muted-2">
+          <p className="flex flex-wrap items-center justify-center gap-2">
+            <span className="inline-flex items-center rounded-full bg-accent-soft px-2.5 py-1 font-medium text-accent-hover">
+              Conciergerie — analyses mensuelles restantes : {access.conciergerie.remaining}/{access.conciergerie.quota}
+            </span>
+            {access.conciergerie.extraRemaining > 0 && (
+              <span className="inline-flex items-center rounded-full border border-border px-2.5 py-1 font-medium text-foreground">
+                Analyses supplémentaires : {access.conciergerie.extraRemaining}
+              </span>
+            )}
+            {access.hasManageableSubscription && <ManageSubscriptionLink analysisId={id} />}
+          </p>
+          {addonAvailable && access.conciergerie.canBuyAddon && !access.unlimited && (
+            <div className="mt-4">
+              <BuyAddonButton analysisId={id} />
+            </div>
+          )}
+        </div>
       )}
 
       {/* Free-trial link (/analyze?promo=<code>, see api/analyze/route.ts):

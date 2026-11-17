@@ -12,6 +12,8 @@ import type { AccessGrant } from "./accessStore";
 //    Accès à vie -- every report of that email is readable.
 //  - conciergerie: N analyses per paid period; each report is unlocked
 //    explicitly, which uses one credit (persisted, so it stays unlocked).
+//    Add-on packs (10 analyses, one-time) are used once the monthly quota is
+//    spent; they never expire and stay usable after the subscription ends.
 
 export interface LegacyRights {
   plusActive: boolean;
@@ -27,7 +29,14 @@ export interface ConciergerieState {
   blockedReason: "payment_failed" | "period_ended" | "quota_exhausted" | null;
   used: number;
   quota: number;
+  /** Monthly analyses left in the current paid period. */
   remaining: number;
+  /** Unused add-on pack analyses (never expire). */
+  extraRemaining: number;
+  /** Which credit the next unlock will use. */
+  nextSource: "monthly" | "pack" | null;
+  /** May buy an add-on pack now (subscription in a paid period). */
+  canBuyAddon: boolean;
   periodEnd: string | null;
   cancelAtPeriodEnd: boolean;
 }
@@ -62,23 +71,30 @@ export function pickConciergerieGrant(grants: AccessGrant[], nowMs: number): Acc
   return subs.find((g) => isConciergerieGrantUsable(g, nowMs)) ?? subs[subs.length - 1] ?? null;
 }
 
-export function conciergerieState(grant: AccessGrant, used: number, nowMs: number): ConciergerieState {
+export function conciergerieState(grant: AccessGrant, used: number, nowMs: number, extraRemaining = 0): ConciergerieState {
   const quota = grant.quotaPerPeriod ?? 0;
   const inPeriod = isConciergerieGrantUsable(grant, nowMs);
   const remaining = inPeriod ? Math.max(0, quota - used) : 0;
+  const extra = Math.max(0, extraRemaining);
+  const nextSource = remaining > 0 ? "monthly" : extra > 0 ? "pack" : null;
   let blockedReason: ConciergerieState["blockedReason"] = null;
-  if (!inPeriod) {
-    blockedReason = grant.status === "past_due" || grant.status === "unpaid" ? "payment_failed" : "period_ended";
-  } else if (remaining === 0) {
-    blockedReason = "quota_exhausted";
+  if (nextSource === null) {
+    if (!inPeriod) {
+      blockedReason = grant.status === "past_due" || grant.status === "unpaid" ? "payment_failed" : "period_ended";
+    } else {
+      blockedReason = "quota_exhausted";
+    }
   }
   return {
     grantId: grant.id,
-    usable: inPeriod && remaining > 0,
+    usable: nextSource !== null,
     blockedReason,
     used: inPeriod ? used : 0,
     quota,
     remaining,
+    extraRemaining: extra,
+    nextSource,
+    canBuyAddon: inPeriod,
     periodEnd: grant.paidPeriodEnd,
     cancelAtPeriodEnd: grant.cancelAtPeriodEnd,
   };
@@ -96,6 +112,8 @@ export function resolveAccess(params: {
   scopeCheckoutSessionId?: string | null;
   /** Credits used in the current period of the chosen Conciergerie grant. */
   conciergerieUsed: number;
+  /** Unused add-on pack analyses visible to this visitor. */
+  packCredits?: number;
   nowMs: number;
 }): ResolvedAccess {
   const scope = params.scopeCheckoutSessionId ?? null;
@@ -111,15 +129,17 @@ export function resolveAccess(params: {
       : legacy.plusActive
         ? "legacy_plus"
         : null;
+  const packCredits = params.packCredits ?? 0;
   const hasAnyRight =
     unlimitedSource !== null ||
-    (conciergerieGrant !== null && isConciergerieGrantUsable(conciergerieGrant, nowMs));
+    (conciergerieGrant !== null && (isConciergerieGrantUsable(conciergerieGrant, nowMs) || packCredits > 0));
 
   return {
     verified,
     needsVerification: !verified && hasAnyRight,
     unlimited: verified ? unlimitedSource : null,
-    conciergerie: verified && conciergerieGrant ? conciergerieState(conciergerieGrant, params.conciergerieUsed, nowMs) : null,
+    conciergerie:
+      verified && conciergerieGrant ? conciergerieState(conciergerieGrant, params.conciergerieUsed, nowMs, packCredits) : null,
     hasManageableSubscription:
       verified &&
       (legacy.plusActive ||

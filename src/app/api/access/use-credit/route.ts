@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAnalysis } from "@/lib/store";
 import { getAccessForEmail } from "@/lib/access/reportAccess";
-import { consumeCredit } from "@/lib/access/accessStore";
+import { consumeAnalysisCredit } from "@/lib/access/accessStore";
 
-// Unlocks a report with one Conciergerie analysis. The quota is enforced in
-// the database (consume_grant_credit locks the grant row), never in the UI;
-// a report never costs two credits.
+// Unlocks a report with one Conciergerie analysis: the monthly quota first,
+// then an add-on pack. Enforced in the database (consume_analysis_credit locks
+// the grant row), never in the UI; a report never costs two credits.
 
 const bodySchema = z.object({ analysisId: z.string().uuid() });
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -24,9 +24,18 @@ export async function POST(req: NextRequest) {
   if (!access.verified || !access.conciergerie) {
     return NextResponse.json({ ok: false, error: "Vérifie d'abord ton e-mail." }, { status: 403, headers: NO_STORE });
   }
-  const res = await consumeCredit(access.conciergerie.grantId, analysisId);
+  const res = await consumeAnalysisCredit(access.conciergerie.grantId, analysisId);
   if (res.outcome === "consumed" || res.outcome === "already") {
-    return NextResponse.json({ ok: true, outcome: res.outcome, remaining: Math.max(0, res.quota - res.used) }, { headers: NO_STORE });
+    return NextResponse.json(
+      {
+        ok: true,
+        outcome: res.outcome,
+        source: res.source,
+        remaining: Math.max(0, res.quota - res.used),
+        extraRemaining: res.extraRemaining,
+      },
+      { headers: NO_STORE }
+    );
   }
   const error =
     res.outcome === "quota_exhausted"

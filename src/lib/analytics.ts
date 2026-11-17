@@ -162,6 +162,20 @@ export const ANALYTICS_EVENTS = [
   "access_code_requested",
   "access_verified",
   "subscription_credit_used",
+  // Add-on "Pack 10 analyses supplémentaires" (one-time, Conciergerie only).
+  // source: "subscription_checkout" (order bump on the Conciergerie
+  // checkout) or "account" (bought later from the report page).
+  // addon_purchase_completed / _failed, addon_refunded, addon_disputed and
+  // addon_dispute_closed are written server side by the Stripe webhook.
+  "addon_offered",
+  "addon_selected",
+  "addon_removed",
+  "addon_checkout_started",
+  "addon_purchase_completed",
+  "addon_purchase_failed",
+  "addon_refunded",
+  "addon_disputed",
+  "addon_dispute_closed",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];

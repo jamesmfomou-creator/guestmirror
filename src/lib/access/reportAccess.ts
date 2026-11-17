@@ -1,5 +1,5 @@
 import { getSubscriptionByEmail, isLifetimeActive, isPlusActive } from "@/lib/subscriptions";
-import { creditsUsedInPeriod, listGrantsByEmail, normalizeEmail, type AccessGrant } from "./accessStore";
+import { creditsUsedInPeriod, listGrantsByEmail, normalizeEmail, packCreditsRemaining, type AccessGrant } from "./accessStore";
 import { pickConciergerieGrant, resolveAccess, type ResolvedAccess } from "./entitlements";
 import { currentIdentity } from "./session";
 
@@ -39,12 +39,15 @@ export async function getAccessForEmail(rawEmail: string | null | undefined): Pr
     const nowMs = Date.now();
     const chosen = pickConciergerieGrant(scoped, nowMs);
     const used = chosen ? await creditsUsedInPeriod(chosen) : 0;
+    // Packs only exist for Conciergerie subscribers (current or former).
+    const packCredits = chosen ? await packCreditsRemaining(email, scope ? scoped.map((g) => g.id) : undefined) : 0;
     const resolved = resolveAccess({
       grants,
       legacy: { plusActive: isPlusActive(legacy), lifetimeActive: isLifetimeActive(legacy) },
       verified,
       scopeCheckoutSessionId: scope,
       conciergerieUsed: used,
+      packCredits,
       nowMs,
     });
     const portalCustomerId =

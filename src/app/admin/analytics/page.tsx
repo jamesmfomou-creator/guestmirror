@@ -869,6 +869,52 @@ export default async function AdminAnalyticsPage({
             </tbody>
           </table>
         </div>
+
+        <h3 className="mt-6 text-sm font-semibold">Pack 10 analyses supplémentaires — 12,90 €</h3>
+        <p className="mt-1 text-sm text-muted-2">
+          « Avec l&apos;abonnement » : option cochée dans le récapitulatif Conciergerie. « Espace abonné » : acheté plus tard
+          depuis un rapport. Achats confirmés par Stripe uniquement.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Kpi label="Taux d'ajout à l'abonnement" value={proportionLabel(data.offers.addon.attachRate)} />
+          <Kpi label="Paiements Conciergerie avec pack" value={data.offers.addon.conciergerieCheckoutsWithAddon} />
+          <Kpi label="Paiements Conciergerie sans pack" value={data.offers.addon.conciergerieCheckoutsWithoutAddon} />
+          <Kpi label="Échecs / remb. / litiges" value={`${data.offers.addon.failures} / ${data.offers.addon.refunds} / ${data.offers.addon.disputes}`} />
+        </div>
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <th className="px-4 py-2.5 font-medium">Origine</th>
+                <th className="px-4 py-2.5 font-medium">Proposé</th>
+                <th className="px-4 py-2.5 font-medium">Choisi</th>
+                <th className="px-4 py-2.5 font-medium">Paiements commencés</th>
+                <th className="px-4 py-2.5 font-medium">Achats</th>
+                <th className="px-4 py-2.5 font-medium">Revenu</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(
+                [
+                  ["subscription_checkout", "Avec l'abonnement"],
+                  ["account", "Espace abonné"],
+                ] as const
+              ).map(([key, label]) => {
+                const a = data.offers.addon.bySource[key];
+                return (
+                  <tr key={key} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2.5 font-medium">{label}</td>
+                    <td className="px-4 py-2.5 tabular-nums">{a.offered}</td>
+                    <td className="px-4 py-2.5 tabular-nums">{a.selected}</td>
+                    <td className="px-4 py-2.5 tabular-nums">{a.checkoutsStarted}</td>
+                    <td className="px-4 py-2.5 tabular-nums">{a.purchases}</td>
+                    <td className="px-4 py-2.5 tabular-nums">{eur(a.revenue)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {/* Pricing: one-time vs Plus */}
