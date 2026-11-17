@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { BRAND_NAME } from "@/lib/brand";
 
 const PROPERTY_TYPES = ["Appartement", "Maison", "Studio", "Chambre privée", "Loft", "Autre"];
 
@@ -47,9 +46,10 @@ export function OptionalInfoCard({ analysisId }: { analysisId: string }) {
   return (
     <div className="mx-auto mb-14 max-w-xl">
       <div className="card p-6 sm:p-7">
-        <h2 className="text-lg font-semibold">Aide {BRAND_NAME} à affiner ton analyse</h2>
+        <h2 className="text-lg font-semibold">Complète la fiche de ton logement</h2>
         <p className="mt-1.5 text-sm text-muted">
-          Quelques informations facultatives pour personnaliser davantage tes recommandations.
+          Quelques informations facultatives, enregistrées avec ton rapport. Elles ne modifient pas le diagnostic
+          ci-dessus.
         </p>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">

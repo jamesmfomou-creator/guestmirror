@@ -20,9 +20,10 @@ const GOAL_OPTIONS: { value: Goal; label: string }[] = [
  * the brief for this step specifies exactly one button, no "passer cette
  * étape".
  *
- * The answer is segmentation only -- never claim or imply to the user
- * that the AI diagnostic itself is tailored to this choice, since the
- * analysis engine doesn't read it.
+ * The answer never reaches the AI (the analysis and its score depend on the
+ * listing only). The result page uses it to present the report's own
+ * findings in goal order (lib/goalPersonalization.ts) -- the description
+ * below says exactly that, nothing more.
  */
 export function StepGoal({
   goal,
@@ -47,7 +48,7 @@ export function StepGoal({
             Quel est ton objectif avec <em>cette annonce</em> ?
           </>
         }
-        description="Pour mieux comprendre tes priorités."
+        description="Ton rapport sera organisé selon cet objectif. Le score, lui, ne dépend que de ton annonce."
       />
 
       <div className="mt-9 space-y-2.5">

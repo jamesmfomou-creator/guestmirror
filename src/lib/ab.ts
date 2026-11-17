@@ -11,6 +11,13 @@
  * first request, with no flash between an SSR default and a client
  * correction. proxy.ts assigns the cookie on first visit for any
  * non-admin/non-API page; this file just reads it.
+ *
+ * Change during the test, 2026-11-17 (goal personalisation): the locked
+ * result of BOTH arms gained a listing card above the score (title, goal;
+ * the cover photo too in A, which B already showed via AhaCoverImage), and
+ * B's locked card now states the real number of weaknesses instead of a
+ * sum of unrelated items. A is therefore less different from B than before
+ * this date: compare the periods separately.
  */
 
 export const AB_COOKIE_NAME = "gm_ab";

@@ -43,10 +43,10 @@ export function StepProfile({
       <OnboardingHeading
         title={
           <>
-            Une dernière chose <em>avant ton analyse</em>
+            Parlons un peu <em>de ton activité</em>
           </>
         }
-        description="Ça nous aide à améliorer GuestMirror. Facultatif."
+        description="Deux questions facultatives, pour mieux connaître ta situation."
       />
 
       <Surface className="mt-9">

@@ -68,15 +68,17 @@ export function StepEmail({
           isRetry ? (
             "L'analyse n'a pas pu être terminée."
           ) : (
+            // Honest wording: the analysis has not started yet (it starts
+            // after the goal step) and the free result is not emailed.
             <>
-              Ton analyse <em>est prête.</em>
+              Où souhaites-tu <em>retrouver ton diagnostic</em> ?
             </>
           )
         }
         description={
           isRetry
             ? "Tes captures sont toujours prêtes, tu peux réessayer directement."
-            : "Où veux-tu recevoir ton résultat ?"
+            : "Renseigne ton email pour associer ton diagnostic à ton adresse et pouvoir le retrouver plus tard."
         }
       />
 
@@ -125,7 +127,7 @@ export function StepEmail({
       {error && <ErrorNote>{error}</ErrorNote>}
 
       <Button type="submit" size="lg" className="btn-sheen group mt-8 w-full sm:w-full" disabled={loading}>
-        {loading ? "Un instant…" : isRetry ? "Réessayer l'analyse" : "Voir ma première impression"}
+        {loading ? "Un instant…" : isRetry ? "Réessayer l'analyse" : "Continuer"}
         {!loading && (
           <ArrowRight aria-hidden size={18} className="transition-transform duration-300 group-hover:translate-x-0.5" />
         )}

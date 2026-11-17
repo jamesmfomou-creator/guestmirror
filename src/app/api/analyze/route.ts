@@ -352,6 +352,13 @@ export async function POST(req: NextRequest) {
     }
     console.log(`[analyze] image storage duration_ms=${imageStorageDurationMs} count=${storedImages.length} ${attemptTag}`);
 
+    // The listing's own title, as read from the Airbnb page (link
+    // submissions), kept with the report so the result page can say which
+    // listing it is about (lib/goalPersonalization.ts displayListingTitle).
+    // Added after the AI call: the model never sees or produces this field.
+    const extractedTitle = extractedListingText?.title?.replace(/\s+/g, " ").trim() || null;
+    if (extractedTitle) result = { ...result, listing_title: extractedTitle };
+
     phase = "database";
     const dbStartedAt = Date.now();
     let record;

@@ -77,15 +77,20 @@ export interface AnalysisResult {
   recommended_photo_order: number[];
   action_plan: string[];
   disclaimer: string;
+  // The listing's title as read from the Airbnb page itself (link
+  // submissions only, set server side in api/analyze -- never produced by
+  // the model). Absent on older reports and screenshot submissions.
+  listing_title?: string | null;
 }
 
 export type PaymentStatus = "none" | "pending" | "paid";
 
 export type UserType = "host" | "concierge" | "cohost" | "other";
 export type PropertyCountRange = "1" | "2-5" | "6-20" | "21+";
-// Onboarding "objectif" question (variant B only, asked after email --
-// see StepGoal.tsx). Segmentation only, same as UserType/PropertyCountRange
-// above: never used to alter what the AI analysis itself produces.
+// Onboarding "objectif" question (asked to everyone after email -- see
+// StepGoal.tsx). Never sent to the AI: the analysis and its score depend on
+// the listing only. The result page uses it to ORDER and flag what the
+// analysis found (lib/goalPersonalization.ts), without changing any of it.
 export type Goal = "improve_appeal" | "reduce_hesitation" | "verify_improvements" | "optimize_multiple";
 
 export interface AnalysisInput {

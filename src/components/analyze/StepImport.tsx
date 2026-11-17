@@ -44,7 +44,7 @@ export function StepImport({
             Voyons ce qu&apos;un voyageur <em>voit en premier</em>
           </>
         }
-        description="Importe quelques captures de ton annonce pour découvrir sa première impression."
+        description="Colle le lien de ton annonce Airbnb : on récupère ses photos, son titre et sa description. Le lien ne fonctionne pas ? Importe tes captures."
       />
 
       <Surface className="mt-9">
@@ -79,6 +79,7 @@ export function StepImport({
 
       <Surface>
         <FieldLabel>Importe tes captures d&apos;annonce</FieldLabel>
+        <p className="mt-1.5 text-[13px] text-muted">Alternative si le lien ne fonctionne pas.</p>
         <p className="mt-2 text-[13px] text-muted">{HINTS.join(" · ")}</p>
 
         {images.length === 0 && (
