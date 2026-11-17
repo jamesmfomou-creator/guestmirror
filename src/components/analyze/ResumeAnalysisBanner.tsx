@@ -9,6 +9,7 @@ import {
   nextPollDelayMs,
   readPendingAttempt,
 } from "@/lib/analysisRecovery";
+import { clearPendingAnswers, rememberEditToken, saveAnalysisAnswers, takePendingAnswers } from "@/lib/analysisOwnership";
 
 // Offers the way back to an analysis this browser started but never saw the
 // result of (page closed, phone locked, connection lost for good). The only
@@ -57,6 +58,7 @@ export function ResumeAnalysisBanner({ className = "mb-6" }: { className?: strin
       if (cancelled) return;
 
       if (status.status === "completed" && status.id) {
+        rememberEditToken(status.id, status.edit_token);
         setState({ kind: "ready", analysisId: status.id, overallScore: status.overall_score ?? null });
         return;
       }
@@ -94,8 +96,16 @@ export function ResumeAnalysisBanner({ className = "mb-6" }: { className?: strin
 
   const { analysisId } = state;
 
-  function open() {
+  async function open() {
     const pending = attempt.current;
+    // Answers given during the analysis before the page was closed or
+    // reloaded (background onboarding): attach them now, once.
+    const answers = takePendingAnswers(pending?.attemptId ?? null);
+    if (answers && (answers.goal || answers.user_type || answers.property_count_range)) {
+      const ok = await saveAnalysisAnswers(analysisId, answers);
+      if (answers.goal) track("goal_saved", { analysisId, timing: "after_ready", via: "resume", ok });
+    }
+    clearPendingAnswers(pending?.attemptId ?? null);
     track("analysis_recovered", {
       attemptId: pending?.attemptId ?? null,
       analysisId,
@@ -131,7 +141,7 @@ export function ResumeAnalysisBanner({ className = "mb-6" }: { className?: strin
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
           <button
             type="button"
-            onClick={open}
+            onClick={() => void open()}
             className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover"
           >
             Voir mon résultat

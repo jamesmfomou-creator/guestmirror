@@ -64,7 +64,10 @@ export function AnalysisImmersive({
   onVisualStarted,
   onFinalizing,
   onTransitionEnd,
+  startedAtMs,
 }: {
+  /** When the analysis really started (background onboarding: before this loader appeared). Defaults to mount time. */
+  startedAtMs?: number;
   done: boolean;
   preview: ListingPreviewState;
   /** Local object URLs of the visitor's uploaded screenshots, if any. */
@@ -154,10 +157,10 @@ export function AnalysisImmersive({
 
   // ---- Clock (reassurance + the finalizing event only) --------------------
   useEffect(() => {
-    const start = Date.now();
+    const start = startedAtMs ?? Date.now();
     const t = setInterval(() => setElapsedMs(Date.now() - start), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [startedAtMs]);
 
   useEffect(() => {
     if (!done && elapsedMs >= FINALIZING_AT_MS && !firedFinalizing.current) {

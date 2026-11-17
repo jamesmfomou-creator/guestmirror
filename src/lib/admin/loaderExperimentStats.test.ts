@@ -27,6 +27,16 @@ describe("computeLoaderExperimentStats", () => {
     expect(stats.immersive.attempts).toBe(0);
   });
 
+  it("leaves out attempts from the background onboarding (their loader is not the compared wait)", () => {
+    const stats = computeLoaderExperimentStats([
+      row("analysis_loader_viewed", { attemptId: "bg", loader_variant: "immersive", onboarding_variant: "background", after_questions: true }),
+      row("analysis_completed", { attemptId: "bg", duration_ms: 60_000 }),
+      row("analysis_loader_viewed", { attemptId: "ctl", loader_variant: "immersive", onboarding_variant: "control" }),
+      row("analysis_completed", { attemptId: "ctl", duration_ms: 60_000 }),
+    ]);
+    expect(stats.immersive.attempts).toBe(1);
+  });
+
   it("classifies each attempt once: completed, failed, abandoned, or unresolved", () => {
     const stats = computeLoaderExperimentStats([
       viewed("a", "immersive"),

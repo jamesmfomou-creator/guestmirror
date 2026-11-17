@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { editTokenFor } from "@/lib/analysisEditToken";
 import { findAnalysisByAttemptId } from "@/lib/store";
 import { getAttemptState } from "@/lib/analysisAttempts";
 
@@ -33,7 +34,9 @@ export async function GET(req: NextRequest) {
   const analysis = await findAnalysisByAttemptId(attemptId);
   if (analysis) {
     return NextResponse.json(
-      { status: "completed", id: analysis.id, overall_score: analysis.overall_score },
+      // The attempt id is a random UUID only the creating browser knows, so
+      // the edit token can go back to it here too (resume after a reload).
+      { status: "completed", id: analysis.id, overall_score: analysis.overall_score, edit_token: editTokenFor(analysis.id) },
       { headers: NO_STORE }
     );
   }

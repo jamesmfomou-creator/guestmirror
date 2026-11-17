@@ -11,6 +11,9 @@ export interface AttemptStatusResponse {
   id?: string;
   overall_score?: number;
   error_code?: string;
+  // Proof of ownership of the analysis (lib/analysisEditToken.ts), only for
+  // a completed attempt.
+  edit_token?: string;
 }
 
 // ---- Polling cadence -------------------------------------------------

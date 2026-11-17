@@ -42,6 +42,7 @@ import { getPaywallVariantServer } from "@/lib/paywallExperiment-server";
 import { buildPaywallPreview, lockedCategories, paywallPreviewContents } from "@/lib/paywallPreview";
 import { displayListingTitle, goalExplanation, personalizeResult } from "@/lib/goalPersonalization";
 import { ListingContext } from "@/components/result/ListingContext";
+import { GoalPrompt } from "@/components/result/GoalPrompt";
 import { EMAIL_CONFIGURED } from "@/lib/env";
 
 export const metadata: Metadata = {
@@ -200,6 +201,11 @@ export default async function ResultPage({
         goalExplanation={personal ? goalExplanation(personal, unlocked) : null}
         className={!unlocked && variant === "B" ? "mt-6" : ""}
       />
+      {/* No goal given during the onboarding: ask once, discreetly, to the
+          browser allowed to change this analysis. Never on the content link. */}
+      {!personal && !incomplete && !isDirectLinkReport(analysis.email) && (
+        <GoalPrompt analysisId={id} serverAllowed={access.verified} />
+      )}
 
       <ScoreHeader
         result={analysis.result}
@@ -290,7 +296,7 @@ export default async function ResultPage({
 
       {/* Nothing below was produced for an incomplete analysis: empty
           sections and 0/100 verdicts would read as findings. */}
-      {unlocked && incomplete && <DeleteAnalysis analysisId={id} />}
+      {unlocked && incomplete && <DeleteAnalysis analysisId={id} serverAllowed={access.verified} />}
 
       {unlocked && !incomplete && (
         <>
@@ -323,11 +329,11 @@ export default async function ResultPage({
           })}
           <ActionPlan result={report} matches={personal?.actionMatches} />
           {!analysis.city && !analysis.property_type && !analysis.guest_capacity && !analysis.nightly_price && (
-            <OptionalInfoCard analysisId={id} />
+            <OptionalInfoCard analysisId={id} serverAllowed={access.verified} />
           )}
           {goalMode !== "rescan" && <RescanCTA analysisId={id} />}
           <ShareCard result={analysis.result} />
-          <DeleteAnalysis analysisId={id} />
+          <DeleteAnalysis analysisId={id} serverAllowed={access.verified} />
         </>
       )}
 

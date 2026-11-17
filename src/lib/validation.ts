@@ -31,12 +31,19 @@ export const analyzeRequestSchema = z.object({
 
 export type AnalyzeRequestBody = z.infer<typeof analyzeRequestSchema>;
 
-export const updateAnalysisInputSchema = z.object({
-  city: z.string().trim().max(120).nullable().optional(),
-  property_type: z.string().trim().max(80).nullable().optional(),
-  guest_capacity: z.string().trim().max(20).nullable().optional(),
-  nightly_price: z.string().trim().max(20).nullable().optional(),
-});
+export const updateAnalysisInputSchema = z
+  .object({
+    city: z.string().trim().max(120).nullable().optional(),
+    property_type: z.string().trim().max(80).nullable().optional(),
+    guest_capacity: z.string().trim().max(20).nullable().optional(),
+    nightly_price: z.string().trim().max(20).nullable().optional(),
+    // Answers given while (or after) the analysis runs -- same enums as
+    // analyzeRequestSchema. Display only: they never touch the result.
+    goal: z.enum(["improve_appeal", "reduce_hesitation", "verify_improvements", "optimize_multiple"]).nullable().optional(),
+    user_type: z.enum(["host", "concierge", "cohost", "other"]).nullable().optional(),
+    property_count_range: z.enum(["1", "2-5", "6-20", "21+"]).nullable().optional(),
+  })
+  .strict();
 
 export type UpdateAnalysisInputBody = z.infer<typeof updateAnalysisInputSchema>;
 

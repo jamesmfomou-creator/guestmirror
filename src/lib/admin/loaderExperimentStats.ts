@@ -7,7 +7,10 @@ import { proportion, type Proportion } from "./paywallExperimentStats";
 // getting their result, or did they leave?
 //
 // Only attempts whose analysis_loader_viewed carries a loader_variant are
-// counted; traffic from before the experiment has none.
+// counted; traffic from before the experiment has none. Attempts from the
+// background onboarding (onboarding_variant "background") are left out: their
+// loader appears only after the questions, for the rest of a wait that
+// already started, which is not the wait this experiment compares.
 //
 // Abandonment is deliberately strict: an attempt counts as abandoned only if
 // the page was left while it was still running (analysis_loader_abandoned)
@@ -69,6 +72,7 @@ function cellStats(rows: EventRow[], variant: LoaderVariantKey): LoaderCellStats
   const viewed = new Set<string>();
   for (const r of rows) {
     if (r.event_name !== "analysis_loader_viewed" || r.metadata?.loader_variant !== variant) continue;
+    if (r.metadata?.onboarding_variant === "background") continue;
     const id = attemptIdOf(r);
     if (id) viewed.add(id);
   }
