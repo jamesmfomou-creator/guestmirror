@@ -13,14 +13,31 @@ import { DEMO_RESULT } from "@/lib/demo-data";
 import { BRAND_NAME } from "@/lib/brand";
 import { AIRBNB_TITLE_MAX_LENGTH, sanitizeAirbnbTitles, titleCharCount } from "@/lib/titles";
 import { aiResultSchema, describeShapeIssues } from "@/lib/resultShape";
+import { describeMalformation, repairLeakedToolInput, type RepairResult } from "@/lib/aiRepair";
 
 export class AnalysisError extends Error {
   code: string;
+  // Outcome of each model attempt (see attemptOutcome), when the failure
+  // came after at least one model response. Observability only.
+  attemptOutcomes?: string[];
   constructor(message: string, code: string = "ai_error", cause?: unknown) {
     super(message, cause !== undefined ? { cause } : undefined);
     this.name = "AnalysisError";
     this.code = code;
   }
+}
+
+// One word per model attempt, for logs and analysis_server_* events:
+//   valid                       well-formed, accepted as is
+//   repaired                    leaked markup put back in place, then accepted
+//   repair_refused_ambiguous    malformed, repair refused (could not be sure)
+//   repair_refused_missing      malformed, repair refused (content missing)
+//   invalid:<code>              rejected for another reason (e.g. no score)
+export function attemptOutcome(v: ResponseValidation): string {
+  if (v.ok) return v.repair === "repaired" ? "repaired" : "valid";
+  if (v.repair === "refused_ambiguous" || v.repair === "refused_missing") return `repair_${v.repair}`;
+  if (v.repair === "repaired") return `invalid_after_repair:${v.code}`;
+  return `invalid:${v.code}`;
 }
 
 // Maps the Anthropic SDK's error class hierarchy to the error_code taxonomy
@@ -51,37 +68,56 @@ export function categorizeAnthropicError(err: unknown): string {
 //     failures of forced tool_choice, not a data-shape problem.
 //  3. only once we have a real tool_use with parsed input do we check
 //     whether the required fields are actually present.
+// `repair` (lib/aiRepair.ts): what the deterministic repair of leaked
+// `<parameter>` markup did before the checks below ran. "not_needed" for
+// every well-formed response, which reaches the checks untouched.
+export type RepairStatus = RepairResult["status"] | "not_attempted";
+
 export type ResponseValidation =
-  | { ok: true; input: Partial<AnalysisResult> }
-  | { ok: false; code: string; reason: string };
+  | { ok: true; input: Partial<AnalysisResult>; repair: RepairStatus; repairedFields?: string[] }
+  | { ok: false; code: string; reason: string; repair: RepairStatus; repairReason?: string; diagnostics?: Record<string, unknown> };
 
 export function validateAiResponse(response: Anthropic.Message): ResponseValidation {
+  const notAttempted = { repair: "not_attempted" as const };
   if (response.stop_reason === "max_tokens") {
-    return { ok: false, code: "ai_truncated_response", reason: "stop_reason=max_tokens" };
+    return { ok: false, code: "ai_truncated_response", reason: "stop_reason=max_tokens", ...notAttempted };
   }
   if (response.stop_reason === "refusal") {
-    return { ok: false, code: "ai_refused", reason: "stop_reason=refusal" };
+    return { ok: false, code: "ai_refused", reason: "stop_reason=refusal", ...notAttempted };
   }
   if (response.stop_reason === "model_context_window_exceeded") {
-    return { ok: false, code: "ai_context_exceeded", reason: "stop_reason=model_context_window_exceeded" };
+    return { ok: false, code: "ai_context_exceeded", reason: "stop_reason=model_context_window_exceeded", ...notAttempted };
   }
   if (!response.content || response.content.length === 0) {
-    return { ok: false, code: "ai_empty_response", reason: "empty content array" };
+    return { ok: false, code: "ai_empty_response", reason: "empty content array", ...notAttempted };
   }
   const toolUse = response.content.find(
     (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
   );
   if (!toolUse) {
-    return { ok: false, code: "ai_tool_missing", reason: "no tool_use block despite forced tool_choice" };
+    return { ok: false, code: "ai_tool_missing", reason: "no tool_use block despite forced tool_choice", ...notAttempted };
   }
-  const input = toolUse.input as Partial<AnalysisResult>;
+  // Leaked `<parameter>` markup (lib/aiRepair.ts): put the model's own
+  // content back in place when that is unambiguous, then run exactly the
+  // same checks as for any response. Refused or not needed: the original
+  // input goes through the checks unchanged.
+  const repair = repairLeakedToolInput(toolUse.input);
+  const input = (repair.status === "repaired" ? repair.input : toolUse.input) as Partial<AnalysisResult>;
+  const fail = (code: string, reason: string): ResponseValidation => ({
+    ok: false,
+    code,
+    reason,
+    repair: repair.status,
+    ...(repair.status === "refused_ambiguous" || repair.status === "refused_missing" ? { repairReason: repair.reason } : {}),
+    diagnostics: describeMalformation(toolUse.input),
+  });
   // "required" in the tool schema steers the model but isn't a hard
   // guarantee -- without this check, a response missing overall_score
   // (observed in testing, likely tied to hitting the tool schema's edges
   // on an unusual input) surfaced 60+ seconds later as a raw Postgres
   // not-null violation instead of the existing, fast "réessaie" retry path.
   if (typeof input.overall_score !== "number" || !input.summary) {
-    return { ok: false, code: "ai_schema_mismatch", reason: "missing overall_score/summary" };
+    return fail("ai_schema_mismatch", "missing overall_score/summary");
   }
   // Full-shape gate. The two-field check above let through responses whose
   // nested fields had all come back as strings of leaked `<parameter ...>`
@@ -92,9 +128,11 @@ export function validateAiResponse(response: Anthropic.Message): ResponseValidat
   // and already has the one-retry policy (RETRYABLE_VALIDATION_CODES).
   const shape = aiResultSchema.safeParse(input);
   if (!shape.success) {
-    return { ok: false, code: "ai_schema_mismatch", reason: `shape: ${describeShapeIssues(shape.error)}` };
+    return fail("ai_schema_mismatch", `shape: ${describeShapeIssues(shape.error)}`);
   }
-  return { ok: true, input };
+  return repair.status === "repaired"
+    ? { ok: true, input, repair: "repaired", repairedFields: repair.fields }
+    : { ok: true, input, repair: repair.status };
 }
 
 // Safe-to-log summary of an invalid response's *shape* only -- block types,
@@ -622,6 +660,9 @@ export async function analyzeListing(params: AnalyzeListingParams): Promise<{
   // Model id that actually produced the result (observability: recorded on
   // analysis_server_completed so cost/latency can be compared per model).
   model: string | null;
+  // attemptOutcome() of every model call, in order (["valid"],
+  // ["repaired"], ["invalid:ai_schema_mismatch", "valid"], ...).
+  attemptOutcomes: string[];
 }> {
   if (DEMO_MODE) {
     return {
@@ -632,6 +673,7 @@ export async function analyzeListing(params: AnalyzeListingParams): Promise<{
       retryCount: 0,
       stopReason: null,
       model: null,
+      attemptOutcomes: [],
     };
   }
 
@@ -647,6 +689,7 @@ export async function analyzeListing(params: AnalyzeListingParams): Promise<{
   const logTag = `attempt_id=${params.attemptId ?? "none"}`;
   const sourceNumbers = buildSourceNumberSet({ input: params.input, extractedListingText: params.extractedListingText });
 
+  const attemptOutcomes: string[] = [];
   for (let attempt = 0; attempt <= APP_MAX_RETRIES; attempt++) {
     const aiStartedAt = Date.now();
     let response: Anthropic.Message;
@@ -661,16 +704,20 @@ export async function analyzeListing(params: AnalyzeListingParams): Promise<{
         `[ai] messages.create failed ${logTag} retry_count=${attempt} duration_ms=${Date.now() - aiStartedAt} code=${code}:`,
         err
       );
-      throw new AnalysisError(
+      const error = new AnalysisError(
         "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants.",
         code
       );
+      if (attemptOutcomes.length > 0) error.attemptOutcomes = [...attemptOutcomes, `api_error:${code}`];
+      throw error;
     }
 
     const parsingStartedAt = Date.now();
     const validation = validateAiResponse(response);
     const parsingDurationMs = Date.now() - parsingStartedAt;
     const toolUsePresent = response.content.some((b) => b.type === "tool_use");
+    const outcome = attemptOutcome(validation);
+    attemptOutcomes.push(outcome);
 
     // Section 2's required per-attempt diagnostic line -- model, token
     // usage, stop_reason, tool_use presence, response size, parse/validation
@@ -682,23 +729,31 @@ export async function analyzeListing(params: AnalyzeListingParams): Promise<{
         `stop_reason=${response.stop_reason} tool_use_present=${toolUsePresent} ` +
         `response_length=${JSON.stringify(response.content).length} parse_success=${validation.ok} ` +
         `validation_success=${validation.ok} error_code=${validation.ok ? "" : validation.code} ` +
-        `duration_ms=${Date.now() - aiStartedAt}`
+        `outcome=${outcome} repair=${validation.repair}` +
+        (validation.ok && validation.repairedFields ? ` repaired_fields=${validation.repairedFields.join(",")}` : "") +
+        ` duration_ms=${Date.now() - aiStartedAt}`
     );
 
     if (!validation.ok) {
       console.error(
         `[ai] invalid response ${logTag} retry_count=${attempt} code=${validation.code} reason=${validation.reason} ` +
-          `shape=${JSON.stringify(redactedResponseShape(response))}`
+          `repair=${validation.repair}${validation.repairReason ? ` repair_reason=${validation.repairReason}` : ""} ` +
+          `shape=${JSON.stringify(redactedResponseShape(response))}` +
+          (validation.diagnostics ? ` malformation=${JSON.stringify(validation.diagnostics)}` : "")
       );
 
       const canRetry = attempt < APP_MAX_RETRIES && RETRYABLE_VALIDATION_CODES.has(validation.code);
+      console.log(`[ai] attempt_outcomes ${logTag} outcomes=${attemptOutcomes.join(",")} next=${canRetry ? "retry" : "final_failure"}`);
       if (canRetry) continue;
 
-      throw new AnalysisError(
+      const error = new AnalysisError(
         "L'analyse n'a pas pu être réalisée pour le moment. Réessaie dans quelques instants.",
         validation.code
       );
+      error.attemptOutcomes = [...attemptOutcomes];
+      throw error;
     }
+    console.log(`[ai] attempt_outcomes ${logTag} outcomes=${attemptOutcomes.join(",")} next=done`);
 
     const input = stripUnsupportedInconsistencyClaims(validation.input, sourceNumbers, logTag);
 
@@ -741,6 +796,7 @@ export async function analyzeListing(params: AnalyzeListingParams): Promise<{
       retryCount: attempt,
       stopReason: response.stop_reason,
       model: response.model ?? MODEL,
+      attemptOutcomes: [...attemptOutcomes],
     };
   }
 

@@ -333,10 +333,10 @@ export async function POST(req: NextRequest) {
       return r;
     });
 
-    let result, aiInputTokens, aiOutputTokens, parsingDurationMs, retryCount, stopReason, model;
+    let result, aiInputTokens, aiOutputTokens, parsingDurationMs, retryCount, stopReason, model, attemptOutcomes;
     let storedImages: string[];
     try {
-      [{ result, aiInputTokens, aiOutputTokens, parsingDurationMs, retryCount, stopReason, model }, storedImages] =
+      [{ result, aiInputTokens, aiOutputTokens, parsingDurationMs, retryCount, stopReason, model, attemptOutcomes }, storedImages] =
         await Promise.all([aiPromise, storagePromise]);
     } catch (err) {
       // Preserve analyzeListing's own AnalysisError (code, message) when
@@ -392,6 +392,8 @@ export async function POST(req: NextRequest) {
       model,
       ai_stop_reason: stopReason,
       ai_retry_count: retryCount,
+      // e.g. "valid", "repaired", "invalid:ai_schema_mismatch,valid" (lib/ai.ts attemptOutcome).
+      ai_attempt_outcomes: attemptOutcomes.join(","),
       ai_input_tokens: aiInputTokens,
       ai_output_tokens: aiOutputTokens,
       image_count: effectiveImages.length,
@@ -436,7 +438,10 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error(`[analyze] failed duration_ms=${Date.now() - requestStartedAt} phase=${phase} ${attemptTag}:`, err);
-    await recordFailure(err instanceof AnalysisError ? err.code : "unknown");
+    await recordFailure(
+      err instanceof AnalysisError ? err.code : "unknown",
+      err instanceof AnalysisError && err.attemptOutcomes ? { ai_attempt_outcomes: err.attemptOutcomes.join(",") } : {}
+    );
     if (err instanceof AnalysisError) {
       return NextResponse.json({ error: err.message, error_code: err.code }, { status: 422 });
     }
