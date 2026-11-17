@@ -43,7 +43,7 @@
   --color-score-low: var(--score-low);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-display: var(--font-inter);
+  --font-display: var(--font-display-sans);
 }
 
 * {
@@ -139,4 +139,100 @@ body {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* ------------------------------------------------------------------------
+   Landing design system (only used by the landing page and its sections)
+   ------------------------------------------------------------------------ */
+
+/* Dark "ink" surface: redefines the colour tokens locally, so every existing
+   component (cards, score rings, text utilities) renders correctly on it
+   without being modified. */
+.theme-ink {
+  --background: #14110d;
+  --background-alt: #1c1813;
+  --foreground: #f5f0e7;
+  --muted: #b3aa9b;
+  --muted-2: #847b6e;
+  --border: rgba(245, 240, 231, 0.12);
+  --card: #1d1914;
+  --accent-soft: rgba(217, 103, 63, 0.16);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Display type: tight bold grotesk. In the components layer so a weight
+   utility (font-semibold…) can still override it on smaller headings. */
+@layer components {
+  .text-display {
+    font-family: var(--font-display-sans), ui-sans-serif, "Helvetica Neue", Arial, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.032em;
+    word-spacing: 0.04em;
+    line-height: 1;
+    font-feature-settings: "kern" on, "ss01" on;
+  }
+  .text-display em {
+    font-style: normal;
+  }
+}
+
+/* Small technical labels (section indices, meta). */
+.label-mono {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* Fine background grid that fades out from the top, behind the hero. */
+.hero-grid {
+  background-image:
+    linear-gradient(to right, rgba(21, 18, 14, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(21, 18, 14, 0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 75%);
+}
+
+/* Film grain overlay: a fixed, static texture. No blend mode, so the page
+   underneath is not recomposited on every scroll frame (mobile smoothness). */
+.grain::after {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* Premium primary button finish (landing only): soft inner highlight. */
+.btn-sheen {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 55%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 1px 2px rgba(21, 18, 14, 0.18),
+    0 10px 24px -12px rgba(217, 103, 63, 0.55);
+}
+.btn-ink {
+  background: #15120e;
+  color: #f7f4ee;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 1px 2px rgba(21, 18, 14, 0.3);
+}
+.btn-ink:hover {
+  background: #2a241d;
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.animate-float-slow {
+  animation: float-slow 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float-slow {
+    animation: none;
+  }
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { OnboardingProgress } from "./OnboardingUI";
 import { StepImport } from "./StepImport";
 import { StepProfile } from "./StepProfile";
 import { StepEmail } from "./StepEmail";
@@ -323,15 +324,9 @@ export function AnalyzeWizard() {
 
   function handleEmailSubmit() {
     track("email_submitted", { email: email.trim() });
-    // Variant B only (see the funnel optimization mission's A/B decision:
-    // folded into the existing "Aha moment" B arm rather than a new,
-    // orthogonal test) -- variant A's path is untouched, straight to
-    // runAnalysis exactly as before.
-    if (abVariant === "B") {
-      setStep("goal");
-    } else {
-      runAnalysis();
-    }
+    // The goal question is now asked to every visitor (it used to be part of
+    // the B arm only); the A/B split still drives the loader.
+    setStep("goal");
   }
 
   function handleSelectGoal(value: Goal) {
@@ -439,12 +434,11 @@ export function AnalyzeWizard() {
 
   function backToRetryStep() {
     setSubmitting(false);
-    // Variant B already has a goal selected in state at this point --
-    // sending them back to "email" would force re-entering the email
-    // AND re-answering the goal question. "goal" keeps both: the email
-    // stays filled in (state, not re-asked) and the goal choice is
-    // still selected, just needs one more tap on Continuer to retry.
-    setStep(abVariant === "B" ? "goal" : "email");
+    // A goal is already selected at this point -- sending them back to
+    // "email" would force re-entering the email AND re-answering the goal
+    // question. "goal" keeps both: the email stays filled in and the goal
+    // choice is still selected, just one more tap on Continuer to retry.
+    setStep("goal");
   }
 
   /** The server's own verdict on this attempt: it stopped, with this code. */
@@ -892,10 +886,32 @@ export function AnalyzeWizard() {
     });
   }
 
+  // Onboarding progress (the loader keeps its own layout, untouched).
+  const onboardingSteps: { id: Step; label: string }[] = [
+    { id: "import", label: "Ton annonce" },
+    { id: "profile", label: "Ton profil" },
+    { id: "email", label: "Ton email" },
+    { id: "goal", label: "Ton objectif" },
+  ];
+  const onboardingIndex = onboardingSteps.findIndex((s) => s.id === step);
+
   return (
-    <div className="mx-auto max-w-lg px-5 py-12 sm:py-16">
+    <div className={step === "analyzing" ? "mx-auto max-w-lg px-5 py-12 sm:py-16" : "relative isolate"}>
+      {step !== "analyzing" && (
+        <>
+          <div aria-hidden className="hero-grid pointer-events-none absolute inset-x-0 -top-24 -z-10 h-[620px]" />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-56 left-1/2 -z-10 h-[520px] w-[min(900px,140vw)] -translate-x-1/2 rounded-full bg-accent/[0.08] blur-[120px]"
+          />
+        </>
+      )}
+      <div className={step === "analyzing" ? undefined : "mx-auto max-w-xl px-5 pt-10 pb-20 sm:pt-16 sm:pb-28"}>
+      {step !== "analyzing" && onboardingIndex >= 0 && (
+        <OnboardingProgress steps={onboardingSteps.map((s) => s.label)} current={onboardingIndex} />
+      )}
       {previousAnalysisId && step !== "analyzing" && (
-        <div className="mb-6 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-hover">
+        <div className="mb-6 rounded-2xl border border-accent/20 bg-accent-soft px-4 py-3 text-sm text-accent-hover">
           Nouvelle analyse après modifications — on comparera ton nouveau {BRAND_NAME} à
           l&apos;ancien.
         </div>
@@ -972,6 +988,7 @@ export function AnalyzeWizard() {
       {step === "analyzing" && loaderVariant !== "immersive" && abVariant === "A" && (
         <StepAnalyzing done={analysisDone} onFinalizing={handleFinalizing} />
       )}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { ArrowRight, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ErrorNote, OnboardingHeading, Surface } from "./OnboardingUI";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -61,17 +63,27 @@ export function StepEmail({
 
   return (
     <form onSubmit={handleSubmit} className="animate-fade-up">
-      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-        {isRetry ? "L'analyse n'a pas pu être terminée." : "Ton analyse est prête."}
-      </h1>
-      <p className="mt-3 text-muted">
-        {isRetry
-          ? "Tes captures sont toujours prêtes, tu peux réessayer directement."
-          : "Où veux-tu recevoir ton résultat ?"}
-      </p>
+      <OnboardingHeading
+        title={
+          isRetry ? (
+            "L'analyse n'a pas pu être terminée."
+          ) : (
+            <>
+              Ton analyse <em>est prête.</em>
+            </>
+          )
+        }
+        description={
+          isRetry
+            ? "Tes captures sont toujours prêtes, tu peux réessayer directement."
+            : "Où veux-tu recevoir ton résultat ?"
+        }
+      />
 
-      <div className="card mt-8 p-6 sm:p-7">
-        <input
+      <Surface className="mt-9">
+        <div className="group flex items-center gap-3 rounded-2xl border border-border bg-background px-4 transition-all focus-within:border-foreground/40 focus-within:shadow-[0_0_0_4px_rgba(217,108,63,0.12)]">
+          <Mail aria-hidden size={18} className="shrink-0 text-muted-2 transition-colors group-focus-within:text-accent" />
+          <input
           type="email"
           inputMode="email"
           autoFocus
@@ -79,12 +91,14 @@ export function StepEmail({
           onChange={(e) => handleChange(e.target.value)}
           onBlur={() => setTouched(true)}
           placeholder="ton@email.com"
-          className="w-full rounded-xl border border-border bg-background px-4 py-3 text-[15px] focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
-        />
+          aria-label="Adresse email"
+          className="w-full bg-transparent py-3.5 text-[15px] text-foreground placeholder:text-muted-2 focus:outline-none"
+          />
+        </div>
         {touched && !isValid && (
-          <p className="mt-2 text-sm text-score-low">Ajoute une adresse email valide pour continuer.</p>
+          <p className="mt-2.5 text-sm text-score-low">Ajoute une adresse email valide pour continuer.</p>
         )}
-      </div>
+      </Surface>
 
       {isValid && (
         <p className="mt-4 text-sm text-muted">
@@ -108,14 +122,16 @@ export function StepEmail({
         </p>
       )}
 
-      {error && (
-        <p className="mt-4 rounded-xl bg-score-low/10 px-4 py-3 text-sm text-score-low">{error}</p>
-      )}
+      {error && <ErrorNote>{error}</ErrorNote>}
 
-      <Button type="submit" size="lg" className="mt-6 w-full" disabled={loading}>
+      <Button type="submit" size="lg" className="btn-sheen group mt-8 w-full sm:w-full" disabled={loading}>
         {loading ? "Un instant…" : isRetry ? "Réessayer l'analyse" : "Voir ma première impression"}
+        {!loading && (
+          <ArrowRight aria-hidden size={18} className="transition-transform duration-300 group-hover:translate-x-0.5" />
+        )}
       </Button>
-      <p className="mt-3 text-center text-xs text-muted-2">
+      <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs text-muted-2">
+        <Lock aria-hidden size={12} className="shrink-0" />
         Aucun spam. Ton email sert uniquement à sauvegarder et retrouver ton analyse.
       </p>
     </form>

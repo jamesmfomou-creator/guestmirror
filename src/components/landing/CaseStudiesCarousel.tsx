@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useReducedMotion } from "framer-motion";
 import { scoreColor } from "@/lib/utils";
-import { Eyebrow } from "./Eyebrow";
+import { SectionHeading } from "./SectionHeading";
+import { BRAND_NAME } from "@/lib/brand";
 import { Reveal } from "./Reveal";
 
 // Illustrative only -- built entirely from the existing demo dataset
@@ -111,22 +112,40 @@ export function CaseStudiesCarousel() {
   }, [reduced, hovered]);
 
   return (
-    <section className="border-t border-border/70 py-20 sm:py-28">
-      <div className="mx-auto max-w-5xl px-5">
-        <Reveal className="text-center">
-          <div className="mb-4 flex justify-center">
-            <Eyebrow>Cas concrets</Eyebrow>
+    <section className="border-t border-border/70 py-24 sm:py-32">
+      <div className="mx-auto max-w-6xl px-5">
+        <div className="flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
+          <SectionHeading
+            index="04"
+            label="Cas concrets"
+            title={
+              <>
+                {BRAND_NAME} à travers des <em>cas concrets</em>
+              </>
+            }
+            description="Exemples illustratifs à partir de notre jeu de démonstration — pas des témoignages clients."
+          />
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={() => handleManualNav(-1)}
+              aria-label="Cas précédent"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-foreground transition-all hover:-translate-x-0.5 hover:border-foreground/30"
+            >
+              <ChevronLeft size={17} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleManualNav(1)}
+              aria-label="Cas suivant"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-foreground transition-all hover:translate-x-0.5 hover:border-foreground/30"
+            >
+              <ChevronRight size={17} />
+            </button>
           </div>
-          <h2 className="font-display text-balance text-3xl font-bold tracking-tight sm:text-4xl">
-            Découvrez GuestMirror à travers des cas concrets
-          </h2>
-          <p className="mx-auto mt-3 max-w-md text-sm text-muted">
-            Exemples illustratifs à partir de notre jeu de démonstration — pas des témoignages
-            clients.
-          </p>
-        </Reveal>
+        </div>
 
-        <Reveal delay={0.1} className="relative mt-12">
+        <Reveal delay={0.1} className="relative mt-14">
           <div
             ref={trackRef}
             onMouseEnter={() => setHovered(true)}
@@ -140,21 +159,19 @@ export function CaseStudiesCarousel() {
               <div
                 key={c.title}
                 data-case-card
-                className="card relative w-[280px] shrink-0 snap-start overflow-hidden sm:w-[320px]"
+                className="group relative w-[290px] shrink-0 snap-start overflow-hidden rounded-[24px] border border-border bg-card transition-shadow duration-500 hover:shadow-[0_30px_60px_-36px_rgba(21,18,14,0.4)] sm:w-[360px]"
               >
                 <div className="relative aspect-[4/3] w-full overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={c.image} alt="" className="h-full w-full object-cover" />
+                  <img src={c.image} alt="" className="h-full w-full object-cover transition-transform duration-[1.4s] ease-out group-hover:scale-[1.04]" />
                   <span className="absolute top-3 left-3 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white">
                     Exemple de démonstration
                   </span>
                 </div>
-                <div className="p-5">
-                  <span className="text-[11px] font-semibold tracking-wide text-muted-2 uppercase">
-                    {c.tag}
-                  </span>
-                  <h3 className="mt-1.5 text-sm font-semibold text-foreground">{c.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted">{c.text}</p>
+                <div className="p-6">
+                  <span className="label-mono text-muted-2">{c.tag}</span>
+                  <h3 className="text-display mt-3 text-[1.45rem] leading-[1.15] font-semibold tracking-[-0.025em] text-foreground">{c.title}</h3>
+                  <p className="mt-3 text-[14.5px] leading-relaxed text-muted">{c.text}</p>
                   <div className="mt-4 flex items-center gap-2">
                     <ScorePill score={c.before} />
                     {c.after !== null && (
@@ -171,24 +188,6 @@ export function CaseStudiesCarousel() {
             ))}
           </div>
 
-          <div className="mt-6 flex justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => handleManualNav(-1)}
-              aria-label="Cas précédent"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-background-alt"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleManualNav(1)}
-              aria-label="Cas suivant"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-background-alt"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
         </Reveal>
       </div>
     </section>

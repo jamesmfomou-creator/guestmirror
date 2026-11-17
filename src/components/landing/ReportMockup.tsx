@@ -1,5 +1,6 @@
 import { Reveal } from "./Reveal";
-import { Eyebrow } from "./Eyebrow";
+import { ArrowRight } from "lucide-react";
+import { SectionHeading } from "./SectionHeading";
 import { CtaTrackedButton } from "./CtaTrackedButton";
 import { ReportPreviewCard } from "./ReportPreviewCard";
 
@@ -9,31 +10,32 @@ import { ReportPreviewCard } from "./ReportPreviewCard";
 // a real analysis.
 export function ReportMockup() {
   return (
-    <section className="py-20 sm:py-28">
-      <div className="mx-auto max-w-2xl px-5">
-        <Reveal className="text-center">
-          <div className="mb-4 flex justify-center">
-            <Eyebrow>Aperçu du rapport</Eyebrow>
-          </div>
-          <h2 className="font-display text-balance text-3xl font-bold tracking-tight sm:text-4xl">
-            Pas juste un score. Un diagnostic.
-          </h2>
-          <p className="mx-auto mt-3 max-w-md text-balance text-base text-muted sm:text-lg">
-            Découvre ce qui peut faire hésiter les voyageurs avant même qu&apos;ils réservent.
-          </p>
-        </Reveal>
-
-        <div className="mt-10 sm:mt-12">
-          <ReportPreviewCard />
+    <section className="py-24 sm:py-32">
+      <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-[1fr_1.05fr] lg:gap-20">
+        <div>
+          <SectionHeading
+            index="01"
+            label="Aperçu du rapport"
+            title={
+              <>
+                Pas juste un score. <em>Un diagnostic.</em>
+              </>
+            }
+            description="Découvre ce qui peut faire hésiter les voyageurs avant même qu'ils réservent."
+          />
+          <Reveal delay={0.15} className="mt-10 flex flex-col items-start">
+            <CtaTrackedButton href="/analyze" size="lg" className="btn-sheen group gap-2" ctaLocation="report_preview">
+              Analyser mon annonce Airbnb
+              <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-0.5" />
+            </CtaTrackedButton>
+            <p className="mt-3 text-xs text-muted-2">
+              Exemple illustratif — chaque diagnostic dépend de l&apos;annonce analysée.
+            </p>
+          </Reveal>
         </div>
 
-        <div className="mt-8 flex flex-col items-center text-center">
-          <CtaTrackedButton href="/analyze" size="lg" ctaLocation="report_preview">
-            Analyser mon annonce Airbnb →
-          </CtaTrackedButton>
-          <p className="mt-3 text-xs text-muted-2">
-            Exemple illustratif — chaque diagnostic dépend de l&apos;annonce analysée.
-          </p>
+        <div className="mx-auto w-full max-w-xl">
+          <ReportPreviewCard />
         </div>
       </div>
     </section>
