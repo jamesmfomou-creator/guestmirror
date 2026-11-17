@@ -14,7 +14,7 @@ const GOAL_OPTIONS: { value: Goal; label: string }[] = [
 ];
 
 /**
- * Onboarding "objectif" question -- variant B only, asked right after
+ * Onboarding "objectif" question -- asked to everyone right after
  * email, before the real analysis request fires (see AnalyzeWizard.tsx).
  * A choice is required to continue (no skip link, unlike StepProfile):
  * the brief for this step specifies exactly one button, no "passer cette

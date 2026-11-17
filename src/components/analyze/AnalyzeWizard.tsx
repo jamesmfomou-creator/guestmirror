@@ -324,15 +324,9 @@ export function AnalyzeWizard() {
 
   function handleEmailSubmit() {
     track("email_submitted", { email: email.trim() });
-    // Variant B only (see the funnel optimization mission's A/B decision:
-    // folded into the existing "Aha moment" B arm rather than a new,
-    // orthogonal test) -- variant A's path is untouched, straight to
-    // runAnalysis exactly as before.
-    if (abVariant === "B") {
-      setStep("goal");
-    } else {
-      runAnalysis();
-    }
+    // The goal question is now asked to every visitor (it used to be part of
+    // the B arm only); the A/B split still drives the loader.
+    setStep("goal");
   }
 
   function handleSelectGoal(value: Goal) {
@@ -440,12 +434,11 @@ export function AnalyzeWizard() {
 
   function backToRetryStep() {
     setSubmitting(false);
-    // Variant B already has a goal selected in state at this point --
-    // sending them back to "email" would force re-entering the email
-    // AND re-answering the goal question. "goal" keeps both: the email
-    // stays filled in (state, not re-asked) and the goal choice is
-    // still selected, just needs one more tap on Continuer to retry.
-    setStep(abVariant === "B" ? "goal" : "email");
+    // A goal is already selected at this point -- sending them back to
+    // "email" would force re-entering the email AND re-answering the goal
+    // question. "goal" keeps both: the email stays filled in and the goal
+    // choice is still selected, just one more tap on Continuer to retry.
+    setStep("goal");
   }
 
   /** The server's own verdict on this attempt: it stopped, with this code. */
@@ -898,7 +891,7 @@ export function AnalyzeWizard() {
     { id: "import", label: "Ton annonce" },
     { id: "profile", label: "Ton profil" },
     { id: "email", label: "Ton email" },
-    ...(abVariant === "B" ? [{ id: "goal" as Step, label: "Ton objectif" }] : []),
+    { id: "goal", label: "Ton objectif" },
   ];
   const onboardingIndex = onboardingSteps.findIndex((s) => s.id === step);
 

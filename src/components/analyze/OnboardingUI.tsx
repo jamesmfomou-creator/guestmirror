@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useSyncExternalStore } from "react";
+import { ReactNode } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -89,15 +89,9 @@ export function ErrorNote({ children }: { children: ReactNode }) {
 }
 
 /** Progress across the onboarding steps (shown above each step). */
-const noopSubscribe = () => () => {};
-
 export function OnboardingProgress({ steps, current }: { steps: string[]; current: number }) {
-  // The step count depends on the A/B cookie, read client-side only: render
-  // after hydration, with the same height reserved meanwhile.
-  const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
-  if (!hydrated) return <div aria-hidden className="mb-10 h-[27px] sm:mb-12" />;
   return (
-    <div className="mb-10 animate-fade-up sm:mb-12">
+    <div className="mb-10 sm:mb-12">
       <div className="label-mono flex items-center justify-between text-muted-2">
         <span>
           <span className="text-accent">{String(current + 1).padStart(2, "0")}</span>
