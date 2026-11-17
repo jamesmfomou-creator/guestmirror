@@ -77,19 +77,3 @@ export function scoreSummarySentence(score: number): string {
   }
   return "Ton annonce présente plusieurs points à améliorer. Découvre ce qui freine les voyageurs.";
 }
-
-export function lockedRecommendationCount(result: {
-  top_priorities: { rank: number }[];
-  weaknesses: unknown[];
-  title_analysis: { suggested_titles: unknown[] };
-  photo_analysis: unknown[];
-  action_plan: unknown[];
-}): number {
-  return (
-    Math.max(0, result.top_priorities.length - 1) +
-    Math.max(0, result.weaknesses.length - 1) +
-    result.title_analysis.suggested_titles.length +
-    result.photo_analysis.length +
-    result.action_plan.length
-  );
-}

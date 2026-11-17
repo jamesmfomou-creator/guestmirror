@@ -137,3 +137,16 @@ export function paywallPreviewContents(preview: PaywallPreview): string[] {
   }
   return lines;
 }
+
+/**
+ * Section names for the compact locked card (A/B variant B, LockedPreviewB),
+ * only for the sections this report really contains.
+ */
+export function lockedCategories(preview: PaywallPreview): string[] {
+  const categories: string[] = [];
+  if (preview.photoCount > 0 || preview.hasPhotoOrder) categories.push("Analyse des photos");
+  if (preview.suggestedTitleCount > 0 || preview.hasImprovedDescription) categories.push("Titre et description");
+  if (preview.weaknessCount > 0 || preview.guestQuestionCount > 0) categories.push("Points de friction");
+  if (preview.priorityCount > 0 || preview.actionCount > 0) categories.push("Actions prioritaires");
+  return categories;
+}

@@ -26,7 +26,6 @@ import { GuestQuestions } from "@/components/result/GuestQuestions";
 import { DeleteAnalysis } from "@/components/result/DeleteAnalysis";
 import { OptionalInfoCard } from "@/components/result/OptionalInfoCard";
 import { ManageSubscriptionLink } from "@/components/result/ManageSubscriptionLink";
-import { lockedRecommendationCount } from "@/lib/utils";
 import { BRAND_NAME } from "@/lib/brand";
 import { getAccessForEmail } from "@/lib/access/reportAccess";
 import { AccessPanel, BuyAddonButton } from "@/components/result/AccessPanel";
@@ -40,7 +39,9 @@ import { PostPurchaseFeedback } from "@/components/result/PostPurchaseFeedback";
 import { IncompleteResultNotice } from "@/components/result/IncompleteResultNotice";
 import { isIncompleteResult } from "@/lib/resultShape";
 import { getPaywallVariantServer } from "@/lib/paywallExperiment-server";
-import { buildPaywallPreview } from "@/lib/paywallPreview";
+import { buildPaywallPreview, lockedCategories, paywallPreviewContents } from "@/lib/paywallPreview";
+import { displayListingTitle, goalExplanation, personalizeResult } from "@/lib/goalPersonalization";
+import { ListingContext } from "@/components/result/ListingContext";
 import { EMAIL_CONFIGURED } from "@/lib/env";
 
 export const metadata: Metadata = {
@@ -114,9 +115,24 @@ export default async function ResultPage({
   // when its one-time Stripe price is configured for this environment.
   const addonAvailable = addonPackAvailable();
 
+  // Locked teaser figures (both A/B variants, control paywall): counts of
+  // what this report really holds, same source as the v2 paywall preview.
+  const lockedPreview = !unlocked && !incomplete ? buildPaywallPreview(analysis.result) : null;
+
   const previous = analysis.previous_analysis_id
     ? await getAnalysis(analysis.previous_analysis_id)
     : null;
+
+  // Goal personalisation (lib/goalPersonalization.ts): the same report,
+  // reordered and flagged for the visitor's goal -- score and texts
+  // untouched, no AI call. The free view keeps showing the model's #1
+  // priority, which the reordering never moves. null without a goal.
+  const personal = incomplete
+    ? null
+    : personalizeResult(analysis.result, analysis.goal, { hasPrevious: Boolean(previous) });
+  const report = personal?.result ?? analysis.result;
+  const listingTitle = displayListingTitle(analysis.result);
+  const goalMode = personal?.mode ?? null;
 
   return (
     <div className="px-5 pb-24 pt-12 sm:pt-16">
@@ -173,6 +189,17 @@ export default async function ResultPage({
           Ton diagnostic Airbnb est prêt
         </h1>
       )}
+
+      {/* Which listing, which goal. Variant B's locked view already shows the
+          cover photo above (AhaCoverImage), so only the text is added there. */}
+      <ListingContext
+        photoUrl={!unlocked && variant === "B" ? null : (images[0] ?? null)}
+        title={listingTitle}
+        city={analysis.city}
+        goalReminder={personal?.reminder ?? null}
+        goalExplanation={personal ? goalExplanation(personal, unlocked) : null}
+        className={!unlocked && variant === "B" ? "mt-6" : ""}
+      />
 
       <ScoreHeader
         result={analysis.result}
@@ -234,7 +261,7 @@ export default async function ResultPage({
             !creditUsable ? <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} addonAvailable={addonAvailable} /> : null
           ) : (
             <>
-              <LockedTeaser count={lockedRecommendationCount(analysis.result)} analysisId={id} />
+              <LockedTeaser weaknessCount={lockedPreview?.weaknessCount ?? 0} contents={lockedPreview ? paywallPreviewContents(lockedPreview) : []} analysisId={id} />
               {!creditUsable && <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} addonAvailable={addonAvailable} />}
             </>
           )}
@@ -250,7 +277,7 @@ export default async function ResultPage({
           {paywallPreview ? (
             !creditUsable ? <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} addonAvailable={addonAvailable} /> : null
           ) : (
-            <LockedPreviewB analysisId={id} count={lockedRecommendationCount(analysis.result)}>
+            <LockedPreviewB analysisId={id} weaknessCount={lockedPreview?.weaknessCount ?? 0} categories={lockedPreview ? lockedCategories(lockedPreview) : []}>
               {!creditUsable && <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} addonAvailable={addonAvailable} />}
             </LockedPreviewB>
           )}
@@ -268,18 +295,37 @@ export default async function ResultPage({
       {unlocked && !incomplete && (
         <>
           {previous && <BeforeAfter previous={previous.result} current={analysis.result} />}
-          <FullPriorities result={analysis.result} />
-          <StrengthsWeaknesses result={analysis.result} />
-          <CoverPhotoImpact result={analysis.result} />
-          <TitleSection result={analysis.result} />
-          <DescriptionSection result={analysis.result} />
-          <PhotoGrid result={analysis.result} images={images} />
-          <GuestQuestions result={analysis.result} />
-          <ActionPlan result={analysis.result} />
+          <FullPriorities result={report} matches={personal?.priorityMatches} />
+          {goalMode === "rescan" && <RescanCTA analysisId={id} />}
+          {(goalMode === "topic" && personal?.goal === "improve_appeal"
+            ? (["cover", "photos", "title", "weaknesses", "description", "questions"] as const)
+            : goalMode === "topic" && personal?.goal === "reduce_hesitation"
+              ? (["weaknesses", "questions", "description", "cover", "title", "photos"] as const)
+              : (["weaknesses", "cover", "title", "description", "photos", "questions"] as const)
+          ).map((section) => {
+            // Section order follows the goal (improve_appeal: visuals first;
+            // reduce_hesitation: what is missing or unclear first). Same
+            // sections, same content, whatever the order.
+            switch (section) {
+              case "weaknesses":
+                return <StrengthsWeaknesses key={section} result={report} matches={personal?.weaknessMatches} />;
+              case "cover":
+                return <CoverPhotoImpact key={section} result={report} />;
+              case "title":
+                return <TitleSection key={section} result={report} />;
+              case "description":
+                return <DescriptionSection key={section} result={report} />;
+              case "photos":
+                return <PhotoGrid key={section} result={report} images={images} />;
+              case "questions":
+                return <GuestQuestions key={section} result={report} />;
+            }
+          })}
+          <ActionPlan result={report} matches={personal?.actionMatches} />
           {!analysis.city && !analysis.property_type && !analysis.guest_capacity && !analysis.nightly_price && (
             <OptionalInfoCard analysisId={id} />
           )}
-          <RescanCTA analysisId={id} />
+          {goalMode !== "rescan" && <RescanCTA analysisId={id} />}
           <ShareCard result={analysis.result} />
           <DeleteAnalysis analysisId={id} />
         </>

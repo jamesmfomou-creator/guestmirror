@@ -1,8 +1,9 @@
 import { AnalysisResult } from "@/lib/types";
 import { Section } from "./Section";
 import { severityEmoji, severityLabel } from "@/lib/utils";
+import { GoalBadge } from "./GoalBadge";
 
-export function StrengthsWeaknesses({ result }: { result: AnalysisResult }) {
+export function StrengthsWeaknesses({ result, matches }: { result: AnalysisResult; matches?: boolean[] }) {
   return (
     <Section title="Points forts et points faibles">
       <div className="grid gap-8 sm:grid-cols-2">
@@ -24,12 +25,17 @@ export function StrengthsWeaknesses({ result }: { result: AnalysisResult }) {
             Points faibles
           </h3>
           <ul className="mt-4 space-y-5">
-            {result.weaknesses.map((w) => (
-              <li key={w.title}>
+            {result.weaknesses.map((w, i) => (
+              <li key={`${w.title}-${i}`}>
                 <p className="flex items-center gap-2 text-sm font-medium text-foreground">
                   <span title={severityLabel(w.severity)}>{severityEmoji(w.severity)}</span>
                   {w.title}
                 </p>
+                {matches?.[i] && (
+                  <p className="mt-1.5">
+                    <GoalBadge />
+                  </p>
+                )}
                 <p className="mt-1 text-sm text-muted">{w.explanation}</p>
                 <p className="mt-1.5 text-sm text-foreground">
                   <span className="font-medium text-muted-2">Recommandation — </span>
