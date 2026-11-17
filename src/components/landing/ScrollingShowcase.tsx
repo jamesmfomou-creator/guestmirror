@@ -47,7 +47,9 @@ export function ScrollingShowcase({ items, className }: { items: ShowcaseItem[];
     item.type === "score" ? <ScoreCard key={key} score={item.score} /> : <TestimonialCard key={key} item={item} />;
 
   return (
-    <div className={`no-scrollbar overflow-hidden ${className ?? ""}`}>
+    <div
+      className={`no-scrollbar overflow-hidden [mask-image:linear-gradient(to_right,transparent,#000_12%,#000_88%,transparent)] ${className ?? ""}`}
+    >
       <div className="animate-marquee flex w-max gap-3">
         {items.map((item, i) => renderItem(item, `a-${i}`))}
         {items.map((item, i) => renderItem(item, `b-${i}`))}

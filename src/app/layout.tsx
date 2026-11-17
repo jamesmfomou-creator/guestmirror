@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/brand";
@@ -15,13 +15,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Bolder display face used on the landing page's major headlines for a more
-// premium, tech-forward feel -- everything else (UI, body copy) stays on
-// Geist Sans.
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  weight: ["600", "700", "800"],
+// Editorial serif for the landing page's headlines (roman + italic for the
+// emphasised words). Only the landing uses font-display; the product pages
+// (analysis, result, paywall) stay entirely on Geist.
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-serif",
+  subsets: ["latin", "latin-ext"],
+  weight: "400",
+  style: ["normal", "italic"],
+  display: "swap",
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
@@ -55,7 +57,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="fr"
-      className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <Header />

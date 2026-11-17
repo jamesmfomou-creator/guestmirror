@@ -3,7 +3,6 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ImagePlus, Link2, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/Button";
 import { track } from "@/lib/analytics";
 import { isAirbnbUrl } from "@/lib/airbnbUrl";
 
@@ -50,15 +49,13 @@ export function HeroForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mx-auto w-full max-w-md">
+    <form onSubmit={handleSubmit} className="w-full max-w-[34rem]">
       <label htmlFor="hero-airbnb-url" className="sr-only">
         Colle ton lien Airbnb
       </label>
-      <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-1.5 shadow-[0_8px_28px_-14px_rgba(28,26,23,0.22)] transition-shadow focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 sm:flex-row sm:items-center sm:gap-1.5">
-        <div className="flex items-center gap-2 pl-2.5 sm:flex-1">
-          <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
-            <Link2 size={16} strokeWidth={2.25} />
-          </span>
+      <div className="group relative flex flex-col gap-2 rounded-[22px] border border-border bg-card/90 p-2 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_24px_48px_-28px_rgba(21,18,14,0.35)] backdrop-blur transition-all duration-300 focus-within:border-foreground/25 focus-within:shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_28px_56px_-28px_rgba(21,18,14,0.45)] sm:flex-row sm:items-center">
+        <div className="flex items-center gap-3 pl-3 sm:flex-1">
+          <Link2 aria-hidden size={17} strokeWidth={2} className="shrink-0 text-muted-2" />
           <input
             id="hero-airbnb-url"
             type="text"
@@ -66,32 +63,28 @@ export function HeroForm() {
             autoComplete="off"
             value={url}
             onChange={(e) => handleChange(e.target.value)}
-            placeholder="https://www.airbnb.fr/rooms/…"
-            className="w-full bg-transparent py-2.5 text-base text-foreground placeholder:text-muted-2 focus:outline-none"
+            placeholder="Colle le lien de ton annonce Airbnb"
+            className="w-full bg-transparent py-3 text-[15px] text-foreground placeholder:text-muted-2 focus:outline-none"
           />
         </div>
-        <Button type="submit" size="lg" className="w-full shrink-0 gap-1.5 sm:w-auto">
-          Analyser
-          <ArrowRight size={16} />
-        </Button>
+        <button
+          type="submit"
+          className="btn-sheen group/btn inline-flex shrink-0 items-center justify-center gap-2 rounded-[16px] bg-accent px-6 py-3.5 text-[15px] font-medium text-accent-foreground transition-colors hover:bg-accent-hover"
+        >
+          Analyser mon annonce
+          <ArrowRight size={16} className="transition-transform duration-300 group-hover/btn:translate-x-0.5" />
+        </button>
       </div>
-      {error && <p className="mt-2 text-left text-sm text-score-low">{error}</p>}
+      {error && <p className="mt-2 pl-1 text-left text-sm text-score-low">{error}</p>}
 
-      <div className="mt-4 flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-muted-2">
-        <span className="h-px flex-1 bg-border" />
-        ou
-        <span className="h-px flex-1 bg-border" />
-      </div>
-
-      <Button
+      <button
         type="button"
-        variant="outline"
-        className="mt-4 w-full"
         onClick={handleScreenshotClick}
+        className="mt-4 inline-flex items-center gap-2 pl-1 text-sm text-muted transition-colors hover:text-foreground"
       >
-        <ImagePlus size={16} />
-        Importer une capture d&apos;écran
-      </Button>
+        <ImagePlus size={15} />
+        Ou importe une capture d&apos;écran
+      </button>
     </form>
   );
 }

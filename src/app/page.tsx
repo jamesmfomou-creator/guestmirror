@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Check } from "lucide-react";
+import { ArrowDown, ArrowRight } from "lucide-react";
 import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
 import { HeroForm } from "@/components/landing/HeroForm";
 import { HeroProductDemo } from "@/components/landing/HeroProductDemo";
@@ -17,7 +17,8 @@ import { FAQAccordion } from "@/components/landing/FAQAccordion";
 import { Reveal } from "@/components/landing/Reveal";
 import { BRAND_NAME } from "@/lib/brand";
 import { CtaTrackedButton } from "@/components/landing/CtaTrackedButton";
-import { Eyebrow } from "@/components/landing/Eyebrow";
+import { SectionHeading } from "@/components/landing/SectionHeading";
+import { StaggerWords } from "@/components/landing/StaggerWords";
 import { ResumeAnalysisBanner } from "@/components/analyze/ResumeAnalysisBanner";
 
 export const metadata: Metadata = {
@@ -62,7 +63,7 @@ export default async function LandingPage() {
   const showcaseItems = await getShowcaseItems();
 
   return (
-    <>
+    <div className="grain">
       <AnalyticsBeacon event="landing_view" />
 
       {/* Renders nothing unless this browser started an analysis it never
@@ -70,101 +71,126 @@ export default async function LandingPage() {
       <ResumeAnalysisBanner className="mx-auto max-w-lg px-5 pt-6" />
 
       {/* HERO */}
-      <section className="mx-auto max-w-6xl overflow-x-clip px-5 pt-14 pb-16 sm:pt-20 sm:pb-24">
-        <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
-          <div className="text-center lg:text-left">
-            <div className="mb-5 flex justify-center lg:justify-start">
-              <Eyebrow>L&apos;IA au service de ton annonce Airbnb</Eyebrow>
-            </div>
-            <h1 className="font-display text-balance text-5xl leading-[1.2] font-extrabold tracking-[-0.01em] sm:text-6xl sm:leading-[1.15] lg:text-7xl lg:leading-[1.12]">
-              Améliore ton annonce Airbnb pour donner envie de réserver.
-            </h1>
-            <p className="mx-auto mt-6 max-w-xl text-balance text-lg text-muted lg:mx-0">
-              Colle ton lien Airbnb. GuestMirror analyse ton annonce, identifie ses points
-              faibles et te montre comment l&apos;améliorer.
-            </p>
-            <div className="mt-8 flex flex-col items-center gap-4 lg:items-start">
-              <HeroForm />
-              <a
-                href="#comment-ca-marche"
-                className="text-sm font-medium text-muted transition-opacity hover:opacity-70"
-              >
-                Voir comment ça marche
-              </a>
-            </div>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-2 lg:justify-start">
-              {CHECKS.map((c) => (
-                <span key={c} className="inline-flex items-center gap-1.5">
-                  <Check size={13} className="text-score-high" />
-                  {c}
+      <section className="relative overflow-x-clip">
+        <div aria-hidden className="hero-grid pointer-events-none absolute inset-x-0 -top-24 h-[760px]" />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-48 left-1/2 h-[560px] w-[min(1000px,140vw)] -translate-x-1/2 rounded-full bg-accent/[0.09] blur-[120px]"
+        />
+        <div className="relative mx-auto grid max-w-6xl items-center gap-16 px-5 pt-14 pb-20 sm:pt-20 lg:grid-cols-[1.12fr_1fr] lg:gap-10 lg:pt-24 lg:pb-28">
+          <div>
+            <Reveal y={8}>
+              <span className="label-mono inline-flex items-center gap-2.5 rounded-full border border-border bg-card/70 px-3.5 py-1.5 text-muted backdrop-blur">
+                <span aria-hidden className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60 motion-reduce:hidden" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
                 </span>
-              ))}
-            </div>
-            <div className="mt-4 flex justify-center lg:justify-start">
-              <SocialProof />
-            </div>
+                Diagnostic IA pour annonces Airbnb
+              </span>
+            </Reveal>
+
+            <StaggerWords
+              className="text-display mt-7 text-[3.15rem] text-foreground sm:text-[4.4rem] lg:text-[5.25rem]"
+              segments={[{ text: "Améliore ton annonce Airbnb pour" }, { text: "donner envie de réserver.", em: true }]}
+            />
+
+            <Reveal delay={0.35}>
+              <p className="mt-7 max-w-lg text-pretty text-lg leading-relaxed text-muted">
+                Colle ton lien Airbnb. {BRAND_NAME} analyse ton annonce, identifie ses points faibles et
+                te montre comment l&apos;améliorer.
+              </p>
+            </Reveal>
+
+            <Reveal delay={0.45} className="mt-9">
+              <HeroForm />
+            </Reveal>
+
+            <Reveal delay={0.55} className="mt-9 flex flex-col gap-5">
+              <ul className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] text-muted">
+                {CHECKS.map((c) => (
+                  <li key={c} className="inline-flex items-center gap-2">
+                    <span aria-hidden className="h-1 w-1 rounded-full bg-accent" />
+                    {c}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex flex-wrap items-center gap-4">
+                <SocialProof />
+                <a
+                  href="#methode"
+                  className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground"
+                >
+                  Voir comment ça marche
+                  <ArrowDown size={14} className="transition-transform duration-300 group-hover:translate-y-0.5" />
+                </a>
+              </div>
+            </Reveal>
           </div>
 
-          <div className="flex flex-col items-center gap-3">
+          <Reveal delay={0.25} y={24} className="flex flex-col items-center gap-4">
             <HeroProductDemo />
             <p className="max-w-xs text-center text-xs text-muted-2">
-              Exemple de démonstration. Tes propres captures servent uniquement à produire ton
-              analyse.
+              Exemple de démonstration. Tes propres captures servent uniquement à produire ton analyse.
             </p>
-          </div>
+          </Reveal>
         </div>
       </section>
 
-      <ScrollingShowcase items={showcaseItems} className="border-y border-border/70 bg-background-alt/50 py-4" />
+      <ScrollingShowcase items={showcaseItems} className="border-y border-border/70 py-5" />
 
-      <CaseStudiesCarousel />
-
-      <ReportMockup />
-
-      <div id="comment-ca-marche">
-        <StepsShowcase />
+      {/* 01 — the report */}
+      <div id="exemple" className="scroll-mt-24">
+        <ReportMockup />
       </div>
 
-      <WhatWeSee />
+      {/* 02 — method */}
+      <div id="methode" className="scroll-mt-24">
+        <span id="comment-ca-marche" className="block scroll-mt-24" aria-hidden />
+        <StepsShowcase />
+        <WhatWeSee />
+      </div>
 
+      {/* 03 — progression (dark) */}
       <BeforeAfterShowcase />
 
-      {/* COMPARE MODE */}
-      <section className="border-t border-border/70 bg-background-alt/50 py-20 sm:py-28">
-        <div className="mx-auto max-w-3xl px-5 text-center">
-          <Reveal>
-            <div className="mb-4 flex justify-center">
-              <Eyebrow>Mode comparaison</Eyebrow>
-            </div>
-            <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
-              Laquelle tu cliquerais ?
-            </h2>
-            <p className="mx-auto mt-3 max-w-md text-muted">
-              Deux annonces. Quelques secondes. Découvre laquelle crée la meilleure première
-              impression — et pourquoi.
-            </p>
-          </Reveal>
-          <Reveal delay={0.1} className="mt-8">
+      {/* 04 — illustrative cases */}
+      <CaseStudiesCarousel />
+
+      {/* 05 — compare mode */}
+      <section className="border-t border-border/70 py-24 sm:py-32">
+        <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-[1fr_1.05fr] lg:gap-20">
+          <SectionHeading
+            index="05"
+            label="Mode comparaison"
+            title={
+              <>
+                Laquelle <em>tu cliquerais</em> ?
+              </>
+            }
+            description="Deux annonces. Quelques secondes. Découvre laquelle crée la meilleure première impression — et pourquoi."
+          />
+          <Reveal delay={0.1}>
             <LandingCompareTeaser />
           </Reveal>
         </div>
       </section>
 
-      {/* PRICING */}
-      <section className="border-t border-border/70 py-20 sm:py-28">
-        <Reveal className="mx-auto max-w-3xl px-5 text-center">
-          <div className="mb-4 flex justify-center">
-            <Eyebrow>Tarifs</Eyebrow>
-          </div>
-          <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
-            Découvre exactement quoi améliorer
-          </h2>
-          <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
-            Un rapport pour ton annonce, 20 analyses par mois pour tes logements, ou un accès à vie
-            sans abonnement.
-          </p>
-        </Reveal>
-        <Reveal className="mx-auto mt-8 max-w-5xl px-5 text-center">
+      {/* 06 — pricing */}
+      <section id="tarifs" className="scroll-mt-24 border-t border-border/70 bg-background-alt/60 py-24 sm:py-32">
+        <div className="mx-auto max-w-6xl px-5">
+          <SectionHeading
+            index="06"
+            label="Tarifs"
+            align="center"
+            title={
+              <>
+                Découvre exactement <em>quoi améliorer</em>
+              </>
+            }
+            description="Un rapport pour ton annonce, 20 analyses par mois pour tes logements, ou un accès à vie sans abonnement."
+          />
+        </div>
+        <Reveal className="mx-auto mt-14 max-w-5xl px-5 text-center">
           {/* Every CTA starts with a free analysis; the offer is chosen on the
               diagnostic page (the paywall), where checkout happens. */}
           <PricingCards
@@ -183,7 +209,7 @@ export default async function LandingPage() {
               <CtaTrackedButton
                 href="/analyze"
                 size="lg"
-                className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
+                className="btn-sheen mt-6 w-full whitespace-normal text-[15px] sm:text-base"
                 ctaLocation="pricing_conciergerie"
               >
                 Choisir Conciergerie
@@ -209,42 +235,51 @@ export default async function LandingPage() {
           back: render <TestimonialsSection /> here again (it still only shows
           real, consented testimonials). */}
 
-      {/* FAQ */}
-      <section className="border-t border-border/70 py-20 sm:py-28">
-        <div className="mx-auto max-w-2xl px-5">
-          <Reveal>
-            <div className="mb-4 flex justify-center">
-              <Eyebrow>FAQ</Eyebrow>
-            </div>
-            <h2 className="font-display text-center text-3xl font-bold tracking-tight sm:text-4xl">
-              Questions fréquentes
-            </h2>
-          </Reveal>
+      {/* 07 — FAQ */}
+      <section className="border-t border-border/70 py-24 sm:py-32">
+        <div className="mx-auto grid max-w-6xl gap-12 px-5 lg:grid-cols-[1fr_1.35fr] lg:gap-20">
+          <SectionHeading
+            index="07"
+            label="Questions"
+            title={
+              <>
+                Questions <em>fréquentes</em>
+              </>
+            }
+            description={`Tout ce qu'il faut savoir avant de tester ton annonce avec ${BRAND_NAME}.`}
+          />
           <Reveal delay={0.1}>
             <FAQAccordion items={FAQ} />
           </Reveal>
         </div>
       </section>
 
-      {/* FINAL CTA */}
-      <section className="relative overflow-hidden border-t border-border/70 bg-background-alt/50 py-24 sm:py-32">
-        <div
-          aria-hidden
-          className="absolute top-1/2 left-1/2 -z-10 h-[420px] w-[620px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/15 blur-[110px]"
-        />
-        <Reveal className="mx-auto max-w-lg px-5 text-center">
-          <h2 className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">Et ton annonce ?</h2>
-          <p className="mt-4 text-muted">
-            Découvre ce qu&apos;un voyageur voit pendant ses premières secondes.
-          </p>
-          <CtaTrackedButton href="/analyze" size="lg" className="mt-7" ctaLocation="final_cta">
-            Faire le test des 5 secondes
-          </CtaTrackedButton>
-          <p className="mt-3 text-xs text-muted-2">
-            Gratuit pour commencer • Résultat en quelques instants
-          </p>
-        </Reveal>
+      {/* FINAL CTA (dark) */}
+      <section className="px-4 pb-16 sm:px-5 sm:pb-24">
+        <div className="theme-ink relative mx-auto max-w-6xl overflow-hidden rounded-[32px] px-6 py-20 text-center sm:px-12 sm:py-28">
+          <div aria-hidden className="pointer-events-none absolute -bottom-40 left-1/2 h-[420px] w-[760px] -translate-x-1/2 rounded-full bg-accent/30 blur-[120px]" />
+          <div aria-hidden className="hero-grid pointer-events-none absolute inset-0 opacity-[0.35] invert" />
+          <Reveal className="relative mx-auto max-w-2xl">
+            <span className="label-mono text-muted-2">Ton tour</span>
+            <h2 className="text-display mt-5 text-[3rem] text-foreground sm:text-[4.5rem]">
+              Et <em className="text-accent">ton annonce</em> ?
+            </h2>
+            <p className="mx-auto mt-5 max-w-md text-lg text-muted">
+              Découvre ce qu&apos;un voyageur voit pendant ses premières secondes.
+            </p>
+            <CtaTrackedButton
+              href="/analyze"
+              size="lg"
+              className="btn-sheen group mt-9 gap-2"
+              ctaLocation="final_cta"
+            >
+              Faire le test des 5 secondes
+              <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-0.5" />
+            </CtaTrackedButton>
+            <p className="mt-4 text-xs text-muted-2">Gratuit pour commencer • Résultat en quelques instants</p>
+          </Reveal>
+        </div>
       </section>
-    </>
+    </div>
   );
 }

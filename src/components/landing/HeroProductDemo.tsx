@@ -42,29 +42,15 @@ export function HeroProductDemo() {
   }, [reduced, cycle]);
 
   return (
-    <div className="relative z-0 mx-auto w-full max-w-md pt-5 pb-8 sm:pt-6 sm:pb-10">
+    <div className="animate-float-slow relative z-0 mx-auto w-full max-w-md pt-5 pb-8 sm:pt-6 sm:pb-10">
       {/* Soft depth glow behind the composition -- the same accent already
           used everywhere else (buttons, score chips), just diffused. Gives
           the mockup real presence without introducing a new color or any
           decorative element that isn't the product itself. */}
       <div
         aria-hidden
-        className="absolute top-1/2 left-1/2 -z-10 h-[105%] w-[105%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/18 blur-[80px]"
+        className="absolute top-1/2 left-1/2 -z-10 h-[90%] w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/14 blur-[90px]"
       />
-
-      {/* depth: mini "problème principal" card, furthest back -- real
-          report content (not decorative), just shown small and blurred by
-          distance to build depth behind the main card. */}
-      <div
-        aria-hidden
-        className="absolute right-0 bottom-2 hidden w-48 translate-x-4 rotate-[7deg] rounded-2xl border border-border bg-card p-3.5 opacity-90 shadow-[0_20px_48px_-18px_rgba(28,26,23,0.35)] sm:block"
-      >
-        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-score-low">
-          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-score-low" />
-          Problème
-        </span>
-        <p className="mt-1 text-[11px] leading-snug text-muted">Ton meilleur atout est peu visible.</p>
-      </div>
 
       {/* depth: mini listing card, mid layer */}
       <div
@@ -76,7 +62,14 @@ export function HeroProductDemo() {
       </div>
 
       {/* main card */}
-      <div className="card relative z-10 overflow-hidden p-0 shadow-[0_32px_80px_-28px_rgba(28,26,23,0.35)]">
+      <div className="card relative z-10 overflow-hidden rounded-[24px]! p-0 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_50px_100px_-40px_rgba(21,18,14,0.45),0_18px_36px_-24px_rgba(21,18,14,0.25)]">
+        {/* App window chrome: reads as the product itself, not an illustration. */}
+        <div className="flex items-center gap-1.5 border-b border-border bg-background/70 px-4 py-2.5">
+          <span aria-hidden className="h-2 w-2 rounded-full bg-foreground/15" />
+          <span aria-hidden className="h-2 w-2 rounded-full bg-foreground/15" />
+          <span aria-hidden className="h-2 w-2 rounded-full bg-foreground/15" />
+          <span className="label-mono ml-3 truncate text-[10px]! tracking-[0.12em]! text-muted-2">guestmirror.fr — diagnostic</span>
+        </div>
         <div className="relative aspect-[16/9] w-full overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/demo/annonce-a.jpg" alt="Exemple d'annonce" className="h-full w-full object-cover" />
