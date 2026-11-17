@@ -108,3 +108,18 @@ describe("pickConciergerieGrant", () => {
     expect(pickConciergerieGrant([draft], NOW)).toBeNull();
   });
 });
+
+describe("add-on pack credits", () => {
+  it("monthly first, then the pack; a spent month with extra credits stays usable", () => {
+    expect(conciergerieState(grant({}), 5, NOW, 10)).toMatchObject({ usable: true, nextSource: "monthly", remaining: 15, extraRemaining: 10, canBuyAddon: true });
+    expect(conciergerieState(grant({}), 20, NOW, 3)).toMatchObject({ usable: true, nextSource: "pack", blockedReason: null });
+    expect(conciergerieState(grant({}), 20, NOW, 0)).toMatchObject({ usable: false, blockedReason: "quota_exhausted" });
+  });
+
+  it("after cancellation: extra credits usable (and worth verifying the email for), no new pack sold", () => {
+    const ended = grant({ status: "canceled", paidPeriodEnd: new Date(NOW - day).toISOString() });
+    expect(conciergerieState(ended, 0, NOW, 4)).toMatchObject({ usable: true, nextSource: "pack", remaining: 0, canBuyAddon: false });
+    expect(resolveAccess({ grants: [ended], legacy: noLegacy, verified: false, conciergerieUsed: 0, packCredits: 4, nowMs: NOW }).needsVerification).toBe(true);
+    expect(resolveAccess({ grants: [ended], legacy: noLegacy, verified: false, conciergerieUsed: 0, packCredits: 0, nowMs: NOW }).needsVerification).toBe(false);
+  });
+});

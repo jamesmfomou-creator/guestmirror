@@ -74,7 +74,8 @@ export function normalizeEmail(email: string | null | undefined): string | null 
 
 interface FileDb {
   grants: Record<string, unknown>[];
-  credits: { id: string; grant_id: string; analysis_id: string; period_start: string; created_at: string }[];
+  credits: { id: string; grant_id: string; analysis_id: string; period_start: string; created_at: string; pack_id?: string | null }[];
+  packs?: Record<string, unknown>[];
   events: Record<string, { type: string; processed_at: string | null; outcome: string | null }>;
   verifications: Record<string, unknown>[];
   sessions: Record<string, unknown>[];
@@ -87,7 +88,7 @@ function readDb(): FileDb {
   try {
     return JSON.parse(fs.readFileSync(FILE_DB, "utf-8")) as FileDb;
   } catch {
-    return { grants: [], credits: [], events: {}, verifications: [], sessions: [], payments: [] };
+    return { grants: [], credits: [], events: {}, verifications: [], sessions: [], payments: [], packs: [] };
   }
 }
 
@@ -370,11 +371,236 @@ export async function creditsUsedInPeriod(grant: AccessGrant): Promise<number> {
       .from("credit_usages")
       .select("id", { count: "exact", head: true })
       .eq("grant_id", grant.id)
-      .eq("period_start", grant.paidPeriodStart);
+      .eq("period_start", grant.paidPeriodStart)
+      .is("pack_id", null);
     if (error) throw new Error(`credit_usages count failed: ${error.message}`);
     return count ?? 0;
   }
-  return readDb().credits.filter((c) => c.grant_id === grant.id && c.period_start === grant.paidPeriodStart).length;
+  return readDb().credits.filter((c) => c.grant_id === grant.id && c.period_start === grant.paidPeriodStart && !c.pack_id).length;
+}
+
+// ---------------------------------------------------------------------------
+// Add-on packs (supabase/migrations/0011_addon_packs.sql)
+
+export type PackStatus = "active" | "suspended" | "revoked";
+export type PackSource = "subscription_checkout" | "account";
+
+export interface CreditPack {
+  id: string;
+  email: string;
+  grantId: string | null;
+  source: PackSource;
+  credits: number;
+  status: PackStatus;
+  amount: number | null;
+  stripeCheckoutSessionId: string | null;
+  stripeInvoiceId: string | null;
+  stripePaymentIntentId: string | null;
+  createdAt: string;
+}
+
+function mapPack(r: Record<string, unknown>): CreditPack {
+  return {
+    id: r.id as string,
+    email: r.email as string,
+    grantId: (r.grant_id as string) ?? null,
+    source: r.source as PackSource,
+    credits: r.credits as number,
+    status: r.status as PackStatus,
+    amount: (r.amount as number) ?? null,
+    stripeCheckoutSessionId: (r.stripe_checkout_session_id as string) ?? null,
+    stripeInvoiceId: (r.stripe_invoice_id as string) ?? null,
+    stripePaymentIntentId: (r.stripe_payment_intent_id as string) ?? null,
+    createdAt: (r.created_at as string) ?? nowIso(),
+  };
+}
+
+async function findPack(column: "stripe_invoice_id" | "stripe_checkout_session_id" | "stripe_payment_intent_id", value: string): Promise<CreditPack | null> {
+  if (SUPABASE_CONFIGURED) {
+    const { data, error } = await getSupabaseAdmin()!.from("credit_packs").select("*").eq(column, value).limit(1).maybeSingle();
+    if (error) throw new Error(`credit_packs lookup failed: ${error.message}`);
+    return data ? mapPack(data as Record<string, unknown>) : null;
+  }
+  const row = (readDb().packs ?? []).find((p) => p[column] === value);
+  return row ? mapPack(row) : null;
+}
+
+export const getPackByInvoice = (id: string) => findPack("stripe_invoice_id", id);
+export const getPackByCheckoutSession = (id: string) => findPack("stripe_checkout_session_id", id);
+export const getPackByPaymentIntent = (id: string) => findPack("stripe_payment_intent_id", id);
+
+/**
+ * Records a paid pack once per payment (invoice for the order bump, checkout
+ * session for an account purchase). Returns created=false on a redelivery.
+ */
+export async function ensurePack(params: {
+  email: string;
+  grantId: string | null;
+  source: PackSource;
+  credits: number;
+  amount: number | null;
+  priceId: string | null;
+  invoiceId?: string | null;
+  checkoutSessionId?: string | null;
+  paymentIntentId?: string | null;
+}): Promise<{ pack: CreditPack; created: boolean }> {
+  const key = params.invoiceId
+    ? (["stripe_invoice_id", params.invoiceId] as const)
+    : params.checkoutSessionId
+      ? (["stripe_checkout_session_id", params.checkoutSessionId] as const)
+      : null;
+  if (!key) throw new Error("ensurePack needs an invoice or a checkout session id");
+  const existing = await findPack(key[0], key[1]);
+  if (existing) {
+    // A later event may know the payment intent (refund/dispute lookups).
+    if (!existing.stripePaymentIntentId && params.paymentIntentId) await updatePack(existing.id, { stripe_payment_intent_id: params.paymentIntentId });
+    return { pack: existing, created: false };
+  }
+  const row = {
+    id: randomUUID(),
+    email: normalizeEmail(params.email),
+    grant_id: params.grantId,
+    source: params.source,
+    credits: params.credits,
+    status: "active",
+    amount: params.amount,
+    stripe_price_id: params.priceId,
+    stripe_invoice_id: params.invoiceId ?? null,
+    stripe_checkout_session_id: params.checkoutSessionId ?? null,
+    stripe_payment_intent_id: params.paymentIntentId ?? null,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+  };
+  if (SUPABASE_CONFIGURED) {
+    const { data, error } = await getSupabaseAdmin()!.from("credit_packs").insert(row).select("*").single();
+    if (error) {
+      if (error.code === "23505") {
+        const winner = await findPack(key[0], key[1]);
+        if (winner) return { pack: winner, created: false };
+      }
+      throw new Error(`credit_packs insert failed: ${error.message}`);
+    }
+    return { pack: mapPack(data as Record<string, unknown>), created: true };
+  }
+  const db = readDb();
+  db.packs = db.packs ?? [];
+  db.packs.push(row);
+  writeDb(db);
+  return { pack: mapPack(row), created: true };
+}
+
+async function updatePack(id: string, patch: Record<string, unknown>): Promise<void> {
+  if (SUPABASE_CONFIGURED) {
+    const { error } = await getSupabaseAdmin()!.from("credit_packs").update(patch as never).eq("id", id);
+    if (error) throw new Error(`credit_packs update failed: ${error.message}`);
+    return;
+  }
+  const db = readDb();
+  const row = (db.packs ?? []).find((p) => p.id === id);
+  if (row) {
+    Object.assign(row, patch, { updated_at: nowIso() });
+    writeDb(db);
+  }
+}
+
+export async function setPackStatus(id: string, status: PackStatus, reason: string | null): Promise<void> {
+  await updatePack(id, { status, revoked_reason: reason });
+}
+
+/**
+ * Unused credits across the email's active packs. With `grantIds`, only the
+ * packs attached to those grants (a checkout-scoped session).
+ */
+export async function packCreditsRemaining(email: string | null | undefined, grantIds?: string[]): Promise<number> {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return 0;
+  if (SUPABASE_CONFIGURED) {
+    const supabase = getSupabaseAdmin()!;
+    const { data: all, error } = await supabase.from("credit_packs").select("id, credits, grant_id").eq("email", normalized).eq("status", "active");
+    if (error) throw new Error(`credit_packs lookup failed: ${error.message}`);
+    const packs = grantIds ? (all ?? []).filter((p) => p.grant_id && grantIds.includes(p.grant_id)) : (all ?? []);
+    if (!packs.length) return 0;
+    const { count, error: e2 } = await supabase
+      .from("credit_usages")
+      .select("id", { count: "exact", head: true })
+      .in("pack_id", packs.map((p) => p.id));
+    if (e2) throw new Error(`credit_usages count failed: ${e2.message}`);
+    return Math.max(0, packs.reduce((sum, p) => sum + (p.credits as number), 0) - (count ?? 0));
+  }
+  const db = readDb();
+  return (db.packs ?? [])
+    .filter((p) => p.email === normalized && p.status === "active" && (!grantIds || grantIds.includes(p.grant_id as string)))
+    .reduce((sum, p) => sum + Math.max(0, (p.credits as number) - db.credits.filter((c) => c.pack_id === p.id).length), 0);
+}
+
+export interface AnalysisCreditResult {
+  outcome: CreditOutcome;
+  source: "monthly" | "pack" | null;
+  used: number;
+  quota: number;
+  extraRemaining: number;
+}
+
+/**
+ * Uses one analysis on a report: the monthly Conciergerie quota first, then
+ * the oldest active pack of the same email (consume_analysis_credit). A
+ * report never costs two credits.
+ */
+export async function consumeAnalysisCredit(grantId: string, analysisId: string): Promise<AnalysisCreditResult> {
+  if (SUPABASE_CONFIGURED) {
+    const { data, error } = await getSupabaseAdmin()!.rpc("consume_analysis_credit", {
+      p_grant_id: grantId,
+      p_analysis_id: analysisId,
+    });
+    if (error) throw new Error(`consume_analysis_credit failed: ${error.message}`);
+    const row = (data ?? [])[0];
+    return {
+      outcome: (row?.outcome ?? "no_grant") as CreditOutcome,
+      source: (row?.source ?? null) as AnalysisCreditResult["source"],
+      used: row?.used ?? 0,
+      quota: row?.quota ?? 0,
+      extraRemaining: row?.extra_remaining ?? 0,
+    };
+  }
+
+  // File fallback: same rules as the SQL function (single process, no concurrency).
+  const db = readDb();
+  const g = db.grants.find((x) => x.id === grantId);
+  if (!g) return { outcome: "no_grant", source: null, used: 0, quota: 0, extraRemaining: 0 };
+  const grant = mapGrant(g);
+  const quota = grant.quotaPerPeriod ?? 0;
+  const inPeriod =
+    grant.kind === "conciergerie" &&
+    ["active", "trialing"].includes(grant.status) &&
+    grant.paidPeriodStart !== null &&
+    grant.paidPeriodEnd !== null &&
+    new Date(grant.paidPeriodEnd).getTime() > Date.now();
+  const used = db.credits.filter((c) => c.grant_id === grantId && c.period_start === grant.paidPeriodStart && !c.pack_id).length;
+  const packs = (db.packs ?? [])
+    .filter((p) => p.email === grant.email && p.status === "active")
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+  const left = (p: Record<string, unknown>) => (p.credits as number) - db.credits.filter((c) => c.pack_id === p.id).length;
+  const extra = () => packs.reduce((sum, p) => sum + Math.max(0, left(p)), 0);
+
+  if (db.credits.some((c) => c.analysis_id === analysisId)) {
+    return { outcome: "already", source: null, used: inPeriod ? used : 0, quota: inPeriod ? quota : 0, extraRemaining: extra() };
+  }
+  if (inPeriod && used < quota) {
+    db.credits.push({ id: randomUUID(), grant_id: grantId, analysis_id: analysisId, period_start: grant.paidPeriodStart as string, created_at: nowIso(), pack_id: null });
+    writeDb(db);
+    await unlockAnalysis(analysisId, "paid");
+    return { outcome: "consumed", source: "monthly", used: used + 1, quota, extraRemaining: extra() };
+  }
+  const pack = packs.find((p) => left(p) > 0);
+  if (pack) {
+    db.credits.push({ id: randomUUID(), grant_id: grantId, analysis_id: analysisId, period_start: grant.paidPeriodStart ?? nowIso(), created_at: nowIso(), pack_id: pack.id as string });
+    writeDb(db);
+    await unlockAnalysis(analysisId, "paid");
+    return { outcome: "consumed", source: "pack", used: inPeriod ? used : 0, quota: inPeriod ? quota : 0, extraRemaining: extra() };
+  }
+  return inPeriod
+    ? { outcome: "quota_exhausted", source: null, used, quota, extraRemaining: 0 }
+    : { outcome: "inactive", source: null, used: 0, quota, extraRemaining: 0 };
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { PricingCards } from "@/components/pricing/PricingCards";
 import { track } from "@/lib/analytics";
@@ -9,7 +9,8 @@ import { useInViewOnce } from "@/lib/tracking/useInViewOnce";
 import { UserType, PropertyCountRange } from "@/lib/types";
 import type { PaywallPreview } from "@/lib/paywallPreview";
 import { PaywallPreviewV2 } from "./PaywallPreviewV2";
-import { OFFERS, formatEur, type OfferId } from "@/lib/plans";
+import { ConciergerieCheckoutSheet } from "./ConciergerieCheckoutSheet";
+import { ADDON_PACK, OFFERS, formatEur, type OfferId } from "@/lib/plans";
 
 type Plan = OfferId;
 
@@ -48,6 +49,7 @@ export function Paywall({
   propertyCountRange,
   preview,
   emailsReportLink,
+  addonAvailable = false,
 }: {
   analysisId: string;
   canceled?: boolean;
@@ -61,6 +63,8 @@ export function Paywall({
   // counts only -- see lib/paywallPreview.ts.
   preview?: PaywallPreview;
   emailsReportLink?: boolean;
+  /** The one-time "10 analyses" pack can be added to the Conciergerie checkout. */
+  addonAvailable?: boolean;
 }) {
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,11 +96,35 @@ export function Paywall({
   const showConciergeBanner =
     userType === "concierge" || (propertyCountRange != null && MULTI_PROPERTY_RANGES.includes(propertyCountRange));
 
-  async function handleSelect(plan: Plan) {
-    setLoadingPlan(plan);
+  // Conciergerie with the add-on available: a summary step before Stripe,
+  // where the pack can be ticked (never pre-ticked).
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [addon, setAddon] = useState(false);
+  const closeSheet = useCallback(() => {
+    setSheetOpen(false);
     setError(null);
-    const price = OFFERS[plan].amountEur;
+  }, []);
 
+  function handleSelect(plan: Plan) {
+    if (plan === "conciergerie" && addonAvailable) {
+      trackOfferClick(plan);
+      setError(null);
+      setAddon(false);
+      setSheetOpen(true);
+      track("addon_offered", { analysisId, source: "subscription_checkout", price: ADDON_PACK.amountEur });
+      return;
+    }
+    trackOfferClick(plan);
+    void startCheckout(plan, false);
+  }
+
+  function toggleAddon(next: boolean) {
+    setAddon(next);
+    track(next ? "addon_selected" : "addon_removed", { analysisId, source: "subscription_checkout", price: ADDON_PACK.amountEur });
+  }
+
+  function trackOfferClick(plan: Plan) {
+    const price = OFFERS[plan].amountEur;
     track("paywall_cta_clicked", {
       analysisId,
       plan,
@@ -108,23 +136,32 @@ export function Paywall({
     });
     track("unlock_clicked", { analysisId, plan, price, overall_score: overallScore, user_type: userType, property_count_range: propertyCountRange });
     track(OFFER_CLICKED[plan], { analysisId, price, overall_score: overallScore, user_type: userType, property_count_range: propertyCountRange });
+  }
 
+  async function startCheckout(plan: Plan, withAddon: boolean) {
+    setLoadingPlan(plan);
+    setError(null);
+    const price = OFFERS[plan].amountEur;
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ analysisId, offer: plan }),
+        body: JSON.stringify({ analysisId, offer: plan, ...(plan === "conciergerie" && addonAvailable ? { addon: withAddon } : {}) }),
       });
       const json = await res.json();
       if (!res.ok) {
         if (json.code === "verify_first") {
+          setSheetOpen(false);
           document.getElementById("verify-access")?.scrollIntoView({ behavior: "smooth", block: "center" });
         }
         throw new Error(json.error || "Le paiement n'a pas pu être initié.");
       }
 
       track("checkout_started", { analysisId, plan, price, currency: "EUR", input_method: inputMethod, user_type: userType, property_count_range: propertyCountRange });
-      track(OFFER_CHECKOUT_STARTED[plan], { analysisId, price, currency: "EUR" });
+      track(OFFER_CHECKOUT_STARTED[plan], { analysisId, price, currency: "EUR", addon: plan === "conciergerie" ? withAddon : undefined });
+      if (withAddon) {
+        track("addon_checkout_started", { analysisId, source: "subscription_checkout", price: ADDON_PACK.amountEur, currency: "EUR" });
+      }
 
       window.location.href = json.url;
     } catch (err) {
@@ -135,6 +172,15 @@ export function Paywall({
 
   return (
     <div ref={ref} id="paywall" className="mx-auto mt-6 max-w-5xl scroll-mt-20">
+      <ConciergerieCheckoutSheet
+        open={sheetOpen}
+        addon={addon}
+        loading={loadingPlan === "conciergerie"}
+        error={sheetOpen ? error : null}
+        onToggleAddon={toggleAddon}
+        onConfirm={() => void startCheckout("conciergerie", addon)}
+        onClose={closeSheet}
+      />
       {preview ? (
         <PaywallPreviewV2
           analysisId={analysisId}

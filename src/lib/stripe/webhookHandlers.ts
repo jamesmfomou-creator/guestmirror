@@ -1,16 +1,22 @@
 import type Stripe from "stripe";
-import { CONCIERGERIE_QUOTA, OFFERS, classifyPrice, isOfferId, type OfferId } from "@/lib/plans";
+import { ADDON_PACK, CONCIERGERIE_QUOTA, OFFERS, classifyPrice, isAddonPackPrice, isOfferId, type OfferId } from "@/lib/plans";
 import { unlockAnalysis, getAnalysis } from "@/lib/store";
 import {
   applyPaidPeriod,
   applySubscriptionStatus,
   clearPendingUnlock,
-  consumeCredit,
+  consumeAnalysisCredit,
   ensureConciergerieGrant,
   ensureLifetimeGrant,
+  ensurePack,
   findPaymentByIntent,
+  getGrantById,
   getGrantByPaymentIntent,
   getGrantBySubscriptionId,
+  getPackByInvoice,
+  getPackByPaymentIntent,
+  setPackStatus,
+  type CreditPack,
   markPayment,
   recordPaymentOnce,
   setGrantStatus,
@@ -55,6 +61,15 @@ export interface WebhookDeps {
    * checkout event that records the payment (events are not ordered).
    */
   retrievePaymentIntentMetadata?: (id: string) => Promise<Record<string, string>>;
+  /**
+   * The payment intent that paid an invoice, when the payload does not carry
+   * it (recent API versions); used to find the order-bump pack on refunds.
+   */
+  retrieveInvoicePaymentIntent?: (invoiceId: string) => Promise<string | null>;
+  /** Whether an invoice includes the add-on pack (refund arriving before invoice.paid). */
+  invoiceHasAddonPack?: (invoiceId: string) => Promise<boolean>;
+  /** The invoice a payment intent paid, if any (refunds on subscription payments). */
+  invoiceIdForPaymentIntent?: (paymentIntentId: string) => Promise<string | null>;
 }
 
 /** Thrown so the route answers 500 and Stripe redelivers the event later. */
@@ -101,6 +116,27 @@ export function invoiceLine(invoice: Stripe.Invoice): { priceId: string | null; 
   };
 }
 
+/** The add-on pack line of an invoice (order bump), if any. */
+export function invoiceAddonLine(invoice: Stripe.Invoice): { priceId: string; amount: number | null } | null {
+  const lines = (invoice.lines?.data ?? []) as unknown as Array<{
+    pricing?: { price_details?: { price?: unknown } };
+    price?: unknown;
+    amount?: number;
+  }>;
+  for (const line of lines) {
+    const priceId = idOf(line.pricing?.price_details?.price) ?? idOf(line.price);
+    if (priceId && isAddonPackPrice(priceId)) return { priceId, amount: typeof line.amount === "number" ? line.amount : null };
+  }
+  return null;
+}
+
+function invoicePaymentIntentId(invoice: Stripe.Invoice): string | null {
+  const legacy = idOf((invoice as unknown as { payment_intent?: unknown }).payment_intent);
+  if (legacy) return legacy;
+  const payments = (invoice as unknown as { payments?: { data?: Array<{ payment?: { payment_intent?: unknown } }> } }).payments;
+  return idOf(payments?.data?.[0]?.payment?.payment_intent) ?? null;
+}
+
 function subscriptionPriceId(sub: Stripe.Subscription): string | null {
   return idOf(sub.items?.data?.[0]?.price) ?? null;
 }
@@ -137,7 +173,7 @@ const STRIPE_TO_GRANT_STATUS: Record<string, GrantStatus> = {
 async function unlockPendingReport(grant: AccessGrant, deps: WebhookDeps): Promise<void> {
   if (!grant.pendingUnlockAnalysisId || !isConciergerieGrantUsable(grant, Date.now())) return;
   const analysisId = grant.pendingUnlockAnalysisId;
-  const res = await consumeCredit(grant.id, analysisId);
+  const res = await consumeAnalysisCredit(grant.id, analysisId);
   await clearPendingUnlock(grant.id);
   if (res.outcome === "consumed") {
     await deps.track({
@@ -210,10 +246,110 @@ async function fulfilPaidSession(session: Stripe.Checkout.Session, info: NonNull
   return isLifetime ? "lifetime_granted" : "report_unlocked";
 }
 
+/** A pack bought on its own from the report page (checkout mode=payment). */
+function isAddonSession(session: Stripe.Checkout.Session): boolean {
+  return session.metadata?.app === "guestmirror" && session.metadata?.offer === "addon_pack";
+}
+
+async function fulfilAddonSession(session: Stripe.Checkout.Session, deps: WebhookDeps): Promise<Outcome> {
+  const md = session.metadata ?? {};
+  // The verified email the purchase was started from (metadata, set by the
+  // server), never what was typed on Stripe's page.
+  const email = md.email || sessionEmail(session);
+  if (!email) return "ignored_incomplete_session";
+  const paymentIntentId = idOf(session.payment_intent);
+  const grant = md.grant_id ? await getGrantById(md.grant_id) : null;
+  const { pack, created } = await ensurePack({
+    email,
+    grantId: grant?.id ?? null,
+    source: "account",
+    credits: ADDON_PACK.credits,
+    amount: session.amount_total ?? null,
+    priceId: md.price_id ?? null,
+    checkoutSessionId: session.id,
+    paymentIntentId,
+  });
+  // Payment row: revenue history and refund/dispute lookups. No report attached.
+  await recordPaymentOnce({
+    analysisId: null,
+    sessionId: session.id,
+    paymentIntentId,
+    amount: session.amount_total ?? null,
+    status: "paid",
+    plan: "addon_pack",
+    priceId: md.price_id ?? null,
+  });
+  await deps.track({
+    eventName: "addon_purchase_completed",
+    analysisId: md.analysisId ?? null,
+    email,
+    dedupeKey: { field: "stripe_session_id", value: session.id },
+    metadata: {
+      source: "account",
+      offer: "addon_pack",
+      amount: session.amount_total ?? null,
+      currency: (session.currency || "eur").toUpperCase(),
+      credits: pack.credits,
+      stripe_session_id: session.id,
+      pack_id: pack.id,
+    },
+  });
+  return created ? "addon_pack_granted" : "addon_pack_already_granted";
+}
+
+/** Order bump: the pack was on the first invoice of a Conciergerie subscription. */
+async function grantOrderBumpPack(invoice: Stripe.Invoice, grant: AccessGrant, deps: WebhookDeps): Promise<CreditPack | null> {
+  const addon = invoiceAddonLine(invoice);
+  if (!addon || !invoice.id) return null;
+  let paymentIntentId = invoicePaymentIntentId(invoice);
+  if (!paymentIntentId && deps.retrieveInvoicePaymentIntent) {
+    paymentIntentId = await deps.retrieveInvoicePaymentIntent(invoice.id).catch(() => null);
+  }
+  const { pack } = await ensurePack({
+    email: grant.email,
+    grantId: grant.id,
+    source: "subscription_checkout",
+    credits: ADDON_PACK.credits,
+    amount: addon.amount,
+    priceId: addon.priceId,
+    invoiceId: invoice.id,
+    paymentIntentId,
+  });
+  await deps.track({
+    eventName: "addon_purchase_completed",
+    email: grant.email,
+    dedupeKey: { field: "stripe_invoice_id", value: invoice.id },
+    metadata: {
+      source: "subscription_checkout",
+      offer: "addon_pack",
+      amount: addon.amount,
+      currency: (invoice.currency || "eur").toUpperCase(),
+      credits: pack.credits,
+      stripe_invoice_id: invoice.id,
+      stripe_subscription_id: grant.stripeSubscriptionId,
+      pack_id: pack.id,
+    },
+  });
+  return pack;
+}
+
 // ---------------------------------------------------------------------------
 // Event handlers
 
 async function onCheckoutCompleted(session: Stripe.Checkout.Session, deps: WebhookDeps): Promise<Outcome> {
+  if (isAddonSession(session)) {
+    if (session.payment_status === "paid") return fulfilAddonSession(session, deps);
+    await recordPaymentOnce({
+      analysisId: null,
+      sessionId: session.id,
+      paymentIntentId: idOf(session.payment_intent),
+      amount: session.amount_total ?? null,
+      status: "pending",
+      plan: "addon_pack",
+      priceId: session.metadata?.price_id ?? null,
+    });
+    return "addon_awaiting_payment";
+  }
   const info = sessionOffer(session);
   if (!info) return "ignored_not_guestmirror";
 
@@ -287,12 +423,31 @@ async function onCheckoutCompleted(session: Stripe.Checkout.Session, deps: Webho
 }
 
 async function onAsyncPaymentSucceeded(session: Stripe.Checkout.Session, deps: WebhookDeps): Promise<Outcome> {
+  if (isAddonSession(session)) return fulfilAddonSession(session, deps);
   const info = sessionOffer(session);
   if (!info || session.mode !== "payment") return "ignored_not_guestmirror";
   return fulfilPaidSession(session, info, deps);
 }
 
 async function onAsyncPaymentFailed(session: Stripe.Checkout.Session, deps: WebhookDeps): Promise<Outcome> {
+  if (isAddonSession(session)) {
+    await recordPaymentOnce({
+      analysisId: null,
+      sessionId: session.id,
+      paymentIntentId: idOf(session.payment_intent),
+      amount: session.amount_total ?? null,
+      status: "failed",
+      plan: "addon_pack",
+      priceId: session.metadata?.price_id ?? null,
+    });
+    await deps.track({
+      eventName: "addon_purchase_failed",
+      analysisId: session.metadata?.analysisId ?? null,
+      dedupeKey: { field: "stripe_session_id", value: session.id },
+      metadata: { source: "account", offer: "addon_pack", stripe_session_id: session.id, reason: "async_payment_failed" },
+    });
+    return "addon_payment_failed";
+  }
   const info = sessionOffer(session);
   if (!info) return "ignored_not_guestmirror";
   await recordPaymentOnce({
@@ -358,6 +513,9 @@ async function onInvoicePaid(invoice: Stripe.Invoice, deps: WebhookDeps): Promis
     periodEnd: new Date(line.end * 1000),
   })) ?? grant;
 
+  // Order bump: credited only from the paid invoice that carries the pack.
+  await grantOrderBumpPack(invoice, updated, deps);
+
   // First invoice: counted by subscription_started (checkout). Renewals: real new money.
   if (invoice.billing_reason !== "subscription_create") {
     await deps.track({ eventName: "payment_completed", email: updated.email, dedupeKey, metadata: renewalMetadata("conciergerie") });
@@ -383,6 +541,14 @@ async function onInvoicePaymentFailed(invoice: Stripe.Invoice, deps: WebhookDeps
   });
   if (plan === "plus") {
     await deps.track({ eventName: "subscription_payment_failed", email: invoice.customer_email ?? null, dedupeKey, metadata: { plan: "plus", stripe_subscription_id: subscriptionId } });
+  }
+  if (invoiceAddonLine(invoice)) {
+    await deps.track({
+      eventName: "addon_purchase_failed",
+      email: invoice.customer_email ?? null,
+      dedupeKey,
+      metadata: { source: "subscription_checkout", offer: "addon_pack", stripe_invoice_id: invoice.id, reason: "invoice_payment_failed" },
+    });
   }
   return "renewal_failed";
 }
@@ -429,11 +595,61 @@ async function onSubscriptionChanged(sub: Stripe.Subscription, eventCreated: num
   return `conciergerie_${status}`;
 }
 
+type ReversalAction = "refund" | "dispute_opened" | "dispute_won" | "dispute_lost";
+
+/**
+ * Refunds and disputes on an add-on pack. Unused credits are withdrawn
+ * (revoked) or frozen (suspended during a dispute); reports already unlocked
+ * with the pack stay unlocked.
+ */
+async function applyPackReversal(pack: CreditPack, action: ReversalAction, key: string, deps: WebhookDeps): Promise<Outcome> {
+  const status = action === "dispute_won" ? "active" : action === "dispute_opened" ? "suspended" : "revoked";
+  // A refunded pack stays revoked whatever happens to a dispute afterwards.
+  if (!(pack.status === "revoked" && status !== "revoked")) await setPackStatus(pack.id, status, status === "active" ? null : action);
+  await deps.track({
+    eventName: action === "refund" ? "addon_refunded" : action === "dispute_opened" ? "addon_disputed" : "addon_dispute_closed",
+    email: pack.email,
+    dedupeKey: { field: "reversal_key", value: `${key}:${action}` },
+    metadata: { offer: "addon_pack", source: pack.source, pack_id: pack.id, reversal_key: `${key}:${action}`, restored: status === "active" },
+  });
+  return `addon_${action}_applied`;
+}
+
 /** Full refunds and disputes on one-time / lifetime purchases. */
-async function onPaymentReversal(paymentIntentId: string | null, action: "refund" | "dispute_opened" | "dispute_won" | "dispute_lost", deps: WebhookDeps): Promise<Outcome> {
+async function onPaymentReversal(
+  paymentIntentId: string | null,
+  action: ReversalAction,
+  deps: WebhookDeps,
+  invoiceId: string | null = null
+): Promise<Outcome> {
   if (!paymentIntentId) return "ignored_no_payment_intent";
+  // Add-on packs first: bought alone (their own payment) or on the first
+  // subscription invoice (the subscription's payment).
+  const pack = await getPackByPaymentIntent(paymentIntentId);
+  if (pack) {
+    const outcome = await applyPackReversal(pack, action, paymentIntentId, deps);
+    if (pack.source === "subscription_checkout") return outcome; // the subscription itself: unchanged, as before
+    const payment = await findPaymentByIntent(paymentIntentId);
+    if (payment && action === "refund") await markPayment(payment.id, { refunded: true });
+    if (payment && action === "dispute_opened") await markPayment(payment.id, { disputed: true });
+    if (payment && action === "dispute_won") await markPayment(payment.id, { disputed: null });
+    return outcome;
+  }
   const payment = await findPaymentByIntent(paymentIntentId);
   if (!payment) {
+    // Not a one-time purchase: maybe the first invoice of a subscription that
+    // carried the pack (looked up by invoice; recent API versions no longer
+    // put the invoice on the charge).
+    const invoice = invoiceId ?? (deps.invoiceIdForPaymentIntent ? await deps.invoiceIdForPaymentIntent(paymentIntentId).catch(() => null) : null);
+    if (invoice) {
+      const invoicePack = await getPackByInvoice(invoice);
+      if (invoicePack) return applyPackReversal(invoicePack, action, paymentIntentId, deps);
+      // Pack not recorded yet (events are not ordered): ask Stripe to
+      // redeliver once invoice.paid has been applied.
+      if (deps.invoiceHasAddonPack && (await deps.invoiceHasAddonPack(invoice).catch(() => false))) {
+        throw new RetryLaterError(`pack of invoice ${invoice} not recorded yet; retry ${action} later`);
+      }
+    }
     // Refunds and disputes can arrive before checkout.session.completed has
     // recorded the payment. If Stripe says the payment is ours, ask for a
     // redelivery instead of dropping it: applying it now would be undone by
@@ -468,6 +684,16 @@ async function onPaymentReversal(paymentIntentId: string | null, action: "refund
   return `${action}_applied`;
 }
 
+/** Older API versions put the invoice on the charge. */
+function chargeInvoiceId(charge: Stripe.Charge): string | null {
+  return idOf((charge as unknown as { invoice?: unknown }).invoice);
+}
+
+function disputeInvoiceId(dispute: Stripe.Dispute): string | null {
+  const charge = (dispute as unknown as { charge?: unknown }).charge;
+  return charge && typeof charge === "object" ? chargeInvoiceId(charge as Stripe.Charge) : null;
+}
+
 export async function handleStripeEvent(event: Stripe.Event, deps: WebhookDeps): Promise<Outcome> {
   switch (event.type) {
     case "checkout.session.completed":
@@ -488,14 +714,28 @@ export async function handleStripeEvent(event: Stripe.Event, deps: WebhookDeps):
       return onSubscriptionChanged(event.data.object as Stripe.Subscription, event.created, true, deps);
     case "charge.refunded": {
       const charge = event.data.object as Stripe.Charge;
-      // Only a FULL refund withdraws the right; a partial refund is a gesture.
-      return charge.refunded ? onPaymentReversal(idOf(charge.payment_intent), "refund", deps) : "partial_refund_ignored";
+      const paymentIntentId = idOf(charge.payment_intent);
+      const invoiceId = chargeInvoiceId(charge);
+      // Only a FULL refund withdraws a right; a partial refund is a gesture --
+      // except a partial refund covering the add-on pack on the first
+      // subscription invoice, which withdraws the pack (its unused credits).
+      if (charge.refunded) return onPaymentReversal(paymentIntentId, "refund", deps, invoiceId);
+      if (paymentIntentId && (charge.amount_refunded ?? 0) > 0) {
+        const invoice = invoiceId ?? (deps.invoiceIdForPaymentIntent ? await deps.invoiceIdForPaymentIntent(paymentIntentId).catch(() => null) : null);
+        const pack = (await getPackByPaymentIntent(paymentIntentId)) ?? (invoice ? await getPackByInvoice(invoice) : null);
+        if (pack && pack.source === "subscription_checkout" && (charge.amount_refunded ?? 0) >= (pack.amount ?? Math.round(ADDON_PACK.amountEur * 100))) {
+          return applyPackReversal(pack, "refund", paymentIntentId, deps);
+        }
+      }
+      return "partial_refund_ignored";
     }
-    case "charge.dispute.created":
-      return onPaymentReversal(idOf((event.data.object as Stripe.Dispute).payment_intent), "dispute_opened", deps);
+    case "charge.dispute.created": {
+      const dispute = event.data.object as Stripe.Dispute;
+      return onPaymentReversal(idOf(dispute.payment_intent), "dispute_opened", deps, disputeInvoiceId(dispute));
+    }
     case "charge.dispute.closed": {
       const dispute = event.data.object as Stripe.Dispute;
-      return onPaymentReversal(idOf(dispute.payment_intent), dispute.status === "won" ? "dispute_won" : "dispute_lost", deps);
+      return onPaymentReversal(idOf(dispute.payment_intent), dispute.status === "won" ? "dispute_won" : "dispute_lost", deps, disputeInvoiceId(dispute));
     }
     default:
       return "ignored_event_type";

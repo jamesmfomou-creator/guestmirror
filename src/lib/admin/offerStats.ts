@@ -21,6 +21,32 @@ export interface OfferFigures {
   conversionPerPaywallViewer: Proportion;
 }
 
+export type AddonSource = "subscription_checkout" | "account";
+
+export interface AddonSourceFigures {
+  /** Visitors shown the pack (the Conciergerie summary, or the report-page button). */
+  offered: number;
+  /** Visitors who ticked the pack (summary) / clicked the button (report page). */
+  selected: number;
+  checkoutsStarted: number;
+  /** Confirmed by Stripe (webhook), never a redirect. */
+  purchases: number;
+  revenue: number;
+}
+
+/** Add-on "Pack 10 analyses supplémentaires" (12,90 €, one-time). */
+export interface AddonStats {
+  bySource: Record<AddonSource, AddonSourceFigures>;
+  /** Order bump: packs bought with the subscription / Conciergerie subscriptions started. */
+  attachRate: Proportion;
+  /** Conciergerie checkouts started with vs without the pack, and their completion. */
+  conciergerieCheckoutsWithAddon: number;
+  conciergerieCheckoutsWithoutAddon: number;
+  failures: number;
+  refunds: number;
+  disputes: number;
+}
+
 export interface OfferStats {
   pricingVersion: string;
   paywallViewers: number;
@@ -29,6 +55,7 @@ export interface OfferStats {
   paymentFailures: number;
   refunds: number;
   disputes: number;
+  addon: AddonStats;
 }
 
 function meta(row: EventRow, key: string): unknown {
@@ -82,10 +109,37 @@ export function computeOfferStats(allRows: EventRow[]): OfferStats {
     };
   }
 
+  // Add-on events: client ones carry pricing_version, server ones (webhook)
+  // carry offer=addon_pack; both only exist since the add-on.
+  const addonRows = allRows.filter((r) => r.event_name.startsWith("addon_"));
+  const addonOf = (name: string, source: AddonSource) =>
+    addonRows.filter((r) => r.event_name === name && meta(r, "source") === source);
+  const bySource = {} as Record<AddonSource, AddonSourceFigures>;
+  for (const source of ["subscription_checkout", "account"] as const) {
+    const purchases = addonOf("addon_purchase_completed", source);
+    bySource[source] = {
+      offered: new Set(addonOf("addon_offered", source).map(visitorOf)).size,
+      selected: new Set(addonOf("addon_selected", source).map(visitorOf)).size,
+      checkoutsStarted: addonOf("addon_checkout_started", source).length,
+      purchases: purchases.length,
+      revenue: purchases.reduce((sum, r) => sum + num(r, "amount") / 100, 0),
+    };
+  }
+  const conciergerieStarts = of("conciergerie_checkout_started");
+
   return {
     pricingVersion: PRICING_VERSION,
     paywallViewers,
     byOffer,
+    addon: {
+      bySource,
+      attachRate: proportion(bySource.subscription_checkout.purchases, byOffer.conciergerie.purchases),
+      conciergerieCheckoutsWithAddon: conciergerieStarts.filter((r) => meta(r, "addon") === true).length,
+      conciergerieCheckoutsWithoutAddon: conciergerieStarts.filter((r) => meta(r, "addon") !== true).length,
+      failures: addonRows.filter((r) => r.event_name === "addon_purchase_failed").length,
+      refunds: addonRows.filter((r) => r.event_name === "addon_refunded").length,
+      disputes: addonRows.filter((r) => r.event_name === "addon_disputed").length,
+    },
     creditsUsed: of("subscription_credit_used").length,
     paymentFailures: of("payment_failed").length,
     refunds: of("payment_refunded").length,

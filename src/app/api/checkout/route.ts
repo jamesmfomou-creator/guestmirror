@@ -4,7 +4,7 @@ import type Stripe from "stripe";
 import { SITE_URL } from "@/lib/env";
 import { getAnalysis } from "@/lib/store";
 import { getStripe } from "@/lib/stripe";
-import { OFFERS, PRICING_VERSION, isOfferId, priceIdFor, stripeModeOf, type OfferId } from "@/lib/plans";
+import { ADDON_PACK, OFFERS, PRICING_VERSION, addonPackPriceId, isOfferId, priceIdFor, stripeModeOf, type OfferId } from "@/lib/plans";
 import { getAccessForEmail } from "@/lib/access/reportAccess";
 import { listGrantsByEmail } from "@/lib/access/accessStore";
 import { isConciergerieGrantUsable, isLifetimeGrantActive } from "@/lib/access/entitlements";
@@ -23,6 +23,8 @@ const bodySchema = z.object({
   offer: z.string().optional(),
   // Pages rendered before pricing v2 still send `plan`.
   plan: z.string().optional(),
+  // Conciergerie only: add the one-time "10 analyses" pack to the first payment.
+  addon: z.boolean().optional(),
 });
 
 const NO_STORE = { "Cache-Control": "no-store" };
@@ -41,6 +43,7 @@ export async function POST(req: NextRequest) {
   }
   if (!isOfferId(requested)) return json({ error: "Offre inconnue." }, 400);
   const offer: OfferId = requested;
+  const wantsAddon = offer === "conciergerie" && parsed.data.addon === true;
 
   const analysis = await getAnalysis(analysisId);
   if (!analysis) return json({ error: "Analyse introuvable." }, 404);
@@ -70,14 +73,29 @@ export async function POST(req: NextRequest) {
   }
 
   const secretKey = process.env.STRIPE_SECRET_KEY;
-  if (!secretKey) return simulatePurchase(offer, analysisId, analysis.email);
+  if (!secretKey) return simulatePurchase(offer, analysisId, analysis.email, wantsAddon);
 
-  const priceId = priceIdFor(offer, stripeModeOf(secretKey));
+  const mode = stripeModeOf(secretKey);
+  const priceId = priceIdFor(offer, mode);
   if (!priceId) return json({ error: "Cette offre n'est pas disponible pour le moment." }, 503);
 
-  const metadata = { app: "guestmirror", offer, analysisId, price_id: priceId, pricing_version: PRICING_VERSION };
+  // The pack is only ever added to a Conciergerie checkout, and only when the
+  // visitor ticked it. Its price comes from the server catalogue.
+  const addonPriceId = offer === "conciergerie" && wantsAddon ? addonPackPriceId(mode) : null;
+  if (offer === "conciergerie" && wantsAddon && !addonPriceId) {
+    return json({ error: "Le pack d'analyses n'est pas disponible pour le moment.", code: "addon_unavailable" }, 503);
+  }
+
+  const metadata = {
+    app: "guestmirror",
+    offer,
+    analysisId,
+    price_id: priceId,
+    pricing_version: PRICING_VERSION,
+    ...(addonPriceId ? { addon: "addon_pack", addon_price_id: addonPriceId } : {}),
+  };
   const common: Stripe.Checkout.SessionCreateParams = {
-    line_items: [{ price: priceId, quantity: 1 }],
+    line_items: [{ price: priceId, quantity: 1 }, ...(addonPriceId ? [{ price: addonPriceId, quantity: 1 }] : [])],
     // Locks the email on Stripe's page to the one the report is tied to.
     customer_email: analysis.email || undefined,
     client_reference_id: analysisId,
@@ -109,7 +127,7 @@ export async function POST(req: NextRequest) {
  * payment would trigger, with synthetic events, so every offer can be tried
  * end to end without Stripe. Never reachable when a Stripe key is configured.
  */
-async function simulatePurchase(offer: OfferId, analysisId: string, email: string | null) {
+async function simulatePurchase(offer: OfferId, analysisId: string, email: string | null, addon = false) {
   if (!email) return json({ error: "Ajoute un e-mail à ton analyse pour simuler un paiement." }, 400);
   const sessionId = `cs_sim_${analysisId}_${offer}`;
   const nowS = Math.floor(Date.now() / 1000);
@@ -138,7 +156,14 @@ async function simulatePurchase(offer: OfferId, analysisId: string, email: strin
         billing_reason: "subscription_create",
         customer_email: email,
         parent: { subscription_details: { subscription: subscriptionId } },
-        lines: { data: [{ pricing: { price_details: { price: metadata.price_id } }, period: { start: nowS, end: nowS + 30 * 86400 } }] },
+        lines: {
+          data: [
+            { pricing: { price_details: { price: metadata.price_id } }, period: { start: nowS, end: nowS + 30 * 86400 } },
+            ...(addon
+              ? [{ pricing: { price_details: { price: addonPackPriceId("test") } }, amount: Math.round(ADDON_PACK.amountEur * 100), period: { start: nowS, end: nowS } }]
+              : []),
+          ],
+        },
       }),
       deps
     );

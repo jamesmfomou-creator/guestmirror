@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sendUnlockEmail } from "@/lib/email";
 import { claimStripeEvent, completeStripeEvent } from "@/lib/access/accessStore";
 import { handleStripeEvent } from "@/lib/stripe/webhookHandlers";
+import { isAddonPackPrice } from "@/lib/plans";
 import { randomUUID } from "crypto";
 import type Stripe from "stripe";
 
@@ -138,6 +139,23 @@ export async function POST(req: NextRequest) {
       sendUnlockEmail,
       retrieveSubscription: (id) => stripe.subscriptions.retrieve(id),
       retrievePaymentIntentMetadata: async (id) => (await stripe.paymentIntents.retrieve(id)).metadata ?? {},
+      retrieveInvoicePaymentIntent: async (invoiceId) => {
+        const list = await stripe.invoicePayments.list({ invoice: invoiceId, limit: 1 });
+        const pi = list.data[0]?.payment?.payment_intent;
+        return typeof pi === "string" ? pi : (pi?.id ?? null);
+      },
+      invoiceIdForPaymentIntent: async (paymentIntentId) => {
+        const list = await stripe.invoicePayments.list({ payment: { type: "payment_intent", payment_intent: paymentIntentId }, limit: 1 });
+        const inv = list.data[0]?.invoice;
+        return typeof inv === "string" ? inv : (inv?.id ?? null);
+      },
+      invoiceHasAddonPack: async (invoiceId) => {
+        const lines = await stripe.invoices.listLineItems(invoiceId, { limit: 20 });
+        return lines.data.some((l) => {
+          const price = (l as unknown as { pricing?: { price_details?: { price?: unknown } } }).pricing?.price_details?.price;
+          return isAddonPackPrice(typeof price === "string" ? price : (price as { id?: string } | undefined)?.id ?? null);
+        });
+      },
     });
     await completeStripeEvent(event.id, outcome);
     console.log(`[stripe] event=${event.id} type=${event.type} outcome=${outcome}`);
