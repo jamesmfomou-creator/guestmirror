@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from "framer-motion";
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 // Headline that rises in word by word from behind a mask, once, on load.
-// Segments marked `em` are set in italic accent. Static with reduced motion.
+// Segments marked `em` are set in the accent colour. Static with reduced motion.
 export function StaggerWords({
   segments,
   className,
@@ -26,7 +26,7 @@ export function StaggerWords({
       {words.map(({ w, em }, i) => (
         <span key={i} aria-hidden className="inline-block overflow-hidden pb-[0.12em] align-bottom">
           <motion.span
-            className={em ? "inline-block italic text-accent" : "inline-block"}
+            className={em ? "inline-block text-accent" : "inline-block"}
             initial={reduced ? false : { y: "105%" }}
             animate={{ y: "0%" }}
             transition={{ duration: 0.85, ease: EASE, delay: delay + i * 0.055 }}

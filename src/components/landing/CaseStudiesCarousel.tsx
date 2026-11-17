@@ -170,7 +170,7 @@ export function CaseStudiesCarousel() {
                 </div>
                 <div className="p-6">
                   <span className="label-mono text-muted-2">{c.tag}</span>
-                  <h3 className="text-display mt-3 text-[1.55rem] leading-[1.1] text-foreground">{c.title}</h3>
+                  <h3 className="text-display mt-3 text-[1.45rem] leading-[1.15] font-semibold tracking-[-0.025em] text-foreground">{c.title}</h3>
                   <p className="mt-3 text-[14.5px] leading-relaxed text-muted">{c.text}</p>
                   <div className="mt-4 flex items-center gap-2">
                     <ScorePill score={c.before} />

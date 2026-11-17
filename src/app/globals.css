@@ -43,7 +43,7 @@
   --color-score-low: var(--score-low);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-display: var(--font-serif);
+  --font-display: var(--font-display-sans);
 }
 
 * {
@@ -161,17 +161,20 @@ body {
   color: var(--foreground);
 }
 
-/* Editorial display type: large serif with tight leading. */
-.text-display {
-  font-family: var(--font-serif), ui-serif, Georgia, serif;
-  font-weight: 400;
-  letter-spacing: -0.022em;
-  line-height: 0.98;
-  font-feature-settings: "liga" on, "kern" on;
-}
-.text-display em {
-  font-style: italic;
-  letter-spacing: -0.01em;
+/* Display type: tight bold grotesk. In the components layer so a weight
+   utility (font-semibold…) can still override it on smaller headings. */
+@layer components {
+  .text-display {
+    font-family: var(--font-display-sans), ui-sans-serif, "Helvetica Neue", Arial, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.032em;
+    word-spacing: 0.04em;
+    line-height: 1;
+    font-feature-settings: "kern" on, "ss01" on;
+  }
+  .text-display em {
+    font-style: normal;
+  }
 }
 
 /* Small technical labels (section indices, meta). */

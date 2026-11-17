@@ -56,7 +56,7 @@ export function WhatWeSee() {
             <Reveal key={key} delay={0.05 + (i % 3) * 0.06}>
               <div className="group flex h-full flex-col justify-between rounded-[24px] border border-border bg-card p-6 transition-all duration-500 hover:-translate-y-0.5 hover:shadow-[0_24px_48px_-32px_rgba(21,18,14,0.35)]">
                 <h4 className="label-mono font-normal text-muted-2 transition-colors duration-500 group-hover:text-accent">{title}</h4>
-                <p className="text-display mt-8 text-[1.6rem] leading-[1.12] text-foreground">{text}</p>
+                <p className="text-display mt-8 text-[1.5rem] leading-[1.15] font-semibold tracking-[-0.025em] text-foreground">{text}</p>
               </div>
             </Reveal>
           ))}

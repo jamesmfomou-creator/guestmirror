@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowDown, ArrowRight } from "lucide-react";
+import { ArrowDown, ArrowRight, Zap } from "lucide-react";
 import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
 import { HeroForm } from "@/components/landing/HeroForm";
 import { HeroProductDemo } from "@/components/landing/HeroProductDemo";
@@ -80,12 +80,10 @@ export default async function LandingPage() {
         <div className="relative mx-auto grid max-w-6xl items-center gap-16 px-5 pt-14 pb-20 sm:pt-20 lg:grid-cols-[1.12fr_1fr] lg:gap-10 lg:pt-24 lg:pb-28">
           <div>
             <Reveal y={8}>
-              <span className="label-mono inline-flex items-center gap-2.5 rounded-full border border-border bg-card/70 px-3.5 py-1.5 text-muted backdrop-blur">
-                <span aria-hidden className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60 motion-reduce:hidden" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
-                </span>
-                Diagnostic IA pour annonces Airbnb
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card/70 px-3.5 py-2 text-[12.5px] backdrop-blur sm:gap-2 sm:px-4 sm:text-[14px]">
+                <span className="font-bold tracking-tight text-foreground uppercase">Diagnostic IA</span>
+                <Zap aria-hidden size={15} className="fill-accent text-accent" />
+                <span className="font-medium text-muted">Résultat en moins d&apos;une minute</span>
               </span>
             </Reveal>
 
