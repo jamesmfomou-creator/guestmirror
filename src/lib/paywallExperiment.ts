@@ -15,6 +15,16 @@
  * To change what "v2" shows once it has traffic, add a new value (and keep
  * "v2" readable in the dashboard) instead of editing it in place.
  *
+ * Changes during the experiment (compare periods on either side separately):
+ *  - 2026-11-17 (goal personalisation): "control" no longer announces an
+ *    inflated "N autres améliorations" figure nor a fixed list of sections;
+ *    it shows the real weakness count and only the sections the report has
+ *    (the same counting as v2). Control moved closer to v2 on that point.
+ *    Both arms also gained the listing card (title, cover, goal) above the
+ *    score. locked_preview_viewed now carries `weakness_count` in every arm;
+ *    `count` is kept only in v2 (unchanged) and must not be compared across
+ *    arms or periods.
+ *
  * Rollback without a deploy revert: set PAYWALL_V2_SHARE to 0. Visitors
  * already assigned keep their cookie, so v2 must also stop rendering --
  * that is what isPaywallV2Active() is for.

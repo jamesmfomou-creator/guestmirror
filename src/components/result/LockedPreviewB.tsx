@@ -31,7 +31,8 @@ export function LockedPreviewB({
 }) {
   const [revealed, setRevealed] = useState(false);
   const ref = useInViewOnce<HTMLDivElement>(() => {
-    track("locked_preview_viewed", { analysisId, count: weaknessCount });
+    // `weakness_count`, not `count`: see LockedTeaser.
+    track("locked_preview_viewed", { analysisId, weakness_count: weaknessCount });
   });
 
   if (revealed) return <>{children}</>;

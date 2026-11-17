@@ -22,9 +22,11 @@ export function LockedTeaser({
   analysisId?: string;
 }) {
   const ref = useInViewOnce<HTMLDivElement>(() => {
-    // `count` = weaknesses found (it used to be a sum of priorities,
-    // weaknesses, titles, photos and actions).
-    track("locked_preview_viewed", { analysisId, count: weaknessCount });
+    // `weakness_count` (since 2026-11-17), never `count`: historical `count`
+    // values in this arm were a sum of priorities, weaknesses, titles, photos
+    // and actions, so the new figure gets its own field instead of silently
+    // changing the meaning of the old one.
+    track("locked_preview_viewed", { analysisId, weakness_count: weaknessCount });
   });
 
   return (

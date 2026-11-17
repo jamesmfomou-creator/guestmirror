@@ -45,7 +45,9 @@ export function PaywallPreviewV2({
     });
     // Same step as the control's locked teaser / locked preview card, so the
     // existing funnel keeps one comparable "locked preview seen" event.
-    track("locked_preview_viewed", { analysisId, count: preview.weaknessCount });
+    // `count` kept as before for this arm's history; `weakness_count` is the
+    // field every presentation now sends (see LockedTeaser).
+    track("locked_preview_viewed", { analysisId, count: preview.weaknessCount, weakness_count: preview.weaknessCount });
   }, 0.2);
 
   return (
