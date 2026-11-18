@@ -5,12 +5,6 @@ import { resolveImageUrls } from "@/lib/images";
 import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
 import { verdictFor } from "@/lib/utils";
 import { ScoreHeader } from "@/components/result/ScoreHeader";
-import { FirstHesitation } from "@/components/result/FirstHesitation";
-import { MainProblem } from "@/components/result/MainProblem";
-import { FreeRecommendation } from "@/components/result/FreeRecommendation";
-import { LockedTeaser } from "@/components/result/LockedTeaser";
-import { LockedPreviewB } from "@/components/result/LockedPreviewB";
-import { AhaCoverImage } from "@/components/result/AhaCoverImage";
 import { Paywall } from "@/components/result/Paywall";
 import { FullPriorities } from "@/components/result/FullPriorities";
 import { StrengthsWeaknesses } from "@/components/result/StrengthsWeaknesses";
@@ -29,19 +23,21 @@ import { ManageSubscriptionLink } from "@/components/result/ManageSubscriptionLi
 import { BRAND_NAME } from "@/lib/brand";
 import { getAccessForEmail } from "@/lib/access/reportAccess";
 import { AccessPanel, BuyAddonButton } from "@/components/result/AccessPanel";
-import { ADDON_PACK, addonPackAvailable } from "@/lib/plans";
+import { ADDON_PACK, OFFERS, addonPackAvailable, formatEur } from "@/lib/plans";
 import { isDirectLinkReport } from "@/lib/contentLink";
 import { PaymentPending } from "@/components/result/PaymentPending";
 import type { FeedbackPlan } from "@/lib/feedback";
-import { getAbVariantServer } from "@/lib/ab-server";
 import { getInputMethodForAnalysis } from "@/lib/inputMethod";
 import { PostPurchaseFeedback } from "@/components/result/PostPurchaseFeedback";
 import { IncompleteResultNotice } from "@/components/result/IncompleteResultNotice";
 import { isIncompleteResult } from "@/lib/resultShape";
 import { getPaywallVariantServer } from "@/lib/paywallExperiment-server";
-import { buildPaywallPreview, lockedCategories, paywallPreviewContents } from "@/lib/paywallPreview";
+import { buildPaywallPreview } from "@/lib/paywallPreview";
 import { displayListingTitle, goalExplanation, personalizeResult } from "@/lib/goalPersonalization";
 import { ListingContext } from "@/components/result/ListingContext";
+import { FreeInsight } from "@/components/result/FreeInsight";
+import { ImprovementPlanCard } from "@/components/result/ImprovementPlanCard";
+import { buildFreeReveal } from "@/lib/freeReveal";
 import { GoalPrompt } from "@/components/result/GoalPrompt";
 import { OwnershipVerify } from "@/components/result/OwnershipVerify";
 import { maskEmail } from "@/lib/access/maskEmail";
@@ -90,7 +86,6 @@ export default async function ResultPage({
         : sp.plus === "1"
           ? "plus"
           : "one_time";
-  const variant = await getAbVariantServer();
   // Legacy rows stored with a score but none of the detail (see
   // lib/resultShape.ts). Shown as what they are, in both A/B arms alike,
   // instead of a teaser and a paywall for recommendations that don't exist.
@@ -120,7 +115,9 @@ export default async function ResultPage({
 
   // Locked teaser figures (both A/B variants, control paywall): counts of
   // what this report really holds, same source as the v2 paywall preview.
-  const lockedPreview = !unlocked && !incomplete ? buildPaywallPreview(analysis.result) : null;
+  // Free result (reveal_v1): the only projection of the report that reaches a
+  // locked page, besides the paywall v2 preview (names and counts).
+  const freeReveal = !unlocked && !incomplete ? buildFreeReveal(analysis.result) : null;
 
   const previous = analysis.previous_analysis_id
     ? await getAnalysis(analysis.previous_analysis_id)
@@ -185,23 +182,15 @@ export default async function ResultPage({
         />
       )}
 
-      {!unlocked && variant === "B" && <AhaCoverImage imageUrl={images[0]} />}
-
-      {!unlocked && variant === "B" && (
-        <h1 className="mx-auto max-w-md text-balance text-center text-2xl font-semibold tracking-tight sm:text-3xl">
-          Ton diagnostic Airbnb est prêt
-        </h1>
-      )}
-
-      {/* Which listing, which goal. Variant B's locked view already shows the
-          cover photo above (AhaCoverImage), so only the text is added there. */}
+      {/* Which listing, which goal. One free result for everyone since
+          reveal_v1 (lib/resultVersion.ts): the "Aha" A/B test no longer
+          changes this page. */}
       <ListingContext
-        photoUrl={!unlocked && variant === "B" ? null : (images[0] ?? null)}
+        photoUrl={images[0] ?? null}
         title={listingTitle}
         city={analysis.city}
         goalReminder={personal?.reminder ?? null}
         goalExplanation={personal ? goalExplanation(personal, unlocked) : null}
-        className={!unlocked && variant === "B" ? "mt-6" : ""}
       />
       {/* No goal given during the onboarding: ask once, discreetly, to the
           browser allowed to change this analysis. Never on the content link. */}
@@ -212,8 +201,8 @@ export default async function ResultPage({
       <ScoreHeader
         result={analysis.result}
         locked={!unlocked}
-        shortSummary={variant === "B"}
         hideBreakdown={incomplete}
+        attentionCount={freeReveal?.weaknessCount}
       />
 
       {incomplete && (
@@ -254,40 +243,33 @@ export default async function ResultPage({
         />
       )}
 
-      {!unlocked && !incomplete && variant === "A" && (
+      {/* Free result (reveal_v1): one real weakness revealed without its
+          correction, what the paid report really contains, then the
+          existing offers. Everything here comes from buildFreeReveal(): plain
+          strings and counts, never the report itself. */}
+      {!unlocked && !incomplete && freeReveal && (
         <>
-          <FirstHesitation result={analysis.result} />
-          <MainProblem issue={analysis.result.top_priorities[0]?.current_issue ?? null} analysisId={id} />
-          <FreeRecommendation
-            recommendation={analysis.result.top_priorities[0]?.recommended_change ?? null}
+          <FreeInsight reveal={freeReveal} analysisId={id} />
+          <ImprovementPlanCard
             analysisId={id}
-            inputMethod={resultInputMethod}
-            userType={analysis.user_type}
-            propertyCountRange={analysis.property_count_range}
+            insightShown={freeReveal.insight !== null}
+            weaknessCount={freeReveal.weaknessCount}
+            reportContents={freeReveal.reportContents}
+            priceLabel={formatEur(OFFERS.one_time.amountEur)}
+            showOffersButton={!creditUsable}
           />
-          {paywallPreview ? (
-            !creditUsable ? <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} addonAvailable={addonAvailable} /> : null
-          ) : (
-            <>
-              <LockedTeaser weaknessCount={lockedPreview?.weaknessCount ?? 0} contents={lockedPreview ? paywallPreviewContents(lockedPreview) : []} analysisId={id} />
-              {!creditUsable && <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} addonAvailable={addonAvailable} />}
-            </>
-          )}
-          <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
-            {analysis.result.disclaimer}
-          </p>
-          <ShareCardVerdict score={analysis.overall_score} />
-        </>
-      )}
-
-      {!unlocked && !incomplete && variant === "B" && (
-        <>
-          {paywallPreview ? (
-            !creditUsable ? <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} preview={paywallPreview} emailsReportLink={emailsReportLink} addonAvailable={addonAvailable} /> : null
-          ) : (
-            <LockedPreviewB analysisId={id} weaknessCount={lockedPreview?.weaknessCount ?? 0} categories={lockedPreview ? lockedCategories(lockedPreview) : []}>
-              {!creditUsable && <Paywall analysisId={id} canceled={sp.canceled === "1"} overallScore={analysis.overall_score} inputMethod={resultInputMethod} userType={analysis.user_type} propertyCountRange={analysis.property_count_range} addonAvailable={addonAvailable} />}
-            </LockedPreviewB>
+          {!creditUsable && (
+            <Paywall
+              analysisId={id}
+              canceled={sp.canceled === "1"}
+              overallScore={analysis.overall_score}
+              inputMethod={resultInputMethod}
+              userType={analysis.user_type}
+              propertyCountRange={analysis.property_count_range}
+              addonAvailable={addonAvailable}
+              singleCopy
+              {...(paywallPreview ? { preview: paywallPreview, emailsReportLink } : {})}
+            />
           )}
           <p className="mx-auto mt-10 max-w-xl text-center text-xs leading-relaxed text-muted-2">
             {analysis.result.disclaimer}

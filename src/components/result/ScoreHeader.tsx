@@ -19,6 +19,7 @@ export function ScoreHeader({
   locked,
   shortSummary,
   hideBreakdown,
+  attentionCount,
 }: {
   result: AnalysisResult;
   locked: boolean;
@@ -31,6 +32,9 @@ export function ScoreHeader({
   // were never produced, and seven bars at 0 would state something the
   // analysis did not find.
   hideBreakdown?: boolean;
+  // Free result reveal_v1: the real number of weaknesses the analysis found,
+  // shown under the verdict. 0 / undefined: nothing is shown.
+  attentionCount?: number;
 }) {
   const verdict = verdictFor(result.overall_score);
 
@@ -46,6 +50,11 @@ export function ScoreHeader({
         <span>{verdict.emoji}</span>
         {locked ? verdict.short : verdict.long}
       </span>
+      {locked && attentionCount != null && attentionCount > 0 && (
+        <p className="mt-3 text-[15px] font-medium text-foreground">
+          {attentionCount === 1 ? "1 point mérite ton attention" : `${attentionCount} points méritent ton attention`}
+        </p>
+      )}
 
       {locked ? (
         shortSummary ? (

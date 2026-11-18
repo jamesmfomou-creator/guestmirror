@@ -50,6 +50,7 @@ export function Paywall({
   preview,
   emailsReportLink,
   addonAvailable = false,
+  singleCopy = false,
 }: {
   analysisId: string;
   canceled?: boolean;
@@ -65,6 +66,12 @@ export function Paywall({
   emailsReportLink?: boolean;
   /** The one-time "10 analyses" pack can be added to the Conciergerie checkout. */
   addonAvailable?: boolean;
+  /**
+   * Free result reveal_v1 (lib/resultVersion.ts): the "Aha" A/B test is
+   * closed, so the heading no longer depends on ab_variant (the A wording is
+   * kept). Offers, prices, checkout and the v2 presentation are unchanged.
+   */
+  singleCopy?: boolean;
 }) {
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -194,10 +201,10 @@ export function Paywall({
         <>
           <div className="text-center">
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              {abVariant === "B" ? "Passe du diagnostic à l'action." : "Débloque ton analyse complète"}
+              {abVariant === "B" && !singleCopy ? "Passe du diagnostic à l'action." : "Débloque ton analyse complète"}
             </h2>
             <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
-              {abVariant === "B"
+              {abVariant === "B" && !singleCopy
                 ? "Découvre les points faibles de ton annonce et les recommandations concrètes pour l'améliorer."
                 : "Découvre exactement quoi améliorer sur ton annonce."}
             </p>

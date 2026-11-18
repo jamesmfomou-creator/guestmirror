@@ -3,6 +3,7 @@ import { getAbVariant } from "@/lib/ab";
 import { getPaywallVariant } from "@/lib/paywallExperiment";
 import { getLoaderVariant } from "@/lib/loaderExperiment";
 import { getOnboardingVariant } from "@/lib/onboardingExperiment";
+import { RESULT_VERSION } from "@/lib/resultVersion";
 import { PRICING_VERSION } from "@/lib/plans";
 
 /**
@@ -197,6 +198,9 @@ export const ANALYTICS_EVENTS = [
   "analysis_ready",
   "analysis_ready_cta_clicked",
   "goal_saved",
+  // Free result reveal_v1 (lib/resultVersion.ts): the free insight was shown
+  // (kind: weakness | hesitation; severity for a weakness). Names only.
+  "free_insight_viewed",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];
@@ -240,6 +244,8 @@ export function track(event: AnalyticsEvent, props?: Props) {
     // Prices changed on this version: experiments and conversion rates are
     // compared within one pricing version only.
     pricing_version: PRICING_VERSION,
+    // Free result version: compare before/after periods, never mix them.
+    result_version: RESULT_VERSION,
   };
 
   try {
