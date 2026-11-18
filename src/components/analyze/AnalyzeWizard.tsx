@@ -528,7 +528,7 @@ export function AnalyzeWizard() {
     }
 
     setAnalysisDone(true);
-    if (abVariant === "B" || loaderVariant === "immersive") {
+    if (abVariant === "B" || loaderVariant === "immersive" || bg) {
       // AnalysisAhaFlow drives its own short "Ta première impression est
       // prête." beat once `done` flips true, then calls onTransitionEnd.
       pendingResult.current = json;
@@ -930,9 +930,9 @@ export function AnalyzeWizard() {
     loaderViewedAt.current = Date.now();
     track("analysis_loader_viewed", {
       attemptId: attemptId.current,
-      loader: loaderVariant === "immersive" ? "immersive" : abVariant === "B" ? "aha_flow" : "step_analyzing",
+      loader: loaderVariant === "immersive" || bg ? "immersive" : abVariant === "B" ? "aha_flow" : "step_analyzing",
       input_method: inputMethod(),
-      preview_status: loaderVariant === "immersive" ? (url.trim() ? listingPreview.status : "screenshots") : null,
+      preview_status: loaderVariant === "immersive" || bg ? (url.trim() ? listingPreview.status : "screenshots") : null,
       ...(afterQuestions ? { after_questions: true } : {}),
     });
   }
@@ -1063,7 +1063,7 @@ export function AnalyzeWizard() {
   function handleTransitionEnd() {
     if (!pendingResult.current) return;
     if (bg && stepRef.current !== "analyzing") return; // questions on screen: the notice handles it
-    if (loaderVariant === "immersive") {
+    if (loaderVariant === "immersive" || bg) {
       // End of the visual sequence -- distinct from analysis_completed (the
       // real end of the processing), which finishAndRedirect fires next.
       // Deliberately WITHOUT analysisId: the Stripe webhook attributes a
@@ -1293,7 +1293,9 @@ export function AnalyzeWizard() {
         <StepGoal goal={goal} onSelect={handleSelectGoal} onContinue={handleGoalContinue} error={apiError} />
       )}
       {step === "goal" && networkLimit && <div className="mt-5">{networkLimitVerify}</div>}
-      {step === "analyzing" && loaderVariant === "immersive" && (
+      {/* Background onboarding always continues with the immersive loader:
+          it is what the visitor just watched next to the questions. */}
+      {step === "analyzing" && (loaderVariant === "immersive" || bg) && (
         <AnalysisImmersive
           done={analysisDone}
           preview={
@@ -1310,7 +1312,7 @@ export function AnalyzeWizard() {
           onTransitionEnd={handleTransitionEnd}
         />
       )}
-      {step === "analyzing" && loaderVariant !== "immersive" && abVariant === "B" && (
+      {step === "analyzing" && loaderVariant !== "immersive" && !bg && abVariant === "B" && (
         <AnalysisAhaFlow
           done={analysisDone}
           imageUrl={images[0]?.previewUrl}
@@ -1319,7 +1321,7 @@ export function AnalyzeWizard() {
           onTransitionEnd={handleTransitionEnd}
         />
       )}
-      {step === "analyzing" && loaderVariant !== "immersive" && abVariant === "A" && (
+      {step === "analyzing" && loaderVariant !== "immersive" && !bg && abVariant === "A" && (
         <StepAnalyzing done={analysisDone} onFinalizing={handleFinalizing} />
       )}
       </div>
