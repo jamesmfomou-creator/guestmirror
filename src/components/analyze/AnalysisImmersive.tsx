@@ -64,7 +64,17 @@ export function AnalysisImmersive({
   onVisualStarted,
   onFinalizing,
   onTransitionEnd,
+  startedAtMs,
+  embedded = false,
 }: {
+  /**
+   * Background onboarding: shown next to the questions instead of full page
+   * (no page-height block, the title is not the page heading). Same content,
+   * same sequence, same honesty rules. Defaults to the full-page loader.
+   */
+  embedded?: boolean;
+  /** When the analysis really started (background onboarding: before this loader appeared). Defaults to mount time. */
+  startedAtMs?: number;
   done: boolean;
   preview: ListingPreviewState;
   /** Local object URLs of the visitor's uploaded screenshots, if any. */
@@ -154,10 +164,10 @@ export function AnalysisImmersive({
 
   // ---- Clock (reassurance + the finalizing event only) --------------------
   useEffect(() => {
-    const start = Date.now();
+    const start = startedAtMs ?? Date.now();
     const t = setInterval(() => setElapsedMs(Date.now() - start), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [startedAtMs]);
 
   useEffect(() => {
     if (!done && elapsedMs >= FINALIZING_AT_MS && !firedFinalizing.current) {
@@ -194,10 +204,16 @@ export function AnalysisImmersive({
   const showReassurance = !done && elapsedMs >= REASSURANCE_AT_MS;
 
   return (
-    <div className="animate-fade-up flex min-h-[70vh] flex-col items-center pt-2 text-center">
-      <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-        {BRAND_NAME} analyse ton annonce…
-      </h1>
+    <div className={`animate-fade-up flex flex-col items-center text-center ${embedded ? "" : "min-h-[70vh] pt-2"}`}>
+      {embedded ? (
+        <p className="text-balance text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          {BRAND_NAME} analyse ton annonce…
+        </p>
+      ) : (
+        <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          {BRAND_NAME} analyse ton annonce…
+        </h1>
+      )}
       <p className="mt-2 max-w-sm text-sm text-muted sm:text-base">
         Découvre comment ton annonce se présente aux voyageurs.
       </p>
@@ -207,7 +223,11 @@ export function AnalysisImmersive({
 
       <div className="mt-7 w-full">
         {done ? (
-          <SuccessBeat photo={livePhotos[0] ? srcOf(livePhotos[0]) : null} reduceMotion={reduceMotion} />
+          <SuccessBeat
+            photo={livePhotos[0] ? srcOf(livePhotos[0]) : null}
+            reduceMotion={reduceMotion}
+            label={embedded ? "Analyse terminée." : "Ton diagnostic est prêt."}
+          />
         ) : fetching ? (
           <FetchingCard reduceMotion={reduceMotion} />
         ) : (
@@ -276,7 +296,7 @@ function PhaseLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ScanLine({ reduceMotion, durationS }: { reduceMotion: boolean; durationS: number }) {
+export function ScanLine({ reduceMotion, durationS }: { reduceMotion: boolean; durationS: number }) {
   if (reduceMotion) return null;
   return (
     <motion.div
@@ -291,7 +311,7 @@ function ScanLine({ reduceMotion, durationS }: { reduceMotion: boolean; duration
   );
 }
 
-function Corners() {
+export function Corners() {
   const c = "absolute h-5 w-5 border-accent";
   return (
     <div aria-hidden className="pointer-events-none absolute inset-3">
@@ -649,7 +669,7 @@ function FetchingCard({ reduceMotion, label = "Récupération de ton annonce…"
   );
 }
 
-function SuccessBeat({ photo, reduceMotion }: { photo: string | null; reduceMotion: boolean }) {
+function SuccessBeat({ photo, reduceMotion, label }: { photo: string | null; reduceMotion: boolean; label: string }) {
   return (
     <motion.div
       className="flex flex-col items-center"
@@ -670,7 +690,7 @@ function SuccessBeat({ photo, reduceMotion }: { photo: string | null; reduceMoti
       <span className="mt-5 flex h-12 w-12 items-center justify-center rounded-full bg-score-high/10">
         <Check size={24} className="text-score-high" />
       </span>
-      <p className="mt-3 text-lg font-semibold text-foreground">Ton diagnostic est prêt.</p>
+      <p className="mt-3 text-lg font-semibold text-foreground">{label}</p>
     </motion.div>
   );
 }

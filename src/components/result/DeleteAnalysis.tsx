@@ -3,17 +3,34 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
+import { editTokenFor } from "@/lib/analysisOwnership";
+import { EDIT_TOKEN_HEADER_NAME } from "@/lib/analysisEditTokenHeader";
+import { useCanEditAnalysis } from "./useCanEditAnalysis";
 
-export function DeleteAnalysis({ analysisId }: { analysisId: string }) {
+// Only offered to the browser that created the analysis, or to a visitor
+// who verified the report's email (the server checks the same thing).
+export function DeleteAnalysis({ analysisId, serverAllowed = false }: { analysisId: string; serverAllowed?: boolean }) {
   const router = useRouter();
+  const canEdit = useCanEditAnalysis(analysisId, serverAllowed);
   const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  if (!canEdit) return null;
 
   async function handleDelete() {
     setLoading(true);
+    setFailed(false);
     try {
-      await fetch(`/api/analyses/${analysisId}`, { method: "DELETE" });
-      router.push("/");
+      const token = editTokenFor(analysisId);
+      const res = await fetch(`/api/analyses/${analysisId}`, {
+        method: "DELETE",
+        headers: token ? { [EDIT_TOKEN_HEADER_NAME]: token } : {},
+      });
+      if (res.ok) router.push("/");
+      else setFailed(true);
+    } catch {
+      setFailed(true);
     } finally {
       setLoading(false);
     }
@@ -52,6 +69,7 @@ export function DeleteAnalysis({ analysisId }: { analysisId: string }) {
               {loading ? "Suppression…" : "Confirmer"}
             </button>
           </div>
+          {failed && <p className="text-xs text-score-low">La suppression n&apos;a pas fonctionné.</p>}
         </div>
       )}
     </div>

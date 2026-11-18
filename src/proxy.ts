@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { AB_COOKIE_NAME } from "@/lib/ab";
 import { PAYWALL_COOKIE_NAME, drawPaywallVariant, isPaywallVariant } from "@/lib/paywallExperiment";
 import { LOADER_COOKIE_NAME, drawLoaderVariant, isLoaderVariant } from "@/lib/loaderExperiment";
+import {
+  ONBOARDING_COOKIE_NAME,
+  drawOnboardingVariant,
+  isOnboardingCookieValue,
+  onboardingOverride,
+} from "@/lib/onboardingExperiment";
 
 /**
  * Gates /admin/* behind HTTP Basic Auth. Deliberately minimal -- this is a
@@ -64,6 +70,16 @@ function assignExperiments(req: NextRequest): NextResponse {
   }
   if (!isLoaderVariant(req.cookies.get(LOADER_COOKIE_NAME)?.value)) {
     assignments.push({ name: LOADER_COOKIE_NAME, value: drawLoaderVariant() });
+  }
+  // Onboarding experiment (lib/onboardingExperiment.ts): an explicit ?ob=
+  // override wins; otherwise a draw, which is null while the share is 0
+  // (nobody is assigned until the experiment is switched on).
+  const obOverride = onboardingOverride(req.nextUrl.searchParams.get("ob"));
+  if (obOverride && req.cookies.get(ONBOARDING_COOKIE_NAME)?.value !== obOverride) {
+    assignments.push({ name: ONBOARDING_COOKIE_NAME, value: obOverride });
+  } else if (!obOverride && !isOnboardingCookieValue(req.cookies.get(ONBOARDING_COOKIE_NAME)?.value)) {
+    const drawn = drawOnboardingVariant();
+    if (drawn) assignments.push({ name: ONBOARDING_COOKIE_NAME, value: drawn });
   }
 
   if (assignments.length === 0) return NextResponse.next();

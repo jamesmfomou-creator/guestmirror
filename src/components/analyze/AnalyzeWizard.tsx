@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { OnboardingProgress } from "./OnboardingUI";
 import { DIRECT_LINK_EMAIL } from "@/lib/contentLink";
@@ -12,6 +12,15 @@ import { StepAnalyzing } from "./StepAnalyzing";
 import { AnalysisAhaFlow } from "./AnalysisAhaFlow";
 import { AnalysisImmersive, type ListingPreviewState, type VisualStartedInfo } from "./AnalysisImmersive";
 import { getLoaderVariant } from "@/lib/loaderExperiment";
+import { getOnboardingVariant } from "@/lib/onboardingExperiment";
+import { AnalysisLiveCard, ListingConfirmCard } from "./AnalysisLiveCard";
+import { EmailCodeVerify } from "@/components/access/EmailCodeVerify";
+import {
+  clearPendingAnswers,
+  rememberEditToken,
+  saveAnalysisAnswers,
+  savePendingAnswers,
+} from "@/lib/analysisOwnership";
 import { parseListingPreview } from "@/lib/listingPreview";
 import { PendingImage, fileToBase64 } from "@/lib/files";
 import { track } from "@/lib/analytics";
@@ -34,7 +43,10 @@ import {
   savePendingAttempt,
 } from "@/lib/analysisRecovery";
 
-type Step = "import" | "profile" | "email" | "goal" | "analyzing";
+// "questions": background onboarding only (lib/onboardingExperiment.ts) --
+// goal then profile, asked while the analysis already runs.
+type Step = "import" | "profile" | "email" | "goal" | "analyzing" | "questions";
+type QuestionPhase = "goal" | "profile" | "done";
 
 const MAX_IMAGES = 10;
 const MIN_ANIMATION_MS = 3400;
@@ -42,6 +54,8 @@ const MIN_ANIMATION_MS = 3400;
 // for image upload + DB write, so this only fires on a genuinely stuck
 // request instead of racing a real-but-slow analysis.
 const FETCH_TIMEOUT_MS = 290_000;
+
+const noopSubscribe = () => () => {};
 
 function genId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -59,6 +73,8 @@ type AnalyzeResponse = {
   // The server found this attempt already finished and returned the stored
   // analysis instead of running a new one (see api/analyze/route.ts).
   deduplicated?: boolean;
+  // Proof of ownership for this browser (lib/analysisEditToken.ts).
+  edit_token?: string;
 };
 
 // How a result reached the browser when it did NOT come straight back from
@@ -169,6 +185,26 @@ export function AnalyzeWizard() {
   // Analysis loader experiment (lib/loaderExperiment.ts): read once per
   // mount, never assigned here (proxy.ts does that).
   const [loaderVariant] = useState(() => getLoaderVariant());
+  // Onboarding experiment (never assigned here). Hydration-safe: the first
+  // render matches the server's (control), the real variant follows at once.
+  const onboardingVariant = useSyncExternalStore(noopSubscribe, getOnboardingVariant, () => "control" as const);
+  const stepRef = useRef<Step>("import");
+  const [questionPhase, setQuestionPhase] = useState<QuestionPhase>("goal");
+  const questionPhaseRef = useRef<QuestionPhase>("goal");
+  // Background onboarding: the result, when it arrived while questions were on screen.
+  const [readyResult, setReadyResult] = useState<AnalyzeResponse | null>(null);
+  // Stopped by the per-IP abuse limit (busy shared network): verifying the
+  // email lifts that limit for this browser (api/analyze). null | "pending" | "verified".
+  const [networkLimit, setNetworkLimit] = useState<null | "pending" | "verified">(null);
+  const completedAt = useRef<number | null>(null);
+  const goalBeforeReady = useRef(false);
+  const redirecting = useRef(false);
+  const starting = useRef(false);
+  const answers = useRef<{ goal: Goal | null; userType: UserType | null; propertyCountRange: PropertyCountRange | null }>({
+    goal: null,
+    userType: null,
+    propertyCountRange: null,
+  });
   const pendingResult = useRef<AnalyzeResponse | null>(null);
   // The visitor's own listing for the immersive loader, fetched as soon as
   // the link is submitted so it is ready when the wait starts. Never sent to
@@ -188,6 +224,8 @@ export function AnalyzeWizard() {
   // is filed under one internal address instead of a visitor's email.
   const directMode = Boolean(promoCode) && searchParams.get("direct") === "1";
   const submitEmail = () => (directMode ? DIRECT_LINK_EMAIL : email.trim());
+  // Background onboarding (never for the content link, which has no questions).
+  const bg = onboardingVariant === "background" && !directMode;
   const urlStartedTracked = useRef(false);
 
   function inputMethod(): "airbnb_url" | "screenshot" | "mixed" {
@@ -233,7 +271,7 @@ export function AnalyzeWizard() {
    */
   function prefetchListingPreview(rawUrl: string) {
     const trimmedUrl = rawUrl.trim();
-    if (loaderVariant !== "immersive" || !isAirbnbUrl(trimmedUrl)) return;
+    if ((loaderVariant !== "immersive" && !bg) || !isAirbnbUrl(trimmedUrl)) return;
     if (previewRequest.current?.url === trimmedUrl) return;
     previewRequest.current?.controller.abort();
     const controller = new AbortController();
@@ -264,6 +302,16 @@ export function AnalyzeWizard() {
       return;
     }
     if (trimmedUrl) prefetchListingPreview(trimmedUrl);
+    track("listing_import_submitted", { input_method: inputMethod(), image_count: images.length });
+    if (bg) {
+      // Same funnel events the control fires after the profile step.
+      const method = inputMethod();
+      track("listing_input_submitted", { image_count: images.length, input_method: method });
+      if (trimmedUrl) track("airbnb_url_submitted", { input_method: method });
+      if (images.length > 0) track("screenshot_upload_completed", { input_method: method, image_count: images.length });
+      setStep("email");
+      return;
+    }
     if (directMode) {
       const method = inputMethod();
       track("listing_input_submitted", { image_count: images.length, input_method: method, direct_link: true });
@@ -287,7 +335,10 @@ export function AnalyzeWizard() {
 
   function finishAndRedirect(json: AnalyzeResponse) {
     const method = inputMethod();
-    const elapsedMs = Date.now() - (startedAt.current ?? Date.now());
+    // Background onboarding: the visitor may reach the result well after the
+    // analysis finished (still answering) -- duration_ms stays the analysis.
+    const endMs = bg && completedAt.current ? completedAt.current : Date.now();
+    const elapsedMs = endMs - (startedAt.current ?? Date.now());
     const recovered = recoveredVia.current;
     track("analysis_completed", {
       attemptId: attemptId.current,
@@ -337,6 +388,11 @@ export function AnalyzeWizard() {
 
   function handleEmailSubmit() {
     track("email_submitted", { email: email.trim() });
+    if (bg) {
+      // The analysis starts now; goal and profile are asked while it runs.
+      void runAnalysis();
+      return;
+    }
     // The goal question is now asked to every visitor (it used to be part of
     // the B arm only); the A/B split still drives the loader.
     setStep("goal");
@@ -357,12 +413,35 @@ export function AnalyzeWizard() {
       url.trim(),
       images.map((i) => i.id),
       submitEmail().toLowerCase(),
-      goal,
-      userType,
-      propertyCountRange,
+      // Background onboarding: answers come after the start and are
+      // attached separately -- they never make a new attempt.
+      bg ? null : goal,
+      bg ? null : userType,
+      bg ? null : propertyCountRange,
       previousAnalysisId,
       promoCode,
     ]);
+  }
+
+  /**
+   * Background onboarding: attach the answers to the stored analysis (only
+   * this browser's edit token allows it), then go to the result. Answers are
+   * read from a ref: this can run from a timer set before they were given.
+   */
+  async function redirectToResult(json: AnalyzeResponse) {
+    if (redirecting.current) return;
+    redirecting.current = true;
+    const a = answers.current;
+    if (json.id && (a.goal || a.userType || a.propertyCountRange)) {
+      const ok = await saveAnalysisAnswers(json.id, {
+        goal: a.goal,
+        user_type: a.userType,
+        property_count_range: a.propertyCountRange,
+      });
+      if (a.goal) track("goal_saved", { analysisId: json.id, timing: goalBeforeReady.current ? "before_ready" : "after_ready", via: "onboarding", ok });
+    }
+    clearPendingAnswers(attemptId.current);
+    finishAndRedirect(json);
   }
 
   // Keeps the screen on while the analysis runs, where the browser supports
@@ -432,21 +511,46 @@ export function AnalyzeWizard() {
     // A request still hanging on a dead connection has nothing left to tell
     // us; its catch block sees `finished` and stays silent.
     activeRequest.current?.abort();
+    rememberEditToken(json.id, json.edit_token);
+
+    if (bg) {
+      completedAt.current = Date.now();
+      const onboardingDone = stepRef.current !== "questions";
+      track("analysis_ready", { attemptId: attemptId.current, analysisId: json.id, onboarding_done: onboardingDone });
+      if (!onboardingDone) {
+        // Still answering: never pull the visitor away mid-question. The
+        // "Ton diagnostic est prêt" notice offers the way to the result.
+        pendingResult.current = json;
+        setReadyResult(json);
+        setAnalysisDone(true);
+        return;
+      }
+    }
 
     setAnalysisDone(true);
-    if (abVariant === "B" || loaderVariant === "immersive") {
+    if (abVariant === "B" || loaderVariant === "immersive" || bg) {
       // AnalysisAhaFlow drives its own short "Ta première impression est
       // prête." beat once `done` flips true, then calls onTransitionEnd.
       pendingResult.current = json;
     } else {
       const elapsed = Date.now() - (startedAt.current ?? Date.now());
       const wait = Math.max(MIN_ANIMATION_MS - elapsed, 700);
-      setTimeout(() => finishAndRedirect(json), wait);
+      setTimeout(() => (bg ? void redirectToResult(json) : finishAndRedirect(json)), wait);
     }
   }
 
   function backToRetryStep() {
     setSubmitting(false);
+    if (bg) {
+      // Background onboarding: stay with the questions (answers kept); the
+      // error and a "relancer" button are shown there.
+      if (stepRef.current === "analyzing") {
+        questionPhaseRef.current = "done";
+        setQuestionPhase("done");
+      }
+      setStep("questions");
+      return;
+    }
     // A goal is already selected at this point -- sending them back to
     // "email" would force re-entering the email AND re-answering the goal
     // question. "goal" keeps both: the email stays filled in and the goal
@@ -560,7 +664,7 @@ export function AnalyzeWizard() {
     if (finished.current || attemptId.current !== id) return;
 
     if (status?.status === "completed" && status.id) {
-      complete({ id: status.id, overall_score: status.overall_score }, trigger);
+      complete({ id: status.id, overall_score: status.overall_score, edit_token: status.edit_token }, trigger);
       return;
     }
 
@@ -689,6 +793,9 @@ export function AnalyzeWizard() {
         );
       }
       if (!res.ok) {
+        if (json.error_code === "rate_limited" && (json as { rate_scope?: string }).rate_scope === "ip" && !directMode) {
+          setNetworkLimit("pending");
+        }
         if (json.error_code === "airbnb_url_extraction_failed") {
           failExtraction(json.error);
           return;
@@ -754,12 +861,23 @@ export function AnalyzeWizard() {
   }
 
   async function runAnalysis() {
-    if (submitting) return;
+    if (submitting || starting.current) return;
+    // Synchronous guard: two clicks in the same tick both saw submitting=false.
+    starting.current = true;
     setSubmitting(true);
+    setNetworkLimit(null);
     setAnalysisDone(false);
     setApiError(null);
     pendingResult.current = null;
-    setStep("analyzing");
+    // Background onboarding: the questions while it runs (or straight to the
+    // loader when they were already answered, e.g. a retry after a failure).
+    const toQuestions = bg && questionPhaseRef.current !== "done";
+    if (bg) {
+      setReadyResult(null);
+      completedAt.current = null;
+      redirecting.current = false;
+    }
+    setStep(toQuestions ? "questions" : "analyzing");
     startedAt.current = Date.now();
 
     // Same inputs as an attempt we lost track of -> same id, so the server
@@ -785,20 +903,15 @@ export function AnalyzeWizard() {
         ...clientContext(),
       });
     }
-    loaderViewedAt.current = Date.now();
     if (url.trim()) prefetchListingPreview(url);
-    track("analysis_loader_viewed", {
-      attemptId: attemptId.current,
-      loader: loaderVariant === "immersive" ? "immersive" : abVariant === "B" ? "aha_flow" : "step_analyzing",
-      input_method: method,
-      preview_status: loaderVariant === "immersive" ? (url.trim() ? listingPreview.status : "screenshots") : null,
-    });
+    if (!toQuestions) trackLoaderViewed(bg);
     track("analysis_started", {
       attemptId: attemptId.current,
       image_count: images.length,
       has_listing_url: url.trim().length > 0,
       input_method: method,
       is_retry: isSameAttempt,
+      ...(bg ? { stage: "after_email" } : {}),
       ...classifyUserAgent(navigator.userAgent),
     });
     if (method === "airbnb_url") {
@@ -808,10 +921,87 @@ export function AnalyzeWizard() {
     await submitAttempt("initial");
   }
 
+  /**
+   * The waiting screen is shown. Background onboarding fires it only when the
+   * loader really appears (after the questions), flagged after_questions, so
+   * the loader experiment's denominator never counts a loader nobody saw.
+   */
+  function trackLoaderViewed(afterQuestions: boolean) {
+    loaderViewedAt.current = Date.now();
+    track("analysis_loader_viewed", {
+      attemptId: attemptId.current,
+      loader: loaderVariant === "immersive" || bg ? "immersive" : abVariant === "B" ? "aha_flow" : "step_analyzing",
+      input_method: inputMethod(),
+      preview_status: loaderVariant === "immersive" || bg ? (url.trim() ? listingPreview.status : "screenshots") : null,
+      ...(afterQuestions ? { after_questions: true } : {}),
+    });
+  }
+
+  // ---- Background onboarding: questions while the analysis runs ---------
+
+  function handleSelectGoalBackground(value: Goal) {
+    goalBeforeReady.current = !pendingResult.current;
+    handleSelectGoal(value);
+  }
+
+  function finishQuestions() {
+    track("onboarding_completed", { goal, flow: "background" });
+    questionPhaseRef.current = "done";
+    setQuestionPhase("done");
+    if (apiError) return; // the error panel offers the retry
+    if (pendingResult.current) {
+      void redirectToResult(pendingResult.current);
+      return;
+    }
+    trackLoaderViewed(true);
+    setStep("analyzing");
+  }
+
+  function openReadyResult() {
+    if (!pendingResult.current) return;
+    track("analysis_ready_cta_clicked", { attemptId: attemptId.current, question: questionPhaseRef.current });
+    void redirectToResult(pendingResult.current);
+  }
+
   // Latest functions for the listeners/timers below (see `latest`).
   useEffect(() => {
     latest.current.checkStatus = (trigger) => void checkStatus(trigger);
+    stepRef.current = step;
+    questionPhaseRef.current = questionPhase;
+    answers.current = { goal, userType, propertyCountRange };
   });
+
+  useEffect(() => {
+    if (!submitting) starting.current = false;
+  }, [submitting]);
+
+  // Background onboarding: answers survive a reload or a closed tab until
+  // they reach the stored analysis (ResumeAnalysisBanner attaches them).
+  useEffect(() => {
+    if (!bg || !attemptId.current || (step !== "questions" && step !== "analyzing")) return;
+    savePendingAnswers(attemptId.current, { goal, user_type: userType, property_count_range: propertyCountRange });
+  }, [bg, step, goal, userType, propertyCountRange]);
+
+  // The email step was shown (both variants: abandonment at this step).
+  useEffect(() => {
+    if (step !== "email") return;
+    track("email_step_viewed", {
+      listing_preview: bg ? (url.trim() ? listingPreview.status : "screenshots") : "not_shown",
+    });
+    // Once per visit of the step, with the preview state at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  // A question shown while the analysis works (background only).
+  useEffect(() => {
+    if (step !== "questions" || questionPhase === "done") return;
+    track("onboarding_question_viewed", {
+      attemptId: attemptId.current,
+      question: questionPhase,
+      analysis_state: apiError ? "failed" : readyResult ? "ready" : "running",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, questionPhase]);
 
   useEffect(() => {
     function onVisibilityChange() {
@@ -872,7 +1062,8 @@ export function AnalyzeWizard() {
 
   function handleTransitionEnd() {
     if (!pendingResult.current) return;
-    if (loaderVariant === "immersive") {
+    if (bg && stepRef.current !== "analyzing") return; // questions on screen: the notice handles it
+    if (loaderVariant === "immersive" || bg) {
       // End of the visual sequence -- distinct from analysis_completed (the
       // real end of the processing), which finishAndRedirect fires next.
       // Deliberately WITHOUT analysisId: the Stripe webhook attributes a
@@ -883,7 +1074,8 @@ export function AnalyzeWizard() {
         visual_ms: loaderViewedAt.current != null ? Date.now() - loaderViewedAt.current : null,
       });
     }
-    finishAndRedirect(pendingResult.current);
+    if (bg) void redirectToResult(pendingResult.current);
+    else finishAndRedirect(pendingResult.current);
   }
 
   function handleVisualStarted(info: VisualStartedInfo) {
@@ -907,6 +1099,25 @@ export function AnalyzeWizard() {
     { id: "goal", label: "Ton objectif" },
   ];
   const onboardingIndex = onboardingSteps.findIndex((s) => s.id === step);
+  // Background onboarding: annonce → email → objectif → profil (the last two during the analysis).
+  const bgSteps = ["Ton annonce", "Ton email", "Ton objectif", "Ton profil"];
+  const bgIndex =
+    step === "import" ? 0 : step === "email" ? 1 : step === "questions" ? (questionPhase === "goal" ? 2 : 3) : -1;
+  const liveState = apiError ? "failed" : readyResult ? "ready" : "running";
+  const networkLimitVerify =
+    networkLimit === "verified" ? (
+      <p className="text-[13px] font-medium text-foreground">C&apos;est confirmé. Tu peux relancer l&apos;analyse.</p>
+    ) : (
+      <EmailCodeVerify
+        requestBody={{ email: submitEmail(), purpose: "continue" }}
+        verifyBody={(code) => ({ email: submitEmail(), code })}
+        requestLabel="Vérifier mon email pour continuer"
+        onVerified={() => {
+          track("access_verified", { purpose: "network_limit" });
+          setNetworkLimit("verified");
+        }}
+      />
+    );
 
   return (
     <div className={step === "analyzing" ? "mx-auto max-w-lg px-5 py-12 sm:py-16" : "relative isolate"}>
@@ -919,9 +1130,22 @@ export function AnalyzeWizard() {
           />
         </>
       )}
-      <div className={step === "analyzing" ? undefined : "mx-auto max-w-xl px-5 pt-10 pb-20 sm:pt-16 sm:pb-28"}>
-      {step !== "analyzing" && onboardingIndex >= 0 && !directMode && (
+      <div
+        className={
+          step === "analyzing"
+            ? undefined
+            : step === "questions"
+              ? "mx-auto max-w-6xl px-5 pt-10 pb-20 sm:pt-16 sm:pb-28"
+              : "mx-auto max-w-xl px-5 pt-10 pb-20 sm:pt-16 sm:pb-28"
+        }
+      >
+      {step !== "analyzing" && !bg && onboardingIndex >= 0 && !directMode && (
         <OnboardingProgress steps={onboardingSteps.map((s) => s.label)} current={onboardingIndex} />
+      )}
+      {bg && bgIndex >= 0 && (
+        <div className="mx-auto max-w-xl">
+          <OnboardingProgress steps={bgSteps} current={bgIndex} />
+        </div>
       )}
       {previousAnalysisId && step !== "analyzing" && (
         <div className="mb-6 rounded-2xl border border-accent/20 bg-accent-soft px-4 py-3 text-sm text-accent-hover">
@@ -929,8 +1153,8 @@ export function AnalyzeWizard() {
           l&apos;ancien.
         </div>
       )}
-      {step !== "analyzing" && <ResumeAnalysisBanner />}
-      {step === "analyzing" && recoveryNotice && (
+      {step !== "analyzing" && step !== "questions" && <ResumeAnalysisBanner />}
+      {(step === "analyzing" || step === "questions") && recoveryNotice && (
         <div
           role="status"
           aria-live="polite"
@@ -969,12 +1193,109 @@ export function AnalyzeWizard() {
           onSubmit={handleEmailSubmit}
           loading={submitting}
           error={apiError}
+          {...(bg
+            ? {
+                submitLabel: "Lancer l'analyse",
+                confirm: (
+                  <ListingConfirmCard
+                    preview={url.trim() ? (listingPreview.status === "idle" ? { status: "loading" } : listingPreview) : { status: "idle" }}
+                    screenshotUrls={images.map((img) => img.previewUrl)}
+                    onEdit={() => setStep("import")}
+                  />
+                ),
+              }
+            : {})}
         />
+      )}
+      {step === "questions" && (
+        <div className="mt-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start lg:gap-14">
+          <div className="lg:sticky lg:top-28">
+            {/* While it runs (and once ready): the immersive loader itself,
+                embedded next to the questions -- same photos, scan, steps.
+                No tracking callbacks: its events belong to the loader
+                experiment, which leaves background attempts out. A failure
+                is shown by the compact card, which can say so. */}
+            {liveState === "failed" ? (
+              <AnalysisLiveCard
+                preview={url.trim() ? (listingPreview.status === "idle" ? { status: "unavailable" } : listingPreview) : { status: "idle" }}
+                screenshotUrls={images.map((img) => img.previewUrl)}
+                state={liveState}
+              />
+            ) : (
+              <AnalysisImmersive
+                embedded
+                done={liveState === "ready"}
+                preview={url.trim() ? (listingPreview.status === "idle" ? { status: "unavailable" } : listingPreview) : { status: "idle" }}
+                screenshotUrls={images.map((img) => img.previewUrl)}
+                startedAtMs={startedAt.current ?? undefined}
+              />
+            )}
+            {readyResult && !apiError && (
+              <div role="status" aria-live="polite" className="animate-fade-up mt-4 rounded-[var(--radius-lg)] border border-accent/30 bg-accent-soft px-4 py-4 text-left">
+                <p className="text-[15px] font-semibold text-foreground">Ton diagnostic est prêt</p>
+                <p className="mt-1 text-[13px] text-muted">
+                  {questionPhase === "done"
+                    ? "Tu peux le consulter maintenant."
+                    : "Tu peux le voir maintenant, ou finir la question : ta réponse sera appliquée à ton rapport."}
+                </p>
+                <button
+                  type="button"
+                  onClick={openReadyResult}
+                  className="btn-sheen mt-3 inline-flex w-full items-center justify-center rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover"
+                >
+                  Voir mon diagnostic →
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="mt-8 lg:mt-0">
+            {apiError && (
+              <div role="alert" className="mb-8 rounded-[var(--radius-lg)] border border-score-low/25 bg-score-low/[0.06] px-4 py-4 text-left">
+                <p className="text-[15px] font-semibold text-foreground">L&apos;analyse n&apos;a pas pu être terminée.</p>
+                <p className="mt-1 text-[13.5px] text-muted">{apiError}</p>
+                <p className="mt-1 text-[13px] text-muted-2">Tes réponses sont conservées.</p>
+                {networkLimit && <div className="mt-3">{networkLimitVerify}</div>}
+                <button
+                  type="button"
+                  onClick={() => void runAnalysis()}
+                  disabled={submitting}
+                  className="mt-3 inline-flex items-center justify-center rounded-full bg-foreground px-5 py-2.5 text-sm font-semibold text-background disabled:opacity-60"
+                >
+                  Relancer l&apos;analyse
+                </button>
+              </div>
+            )}
+            {questionPhase === "goal" && (
+              <StepGoal
+                goal={goal}
+                onSelect={handleSelectGoalBackground}
+                onContinue={() => setQuestionPhase("profile")}
+                onSkip={() => setQuestionPhase("profile")}
+                continueLabel="Continuer"
+              />
+            )}
+            {questionPhase === "profile" && (
+              <StepProfile
+                propertyCountRange={propertyCountRange}
+                userType={userType}
+                onSelectPropertyCountRange={setPropertyCountRange}
+                onSelectUserType={setUserType}
+                onContinue={finishQuestions}
+              />
+            )}
+            {questionPhase === "done" && !apiError && !readyResult && (
+              <p className="text-sm text-muted">Merci ! On termine ton analyse…</p>
+            )}
+          </div>
+        </div>
       )}
       {step === "goal" && (
         <StepGoal goal={goal} onSelect={handleSelectGoal} onContinue={handleGoalContinue} error={apiError} />
       )}
-      {step === "analyzing" && loaderVariant === "immersive" && (
+      {step === "goal" && networkLimit && <div className="mt-5">{networkLimitVerify}</div>}
+      {/* Background onboarding always continues with the immersive loader:
+          it is what the visitor just watched next to the questions. */}
+      {step === "analyzing" && (loaderVariant === "immersive" || bg) && (
         <AnalysisImmersive
           done={analysisDone}
           preview={
@@ -985,12 +1306,13 @@ export function AnalyzeWizard() {
               : { status: "idle" }
           }
           screenshotUrls={images.map((img) => img.previewUrl)}
+          startedAtMs={bg ? (startedAt.current ?? undefined) : undefined}
           onVisualStarted={handleVisualStarted}
           onFinalizing={handleFinalizing}
           onTransitionEnd={handleTransitionEnd}
         />
       )}
-      {step === "analyzing" && loaderVariant !== "immersive" && abVariant === "B" && (
+      {step === "analyzing" && loaderVariant !== "immersive" && !bg && abVariant === "B" && (
         <AnalysisAhaFlow
           done={analysisDone}
           imageUrl={images[0]?.previewUrl}
@@ -999,7 +1321,7 @@ export function AnalyzeWizard() {
           onTransitionEnd={handleTransitionEnd}
         />
       )}
-      {step === "analyzing" && loaderVariant !== "immersive" && abVariant === "A" && (
+      {step === "analyzing" && loaderVariant !== "immersive" && !bg && abVariant === "A" && (
         <StepAnalyzing done={analysisDone} onFinalizing={handleFinalizing} />
       )}
       </div>

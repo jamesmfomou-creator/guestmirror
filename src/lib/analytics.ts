@@ -2,6 +2,7 @@ import { captureAttribution, getAnonymousId, getFirstTouch, getLastTouch, getSes
 import { getAbVariant } from "@/lib/ab";
 import { getPaywallVariant } from "@/lib/paywallExperiment";
 import { getLoaderVariant } from "@/lib/loaderExperiment";
+import { getOnboardingVariant } from "@/lib/onboardingExperiment";
 import { PRICING_VERSION } from "@/lib/plans";
 
 /**
@@ -176,6 +177,26 @@ export const ANALYTICS_EVENTS = [
   "addon_refunded",
   "addon_disputed",
   "addon_dispute_closed",
+  // Onboarding experiment (lib/onboardingExperiment.ts). onboarding_variant
+  // is attached to every event by track() below. Never any listing text,
+  // email or answer content beyond the enum values below.
+  //  - listing_import_submitted: "Continuer" on the import step (both
+  //    variants; abandonment right after import was invisible before).
+  //  - email_step_viewed: the email step was shown (both variants), with
+  //    listing_preview = what the background variant showed of the listing.
+  //  - onboarding_question_viewed: background only, a question shown while
+  //    the analysis runs (question, analysis_state: running|ready|failed).
+  //  - analysis_ready: background only, the result arrived (onboarding_done
+  //    says whether the questions were already finished).
+  //  - analysis_ready_cta_clicked: background only, "Voir mon diagnostic".
+  //  - goal_saved: the goal was attached to the stored analysis (timing:
+  //    before_ready | after_ready | result_page; ok: whether the save worked).
+  "listing_import_submitted",
+  "email_step_viewed",
+  "onboarding_question_viewed",
+  "analysis_ready",
+  "analysis_ready_cta_clicked",
+  "goal_saved",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];
@@ -215,6 +236,7 @@ export function track(event: AnalyticsEvent, props?: Props) {
     ab_variant: getAbVariant(),
     paywall_variant: getPaywallVariant(),
     loader_variant: getLoaderVariant(),
+    onboarding_variant: getOnboardingVariant(),
     // Prices changed on this version: experiments and conversion rates are
     // compared within one pricing version only.
     pricing_version: PRICING_VERSION,

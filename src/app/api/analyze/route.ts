@@ -14,6 +14,10 @@ import { DEMO_IMAGES, DEMO_RESULT, DEMO_RESULT_AFTER } from "@/lib/demo-data";
 import { extractAirbnbListing, downloadImageAsBase64 } from "@/lib/airbnbExtract";
 import { optimizeImages } from "@/lib/imageOptimize";
 import { isEligibleForLegacyRetest } from "@/lib/access/accessStore";
+import { editTokenFor } from "@/lib/analysisEditToken";
+import { checkAnalyzeRateLimit, rateIdentity } from "@/lib/analyzeRateLimit";
+import { currentIdentity } from "@/lib/access/session";
+import { normalizeEmail } from "@/lib/access/accessStore";
 
 const AIRBNB_EXTRACTION_FAILED_MESSAGE =
   "Impossible d'analyser automatiquement ce lien Airbnb. Importe une capture d'écran de ton annonce pour continuer.";
@@ -59,7 +63,10 @@ export async function POST(req: NextRequest) {
   // Carried through every log line below so a failure at any stage can be
   // traced back to the specific user attempt it came from -- previously
   // only the AI-call logs (lib/ai.ts) had any correlating ID at all.
-  const attemptTag = `attempt_id=${data.attempt_id ?? "none"}`;
+  // Every request is an attempt: a caller that sends no attempt id gets one
+  // here, so idempotency, server events and the abuse limit apply to it too.
+  const attemptId = data.attempt_id ?? crypto.randomUUID();
+  const attemptTag = `attempt_id=${attemptId}${data.attempt_id ? "" : " (server)"}`;
 
   for (const img of data.images) {
     const approxBytes = (img.base64.length * 3) / 4;
@@ -76,12 +83,12 @@ export async function POST(req: NextRequest) {
   // The attempt id is generated once by the client and reused when it
   // resubmits after losing its connection. Before this, a resubmission
   // (new or same id) always paid for a second full model call: the only
-  // dedup lived inside createAnalysis, i.e. *after* the ~55 s AI call. Legacy
-  // callers that send no attempt id skip all of this and behave as before.
-  const attemptId = data.attempt_id ?? null;
+  // dedup lived inside createAnalysis, i.e. *after* the ~55 s AI call. A
+  // caller that sends no attempt id gets a server-generated one (above).
   const inputMethod = data.images.length > 0 ? (data.listing_url ? "mixed" : "screenshot") : "airbnb_url";
 
-  if (attemptId) {
+  const rate = rateIdentity(data.email, req.headers);
+  {
     // 1. Already finished (the client lost the response and is asking
     //    again): hand back the stored analysis. No AI call, no new row.
     const existing = await findAnalysisByAttemptId(attemptId).catch(() => null);
@@ -95,7 +102,12 @@ export async function POST(req: NextRequest) {
           metadata: { reason: "already_completed" },
         })
       );
-      return NextResponse.json({ id: existing.id, overall_score: existing.overall_score, deduplicated: true });
+      return NextResponse.json({
+        id: existing.id,
+        overall_score: existing.overall_score,
+        deduplicated: true,
+        edit_token: editTokenFor(existing.id),
+      });
     }
 
     // 2. Claim the attempt, then check nobody else already holds it. Write
@@ -104,7 +116,14 @@ export async function POST(req: NextRequest) {
     const ownStartEventId = await recordAnalysisServerEvent({
       eventName: "analysis_server_started",
       attemptId,
-      metadata: { input_method: inputMethod, image_count: data.images.length, is_rescan: Boolean(data.previous_analysis_id) },
+      metadata: {
+        input_method: inputMethod,
+        image_count: data.images.length,
+        is_rescan: Boolean(data.previous_analysis_id),
+        // Keyed hashes, never the raw values: what the abuse limit counts.
+        email_hash: rate.emailHash,
+        ip_hash: rate.ipHash,
+      },
     });
     if (ownStartEventId) {
       const events = await getAttemptEvents(attemptId);
@@ -122,6 +141,47 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: "processing" }, { status: 202 });
       }
     }
+
+    // 3. Abuse limit (lib/analyzeRateLimit.ts), after the idempotency checks
+    //    above so a resubmitted attempt is never blocked, before any paid
+    //    work. This attempt's own start is excluded from the count.
+    // A browser that verified this email (code) is a real mailbox owner: the
+    // per-IP counter, meant for one actor rotating emails, does not apply.
+    const verifiedEmail = await currentIdentity().catch(() => null);
+    const emailVerified = Boolean(verifiedEmail) && verifiedEmail!.email === normalizeEmail(data.email);
+    const decision = await checkAnalyzeRateLimit({ email: data.email, identity: rate, attemptId, emailVerified });
+    if (!decision.allowed) {
+      console.warn(`[analyze] rate_limited scope=${decision.scope} window=${decision.window} limit=${decision.limit} ${attemptTag}`);
+      await recordAnalysisServerEvent({
+        eventName: "analysis_server_failed",
+        attemptId,
+        metadata: {
+          error_code: "rate_limited",
+          phase: "rate_limit",
+          rate_scope: decision.scope,
+          rate_window: decision.window,
+          rate_limit: decision.limit,
+          subscriber: decision.subscriber ?? false,
+          input_method: inputMethod,
+          // Lets the limiter leave refused attempts out of later counts.
+          email_hash: rate.emailHash,
+          ip_hash: rate.ipHash,
+        },
+      });
+      return NextResponse.json(
+        {
+          error:
+            decision.scope === "ip"
+              ? "Beaucoup d'analyses ont été lancées depuis ton réseau. Vérifie ton email pour continuer, ou réessaie un peu plus tard."
+              : "Tu as lancé beaucoup d'analyses en peu de temps. Réessaie un peu plus tard, ou écris-nous si tu as besoin d'en faire davantage.",
+          error_code: "rate_limited",
+          // "ip": verifying the email lifts it; "email": only time (or a subscription) does.
+          rate_scope: decision.scope,
+          retry_after_sec: decision.retryAfterSec,
+        },
+        { status: 429, headers: { "Retry-After": String(decision.retryAfterSec) } }
+      );
+    }
   }
 
   let phase: AnalysisPhase = "url_extraction";
@@ -130,7 +190,6 @@ export async function POST(req: NextRequest) {
   // "the server gave up, here is why" instead of leaving it waiting for the
   // in-flight window to expire. Never throws (see recordAnalysisServerEvent).
   async function recordFailure(errorCode: string, extra: AttemptEventMetadata = {}) {
-    if (!attemptId) return;
     await recordAnalysisServerEvent({
       eventName: "analysis_server_failed",
       attemptId,
@@ -147,7 +206,6 @@ export async function POST(req: NextRequest) {
   // Observability only -- the stored analysis row itself is the source of
   // truth for "completed" -- so it runs after the response is sent.
   function recordCompletion(analysisId: string, metadata: AttemptEventMetadata) {
-    if (!attemptId) return;
     after(() =>
       recordAnalysisServerEvent({
         eventName: "analysis_server_completed",
@@ -286,11 +344,11 @@ export async function POST(req: NextRequest) {
         propertyCountRange: data.property_count_range || null,
         isUnlocked: Boolean(promoCodeToRecord) || legacyRetest,
         promoCode: promoCodeToRecord,
-        attemptId: data.attempt_id ?? null,
+        attemptId,
         goal: data.goal ?? null,
       });
       recordCompletion(record.id, { demo: true, total_duration_ms: Date.now() - requestStartedAt });
-      return NextResponse.json({ id: record.id, overall_score: record.overall_score });
+      return NextResponse.json({ id: record.id, overall_score: record.overall_score, edit_token: editTokenFor(record.id) });
     }
 
     phase = "image_preprocessing";
@@ -317,7 +375,7 @@ export async function POST(req: NextRequest) {
       images: effectiveImages,
       input,
       extractedListingText,
-      attemptId: data.attempt_id ?? null,
+      attemptId,
     }).then((r) => {
       aiCallDurationMs = Date.now() - aiStartedAt;
       return r;
@@ -373,7 +431,7 @@ export async function POST(req: NextRequest) {
         propertyCountRange: data.property_count_range || null,
         isUnlocked: Boolean(promoCodeToRecord) || legacyRetest,
         promoCode: promoCodeToRecord,
-        attemptId: data.attempt_id ?? null,
+        attemptId,
         goal: data.goal ?? null,
       });
     } catch (err) {
@@ -410,6 +468,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       id: record.id,
       overall_score: record.overall_score,
+      // Proof of ownership for this browser (lib/analysisEditToken.ts).
+      edit_token: editTokenFor(record.id),
       timings: {
         url_extraction_duration_ms: urlExtractionDurationMs,
         image_preprocessing_duration_ms: imagePreprocessingDurationMs,

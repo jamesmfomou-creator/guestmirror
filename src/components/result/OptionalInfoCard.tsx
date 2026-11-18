@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { editTokenFor } from "@/lib/analysisOwnership";
+import { EDIT_TOKEN_HEADER_NAME } from "@/lib/analysisEditTokenHeader";
+import { useCanEditAnalysis } from "./useCanEditAnalysis";
 
 const PROPERTY_TYPES = ["Appartement", "Maison", "Studio", "Chambre privée", "Loft", "Autre"];
 
@@ -12,7 +15,9 @@ interface InfoData {
   nightly_price: string;
 }
 
-export function OptionalInfoCard({ analysisId }: { analysisId: string }) {
+// Only for the browser allowed to change the analysis (see useCanEditAnalysis).
+export function OptionalInfoCard({ analysisId, serverAllowed = false }: { analysisId: string; serverAllowed?: boolean }) {
+  const canEdit = useCanEditAnalysis(analysisId, serverAllowed);
   const [dismissed, setDismissed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState<InfoData>({
@@ -22,14 +27,17 @@ export function OptionalInfoCard({ analysisId }: { analysisId: string }) {
     nightly_price: "",
   });
 
-  if (dismissed) return null;
+  if (dismissed || !canEdit) return null;
 
   async function handleSave() {
     setSaving(true);
     try {
       await fetch(`/api/analyses/${analysisId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(editTokenFor(analysisId) ? { [EDIT_TOKEN_HEADER_NAME]: editTokenFor(analysisId)! } : {}),
+        },
         body: JSON.stringify({
           city: data.city || null,
           property_type: data.property_type || null,

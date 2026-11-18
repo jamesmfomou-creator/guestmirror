@@ -374,11 +374,15 @@ export async function updateAnalysisInput(
     property_type?: string | null;
     guest_capacity?: string | null;
     nightly_price?: string | null;
+    goal?: Goal | null;
+    user_type?: UserType | null;
+    property_count_range?: PropertyCountRange | null;
   }
 ) {
   if (SUPABASE_CONFIGURED) {
     const supabase = getSupabaseAdmin()!;
-    await supabase.from("analyses").update({ ...input, updated_at: nowIso() }).eq("id", id);
+    const { error } = await supabase.from("analyses").update({ ...input, updated_at: nowIso() }).eq("id", id);
+    if (error) throw new Error(`Supabase update failed: ${error.message}`);
     return;
   }
   const record = readLocalRecord(id);

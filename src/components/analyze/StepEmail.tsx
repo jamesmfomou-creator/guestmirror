@@ -13,12 +13,17 @@ export function StepEmail({
   onSubmit,
   loading,
   error,
+  confirm,
+  submitLabel = "Continuer",
 }: {
   email: string;
   onChange: (v: string) => void;
   onSubmit: () => void;
   loading?: boolean;
   error?: string | null;
+  /** Background onboarding only: the identified listing, confirmed by continuing. */
+  confirm?: React.ReactNode;
+  submitLabel?: string;
 }) {
   const [touched, setTouched] = useState(false);
   const isValid = EMAIL_RE.test(email.trim());
@@ -82,7 +87,9 @@ export function StepEmail({
         }
       />
 
-      <Surface className="mt-9">
+      {confirm}
+
+      <Surface className={confirm ? "mt-4" : "mt-9"}>
         <div className="group flex items-center gap-3 rounded-2xl border border-border bg-background px-4 transition-all focus-within:border-foreground/40 focus-within:shadow-[0_0_0_4px_rgba(217,108,63,0.12)]">
           <Mail aria-hidden size={18} className="shrink-0 text-muted-2 transition-colors group-focus-within:text-accent" />
           <input
@@ -127,7 +134,7 @@ export function StepEmail({
       {error && <ErrorNote>{error}</ErrorNote>}
 
       <Button type="submit" size="lg" className="btn-sheen group mt-8 w-full sm:w-full" disabled={loading}>
-        {loading ? "Un instant…" : isRetry ? "Réessayer l'analyse" : "Continuer"}
+        {loading ? "Un instant…" : isRetry ? "Réessayer l'analyse" : submitLabel}
         {!loading && (
           <ArrowRight aria-hidden size={18} className="transition-transform duration-300 group-hover:translate-x-0.5" />
         )}

@@ -30,11 +30,16 @@ export function StepGoal({
   onSelect,
   onContinue,
   error,
+  continueLabel = "Continuer vers mon diagnostic →",
+  onSkip,
 }: {
   goal: Goal | null;
   onSelect: (value: Goal) => void;
   onContinue: () => void;
   error?: string | null;
+  /** Background onboarding only; the defaults are the original step. */
+  continueLabel?: string;
+  onSkip?: () => void;
 }) {
   useEffect(() => {
     track("onboarding_goal_viewed");
@@ -67,8 +72,17 @@ export function StepGoal({
       {error && <ErrorNote>{error}</ErrorNote>}
 
       <Button size="lg" className="btn-sheen mt-8 w-full sm:w-full" onClick={onContinue} disabled={!goal}>
-        Continuer vers mon diagnostic →
+        {continueLabel}
       </Button>
+      {onSkip && (
+        <button
+          type="button"
+          onClick={onSkip}
+          className="mt-4 w-full text-center text-sm font-medium text-muted underline-offset-4 transition-colors hover:text-foreground hover:underline"
+        >
+          Passer cette question
+        </button>
+      )}
     </div>
   );
 }
