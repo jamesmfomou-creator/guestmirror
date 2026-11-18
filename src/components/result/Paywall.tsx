@@ -210,16 +210,20 @@ export function Paywall({
             </p>
           </div>
 
-          <ul className="card mx-auto mt-6 grid max-w-xl gap-2.5 p-5 text-sm text-foreground sm:grid-cols-2">
-            {UNLOCK_BENEFITS.map((benefit) => (
-              <li key={benefit} className="flex items-start gap-2.5">
-                <span aria-hidden="true" className="mt-0.5 font-semibold text-accent-hover">
-                  ✓
-                </span>
-                <span>{benefit}</span>
-              </li>
-            ))}
-          </ul>
+          {/* reveal_v1: the plan card above already lists what THIS report
+              contains (real counts), so the generic list is not repeated. */}
+          {!singleCopy && (
+            <ul className="card mx-auto mt-6 grid max-w-xl gap-2.5 p-5 text-sm text-foreground sm:grid-cols-2">
+              {UNLOCK_BENEFITS.map((benefit) => (
+                <li key={benefit} className="flex items-start gap-2.5">
+                  <span aria-hidden="true" className="mt-0.5 font-semibold text-accent-hover">
+                    ✓
+                  </span>
+                  <span>{benefit}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       )}
 
@@ -239,7 +243,8 @@ export function Paywall({
           Toutes les formules
         </p>
       )}
-      <div className={preview ? "mt-4" : "mt-7"}>
+      {/* The three offers: target of "Découvrir mes formules" (ImprovementPlanCard). */}
+      <div id="formules" className={`scroll-mt-24 outline-none ${preview ? "mt-4" : "mt-7"}`}>
         <PricingCards
           highlight="one_time"
           showConciergeBanner={showConciergeBanner}

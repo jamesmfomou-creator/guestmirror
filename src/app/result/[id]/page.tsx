@@ -23,7 +23,7 @@ import { ManageSubscriptionLink } from "@/components/result/ManageSubscriptionLi
 import { BRAND_NAME } from "@/lib/brand";
 import { getAccessForEmail } from "@/lib/access/reportAccess";
 import { AccessPanel, BuyAddonButton } from "@/components/result/AccessPanel";
-import { ADDON_PACK, OFFERS, addonPackAvailable, formatEur } from "@/lib/plans";
+import { ADDON_PACK, addonPackAvailable } from "@/lib/plans";
 import { isDirectLinkReport } from "@/lib/contentLink";
 import { PaymentPending } from "@/components/result/PaymentPending";
 import type { FeedbackPlan } from "@/lib/feedback";
@@ -255,7 +255,6 @@ export default async function ResultPage({
             insightShown={freeReveal.insight !== null}
             weaknessCount={freeReveal.weaknessCount}
             reportContents={freeReveal.reportContents}
-            priceLabel={formatEur(OFFERS.one_time.amountEur)}
             showOffersButton={!creditUsable}
           />
           {!creditUsable && (

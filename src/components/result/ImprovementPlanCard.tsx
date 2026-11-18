@@ -7,24 +7,22 @@ import { useInViewOnce } from "@/lib/tracking/useInViewOnce";
 // "Ton plan d'amélioration": what the paid report contains for THIS listing,
 // every line and figure computed by buildFreeReveal() from the report itself
 // (never a fixed list, never an invented number). Receives only those
-// strings and counts. The button does NOT start a payment: it brings the
-// visitor to the existing offers (Paywall, #paywall), where they choose and
-// confirm before any checkout.
+// strings and counts. The button does NOT start a payment and names no
+// price: it brings the visitor to the three existing offers (Paywall,
+// #formules), none preselected, where they choose and confirm before any
+// checkout.
 
 export function ImprovementPlanCard({
   analysisId,
   insightShown,
   weaknessCount,
   reportContents,
-  priceLabel,
   showOffersButton = true,
 }: {
   analysisId: string;
   insightShown: boolean;
   weaknessCount: number;
   reportContents: string[];
-  /** formatEur(OFFERS.one_time.amountEur), from the offer catalogue. */
-  priceLabel: string;
   /** false when a Conciergerie credit unlocks the report instead (no paywall on the page). */
   showOffersButton?: boolean;
 }) {
@@ -34,11 +32,13 @@ export function ImprovementPlanCard({
 
   function showOffers() {
     track("unlock_cta_clicked", { analysisId, source: "plan_card" });
-    const paywall = document.getElementById("paywall");
-    paywall?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const offers = document.getElementById("formules") ?? document.getElementById("paywall");
+    if (!offers) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    offers.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
     // Keyboard and screen-reader users land on the offers too.
-    paywall?.setAttribute("tabindex", "-1");
-    paywall?.focus({ preventScroll: true });
+    offers.setAttribute("tabindex", "-1");
+    offers.focus({ preventScroll: true });
   }
 
   return (
@@ -70,7 +70,7 @@ export function ImprovementPlanCard({
         onClick={showOffers}
         className="btn-sheen mt-6 inline-flex w-full items-center justify-center rounded-full bg-accent px-6 py-3.5 text-base font-semibold text-accent-foreground transition-colors hover:bg-accent-hover"
       >
-        Voir mes corrections — {priceLabel}
+        Découvrir mes formules
       </button>
       <p className="mt-2.5 text-center text-[12.5px] text-muted-2">Tu choisis ta formule juste en dessous, avant tout paiement.</p>
       </>
