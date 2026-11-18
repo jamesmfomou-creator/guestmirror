@@ -1,19 +1,32 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { AlertCircle, Check, Images, Loader2, MapPin } from "lucide-react";
 import { loaderImageUrl } from "@/lib/listingPreview";
-import type { ListingPreviewState } from "./AnalysisImmersive";
+import { MAX_GALLERY_PHOTOS, PHOTO_MS } from "@/lib/immersiveSequence";
+import { Corners, ScanLine, type ListingPreviewState } from "./AnalysisImmersive";
 
-// Compact view of the analysis while the visitor answers the onboarding
-// questions (background onboarding, lib/onboardingExperiment.ts).
+// The analysis, shown next to the onboarding questions while it runs
+// (background onboarding, lib/onboardingExperiment.ts): the listing's real
+// photos go by one after another under the same scan as the immersive loader
+// (each photo, a scan line, a slow zoom, the thumbnails), then its title and
+// city, then the states the browser really knows.
 //
 // Same honesty rules as the immersive loader: only the visitor's own
-// content (their listing's photo, title and city from /api/listing-preview,
-// or their own screenshots) and only states the browser really knows -- the
-// listing was found, the analysis request is running, it is ready, it
-// failed. No percentage, no timer, no invented step.
+// content (their listing's photos, title and city from /api/listing-preview,
+// or their own screenshots) and only real states -- the listing was found,
+// the analysis request is running, it is ready, it failed. The photo scan is
+// what is being looked at, paced for display; no percentage, no timer, no
+// invented step. A photo that fails to load is skipped, never replaced.
 
 export type LiveState = "running" | "ready" | "failed";
+
+interface Photo {
+  key: string;
+  src: string;
+  fallback: string | null;
+}
 
 export function AnalysisLiveCard({
   preview,
@@ -24,9 +37,33 @@ export function AnalysisLiveCard({
   screenshotUrls: string[];
   state: LiveState;
 }) {
+  const reduceMotion = useReducedMotion() ?? false;
   const listing = preview.status === "ready" ? preview.preview : null;
-  const photo = listing?.imageUrls[0] ? loaderImageUrl(listing.imageUrls[0]) : screenshotUrls[0] ?? null;
   const fromScreenshots = preview.status === "idle";
+
+  const photos: Photo[] = useMemo(
+    () =>
+      listing && listing.imageUrls.length > 0
+        ? listing.imageUrls.slice(0, MAX_GALLERY_PHOTOS).map((raw) => ({ key: raw, src: loaderImageUrl(raw), fallback: raw }))
+        : screenshotUrls.slice(0, MAX_GALLERY_PHOTOS).map((u) => ({ key: u, src: u, fallback: null })),
+    [listing, screenshotUrls]
+  );
+  // A resized CDN photo that fails falls back once to the original; failing twice, it is skipped.
+  const [failures, setFailures] = useState<Record<string, "retry" | "dead">>({});
+  const live = photos.filter((p) => failures[p.key] !== "dead");
+  const srcOf = (p: Photo) => (failures[p.key] === "retry" && p.fallback ? p.fallback : p.src);
+  const onError = (p: Photo) =>
+    setFailures((prev) => ({ ...prev, [p.key]: !prev[p.key] && p.fallback && p.fallback !== p.src ? "retry" : "dead" }));
+
+  // One photo after another while the analysis runs; the last one shown stays once it is done.
+  const [tick, setTick] = useState(0);
+  const scanning = state === "running" && live.length > 0;
+  useEffect(() => {
+    if (!scanning || live.length < 2) return;
+    const t = setInterval(() => setTick((i) => i + 1), PHOTO_MS);
+    return () => clearInterval(t);
+  }, [scanning, live.length]);
+  const current = live.length > 0 ? live[tick % live.length] : null;
 
   const rows: { label: string; status: "done" | "active" | "pending" | "error" }[] = [
     fromScreenshots
@@ -39,39 +76,86 @@ export function AnalysisLiveCard({
   ];
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card shadow-[0_18px_40px_-30px_rgba(28,26,23,0.35)]">
-      <div className="flex items-center gap-3.5 p-4">
-        {photo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={photo}
-            alt={fromScreenshots ? "Ta première capture" : "Photo principale de ton annonce"}
-            referrerPolicy="no-referrer"
-            className="h-14 w-[72px] shrink-0 rounded-xl border border-border object-cover lg:h-16 lg:w-20"
-          />
-        ) : (
-          <span className="flex h-14 w-[72px] shrink-0 items-center justify-center rounded-xl border border-border bg-background-alt text-muted-2 lg:h-16 lg:w-20">
-            <Images size={20} aria-hidden />
+    <div className="overflow-hidden rounded-[var(--radius-lg)] border border-border bg-card shadow-[0_24px_60px_-34px_rgba(28,26,23,0.45)]">
+      {current ? (
+        <div className="relative aspect-[16/10] overflow-hidden bg-background-alt lg:aspect-[4/3]">
+          <AnimatePresence initial={false}>
+            <motion.img
+              key={`${current.key}-${tick}`}
+              src={srcOf(current)}
+              alt={fromScreenshots ? "Ta capture, en cours d'analyse" : "Photo de ton annonce, en cours d'analyse"}
+              referrerPolicy="no-referrer"
+              onError={() => onError(current)}
+              className="absolute inset-0 h-full w-full object-cover"
+              initial={{ opacity: 0, scale: 1 }}
+              animate={reduceMotion || !scanning ? { opacity: 1 } : { opacity: 1, scale: 1.05 }}
+              exit={{ opacity: 0 }}
+              transition={{ opacity: { duration: reduceMotion ? 0.2 : 0.45 }, scale: { duration: PHOTO_MS / 1000, ease: "linear" } }}
+            />
+          </AnimatePresence>
+          {scanning && (
+            <>
+              <Corners />
+              <ScanLine key={`scan-${tick}`} reduceMotion={reduceMotion} durationS={(PHOTO_MS / 1000) * 0.8} />
+            </>
+          )}
+          <span className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full bg-background/90 px-3 py-1 text-xs font-semibold text-accent-hover backdrop-blur">
+            {state === "ready" ? (
+              <>
+                <Check size={12} aria-hidden className="text-score-high" />
+                Diagnostic prêt
+              </>
+            ) : state === "failed" ? (
+              "Analyse interrompue"
+            ) : (
+              <>
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" aria-hidden />
+                Analyse des photos
+              </>
+            )}
           </span>
-        )}
-        <div className="min-w-0 text-left">
-          <p className="label-mono text-muted-2">{state === "ready" ? "Diagnostic prêt" : "Analyse de ton annonce"}</p>
-          {listing?.title ? (
-            <p className="mt-0.5 line-clamp-2 text-[14px] font-semibold leading-snug text-foreground">{listing.title}</p>
-          ) : (
-            <p className="mt-0.5 text-[14px] text-muted">{fromScreenshots ? "À partir de tes captures" : "Ton annonce Airbnb"}</p>
-          )}
-          {listing?.city && (
-            <p className="mt-0.5 flex items-center gap-1 text-[12.5px] text-muted">
-              <MapPin aria-hidden size={12} className="shrink-0" />
-              {listing.city}
-            </p>
-          )}
         </div>
+      ) : (
+        <div className="flex aspect-[16/10] items-center justify-center bg-background-alt text-muted-2 lg:aspect-[4/3]">
+          <Images size={28} aria-hidden />
+        </div>
+      )}
+
+      {live.length > 1 && (
+        <div className="flex gap-1.5 px-4 pt-3" aria-hidden>
+          {live.map((p) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={p.key}
+              src={srcOf(p)}
+              alt=""
+              referrerPolicy="no-referrer"
+              onError={() => onError(p)}
+              className={`h-10 w-12 rounded-md object-cover transition-all duration-300 ${
+                p === current ? "opacity-100 ring-2 ring-accent ring-offset-2 ring-offset-card" : "opacity-45"
+              }`}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="px-4 pb-1 pt-3.5 text-left sm:px-5">
+        <p className="label-mono text-muted-2">{state === "ready" ? "Diagnostic prêt" : "Analyse de ton annonce"}</p>
+        {listing?.title ? (
+          <p className="mt-1 line-clamp-2 text-[15px] font-semibold leading-snug text-foreground lg:text-base">{listing.title}</p>
+        ) : (
+          <p className="mt-1 text-[14px] text-muted">{fromScreenshots ? "À partir de tes captures" : "Ton annonce Airbnb"}</p>
+        )}
+        {listing?.city && (
+          <p className="mt-0.5 flex items-center gap-1 text-[13px] text-muted">
+            <MapPin aria-hidden size={12} className="shrink-0" />
+            {listing.city}
+          </p>
+        )}
       </div>
-      <ol className="space-y-1.5 border-t border-border px-4 py-3 text-left" aria-label="État de l'analyse">
+      <ol className="mt-2 space-y-1.5 border-t border-border px-4 py-3 text-left sm:px-5" aria-label="État de l'analyse">
         {rows.map((r) => (
-          <li key={r.label} className="flex items-center gap-2.5 text-[13px]">
+          <li key={r.label} className="flex items-center gap-2.5 text-[13.5px]">
             <RowIcon status={r.status} />
             <span className={r.status === "pending" ? "text-muted-2" : "text-foreground"}>{r.label}</span>
             {r.status === "active" && <span className="ml-auto text-[11.5px] text-muted">en cours</span>}

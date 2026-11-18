@@ -279,7 +279,7 @@ function PhaseLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ScanLine({ reduceMotion, durationS }: { reduceMotion: boolean; durationS: number }) {
+export function ScanLine({ reduceMotion, durationS }: { reduceMotion: boolean; durationS: number }) {
   if (reduceMotion) return null;
   return (
     <motion.div
@@ -294,7 +294,7 @@ function ScanLine({ reduceMotion, durationS }: { reduceMotion: boolean; duration
   );
 }
 
-function Corners() {
+export function Corners() {
   const c = "absolute h-5 w-5 border-accent";
   return (
     <div aria-hidden className="pointer-events-none absolute inset-3">

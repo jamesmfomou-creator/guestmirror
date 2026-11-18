@@ -1135,7 +1135,7 @@ export function AnalyzeWizard() {
           step === "analyzing"
             ? undefined
             : step === "questions"
-              ? "mx-auto max-w-5xl px-5 pt-10 pb-20 sm:pt-16 sm:pb-28"
+              ? "mx-auto max-w-6xl px-5 pt-10 pb-20 sm:pt-16 sm:pb-28"
               : "mx-auto max-w-xl px-5 pt-10 pb-20 sm:pt-16 sm:pb-28"
         }
       >
@@ -1208,7 +1208,7 @@ export function AnalyzeWizard() {
         />
       )}
       {step === "questions" && (
-        <div className="mt-2 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start lg:gap-12">
+        <div className="mt-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start lg:gap-14">
           <div className="lg:sticky lg:top-28">
             <AnalysisLiveCard
               preview={url.trim() ? (listingPreview.status === "idle" ? { status: "unavailable" } : listingPreview) : { status: "idle" }}
