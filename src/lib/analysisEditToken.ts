@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { serverSecret } from "@/lib/serverSecret";
+import { editSecrets } from "@/lib/serverSecret";
 
 // Proof that a browser may modify an analysis (goal, profile, optional
 // listing details) or delete it. Before this, the analysis id alone was
@@ -8,24 +8,30 @@ import { serverSecret } from "@/lib/serverSecret";
 // The token is an HMAC of the analysis id with a server secret: nothing is
 // stored, no migration. It is handed only to the browser that created the
 // analysis (the /api/analyze response, the status endpoint answering for
-// that browser's own random attempt id). Another device can still act on a
-// report once its email is verified (lib/access/session.ts), checked by
-// mayEditAnalysis in the route.
+// that browser's own random attempt id). Any other browser -- another device,
+// or an old report created before tokens existed -- proves ownership by
+// verifying the report's email with a code (lib/access/session.ts), checked
+// by mayEdit in api/analyses/[id].
 //
-// Secret: lib/serverSecret.ts (ANALYSIS_EDIT_SECRET when set, otherwise
-// derived from the Supabase service-role key, server-only). Rotating that key invalidates
-// outstanding tokens: the owner then simply can no longer change the goal
-// from that browser, nothing else is affected.
+// Secrets and their rotation: lib/serverSecret.ts.
 
-export function editTokenFor(analysisId: string): string {
-  return createHmac("sha256", serverSecret()).update(`analysis-edit:v1:${analysisId}`).digest("base64url").slice(0, 32);
+function sign(secret: string, analysisId: string): string {
+  return createHmac("sha256", secret).update(`analysis-edit:v1:${analysisId}`).digest("base64url").slice(0, 32);
+}
+
+/** The token for this analysis, or null when no secret is configured (production fails closed). */
+export function editTokenFor(analysisId: string): string | null {
+  const { current } = editSecrets();
+  return current ? sign(current, analysisId) : null;
 }
 
 export function isValidEditToken(analysisId: string, token: unknown): boolean {
   if (typeof token !== "string" || token.length !== 32) return false;
-  const expected = Buffer.from(editTokenFor(analysisId));
   const given = Buffer.from(token);
-  return given.length === expected.length && timingSafeEqual(given, expected);
+  return editSecrets().accepted.some((secret) => {
+    const expected = Buffer.from(sign(secret, analysisId));
+    return expected.length === given.length && timingSafeEqual(expected, given);
+  });
 }
 
 export { EDIT_TOKEN_HEADER_NAME as EDIT_TOKEN_HEADER } from "@/lib/analysisEditTokenHeader";

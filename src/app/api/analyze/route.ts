@@ -16,6 +16,8 @@ import { optimizeImages } from "@/lib/imageOptimize";
 import { isEligibleForLegacyRetest } from "@/lib/access/accessStore";
 import { editTokenFor } from "@/lib/analysisEditToken";
 import { checkAnalyzeRateLimit, rateIdentity } from "@/lib/analyzeRateLimit";
+import { currentIdentity } from "@/lib/access/session";
+import { normalizeEmail } from "@/lib/access/accessStore";
 
 const AIRBNB_EXTRACTION_FAILED_MESSAGE =
   "Impossible d'analyser automatiquement ce lien Airbnb. Importe une capture d'écran de ton annonce pour continuer.";
@@ -143,7 +145,11 @@ export async function POST(req: NextRequest) {
     // 3. Abuse limit (lib/analyzeRateLimit.ts), after the idempotency checks
     //    above so a resubmitted attempt is never blocked, before any paid
     //    work. This attempt's own start is excluded from the count.
-    const decision = await checkAnalyzeRateLimit({ email: data.email, identity: rate, attemptId });
+    // A browser that verified this email (code) is a real mailbox owner: the
+    // per-IP counter, meant for one actor rotating emails, does not apply.
+    const verifiedEmail = await currentIdentity().catch(() => null);
+    const emailVerified = Boolean(verifiedEmail) && verifiedEmail!.email === normalizeEmail(data.email);
+    const decision = await checkAnalyzeRateLimit({ email: data.email, identity: rate, attemptId, emailVerified });
     if (!decision.allowed) {
       console.warn(`[analyze] rate_limited scope=${decision.scope} window=${decision.window} limit=${decision.limit} ${attemptTag}`);
       await recordAnalysisServerEvent({
@@ -165,8 +171,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Tu as lancé beaucoup d'analyses en peu de temps. Réessaie un peu plus tard, ou écris-nous si tu as besoin d'en faire davantage.",
+            decision.scope === "ip"
+              ? "Beaucoup d'analyses ont été lancées depuis ton réseau. Vérifie ton email pour continuer, ou réessaie un peu plus tard."
+              : "Tu as lancé beaucoup d'analyses en peu de temps. Réessaie un peu plus tard, ou écris-nous si tu as besoin d'en faire davantage.",
           error_code: "rate_limited",
+          // "ip": verifying the email lifts it; "email": only time (or a subscription) does.
+          rate_scope: decision.scope,
           retry_after_sec: decision.retryAfterSec,
         },
         { status: 429, headers: { "Retry-After": String(decision.retryAfterSec) } }

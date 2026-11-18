@@ -11,9 +11,18 @@ import { getSubscriptionByEmail, isLifetimeActive, isPlusActive } from "@/lib/su
 // email). No migration, no extra table.
 //
 // Calibrated on production (2026-11-17): the busiest email ever made 7
-// analyses in an hour and 7 in a day. Limits sit well above that, IP limits
-// higher still (offices, mobile carriers and proxies share addresses), and a
-// paying subscriber (Conciergerie, lifetime, legacy Plus) gets far more room.
+// analyses in an hour and 7 in a day, and the whole site ~13 a day. The
+// EMAIL limit is the per-person protection. The IP limit only stops one
+// actor rotating emails from one address, so it is higher, and:
+//   - IPv6 addresses count per /64 (one subscriber line), so neighbours on a
+//     mobile network do not share a counter, and an abuser cannot rotate
+//     inside their own /64;
+//   - it does not apply to a visitor who verified their email in this
+//     browser (code sent to the address): a legitimate user behind a busy
+//     shared address (office, coworking, campus, carrier NAT) proves they are
+//     a real mailbox owner and goes on, still under the email limit;
+//   - a paying subscriber (Conciergerie, lifetime, legacy Plus) gets far
+//     more room on both counters.
 //
 // Deliberately fail-open: if the lookup itself fails, the analysis goes
 // ahead. A resubmission of an attempt already started (same attempt id) is
@@ -27,8 +36,13 @@ export interface Limits {
   ipPerDay: number;
 }
 
-export const STANDARD_LIMITS: Limits = { emailPerHour: 12, emailPerDay: 30, ipPerHour: 20, ipPerDay: 60 };
-export const SUBSCRIBER_LIMITS: Limits = { emailPerHour: 60, emailPerDay: 200, ipPerHour: 60, ipPerDay: 200 };
+export const STANDARD_LIMITS: Limits = { emailPerHour: 12, emailPerDay: 30, ipPerHour: 30, ipPerDay: 100 };
+export const SUBSCRIBER_LIMITS: Limits = { emailPerHour: 60, emailPerDay: 200, ipPerHour: 100, ipPerDay: 300 };
+
+/** The same limits without the IP counters (verified email). */
+export function withoutIpLimit(limits: Limits): Limits {
+  return { ...limits, ipPerHour: Number.POSITIVE_INFINITY, ipPerDay: Number.POSITIVE_INFINITY };
+}
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -39,6 +53,24 @@ export function clientIp(headers: Headers): string | null {
   const forwarded = headers.get("x-forwarded-for")?.split(",")[0];
   const ip = (direct ?? forwarded ?? "").trim();
   return ip || null;
+}
+
+/**
+ * What the IP counter is keyed on: an IPv4 address as is, an IPv6 address
+ * reduced to its /64 network (the part a single line or device keeps).
+ * IPv4-mapped IPv6 ("::ffff:1.2.3.4") counts as the IPv4 address.
+ */
+export function ipCounterKey(ip: string): string {
+  const v = ip.trim().replace(/^\[|\]$/g, "").split("%")[0];
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(v);
+  if (mapped) return mapped[1];
+  if (!v.includes(":")) return v;
+  const [head, tail = ""] = v.split("::");
+  const h = head ? head.split(":") : [];
+  const t = v.includes("::") ? (tail ? tail.split(":") : []) : [];
+  const groups = v.includes("::") ? [...h, ...Array(8 - h.length - t.length).fill("0"), ...t] : h;
+  if (groups.length !== 8 || groups.some((g) => !/^[0-9a-f]{1,4}$/i.test(g))) return v.toLowerCase();
+  return `${groups.slice(0, 4).map((g) => parseInt(g, 16).toString(16)).join(":")}::/64`;
 }
 
 export interface RecentStarts {
@@ -78,7 +110,7 @@ export interface RateIdentity {
 export function rateIdentity(email: string | null | undefined, headers: Headers): RateIdentity {
   const e = normalizeEmail(email);
   const ip = clientIp(headers);
-  return { emailHash: e ? hashIdentifier("email", e) : null, ipHash: ip ? hashIdentifier("ip", ip) : null };
+  return { emailHash: e ? hashIdentifier("email", e) : null, ipHash: ip ? hashIdentifier("ip", ipCounterKey(ip)) : null };
 }
 
 async function recentStarts(id: RateIdentity, currentAttemptId: string | null, nowMs: number): Promise<RecentStarts> {
@@ -143,16 +175,19 @@ export async function checkAnalyzeRateLimit(params: {
   email: string | null | undefined;
   identity: RateIdentity;
   attemptId: string | null;
+  /** This browser verified the submitted email (code): the IP counter does not apply. */
+  emailVerified?: boolean;
   nowMs?: number;
 }): Promise<RateDecision & { subscriber?: boolean }> {
   if (!SUPABASE_CONFIGURED) return { allowed: true };
   const nowMs = params.nowMs ?? Date.now();
+  const adjust = (l: Limits) => (params.emailVerified ? withoutIpLimit(l) : l);
   try {
     const recent = await recentStarts(params.identity, params.attemptId, nowMs);
-    const standard = decide(recent, nowMs, STANDARD_LIMITS);
+    const standard = decide(recent, nowMs, adjust(STANDARD_LIMITS));
     if (standard.allowed) return standard;
     const subscriber = await isSubscriber(params.email);
-    return subscriber ? { ...decide(recent, nowMs, SUBSCRIBER_LIMITS), subscriber } : { ...standard, subscriber };
+    return subscriber ? { ...decide(recent, nowMs, adjust(SUBSCRIBER_LIMITS)), subscriber } : { ...standard, subscriber };
   } catch (err) {
     console.error("[rate-limit] lookup failed, allowing the attempt:", err instanceof Error ? err.message : err);
     return { allowed: true };

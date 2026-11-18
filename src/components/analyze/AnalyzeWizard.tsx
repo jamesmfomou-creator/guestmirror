@@ -14,6 +14,7 @@ import { AnalysisImmersive, type ListingPreviewState, type VisualStartedInfo } f
 import { getLoaderVariant } from "@/lib/loaderExperiment";
 import { getOnboardingVariant } from "@/lib/onboardingExperiment";
 import { AnalysisLiveCard, ListingConfirmCard } from "./AnalysisLiveCard";
+import { EmailCodeVerify } from "@/components/access/EmailCodeVerify";
 import {
   clearPendingAnswers,
   rememberEditToken,
@@ -192,6 +193,9 @@ export function AnalyzeWizard() {
   const questionPhaseRef = useRef<QuestionPhase>("goal");
   // Background onboarding: the result, when it arrived while questions were on screen.
   const [readyResult, setReadyResult] = useState<AnalyzeResponse | null>(null);
+  // Stopped by the per-IP abuse limit (busy shared network): verifying the
+  // email lifts that limit for this browser (api/analyze). null | "pending" | "verified".
+  const [networkLimit, setNetworkLimit] = useState<null | "pending" | "verified">(null);
   const completedAt = useRef<number | null>(null);
   const goalBeforeReady = useRef(false);
   const redirecting = useRef(false);
@@ -789,6 +793,9 @@ export function AnalyzeWizard() {
         );
       }
       if (!res.ok) {
+        if (json.error_code === "rate_limited" && (json as { rate_scope?: string }).rate_scope === "ip" && !directMode) {
+          setNetworkLimit("pending");
+        }
         if (json.error_code === "airbnb_url_extraction_failed") {
           failExtraction(json.error);
           return;
@@ -858,6 +865,7 @@ export function AnalyzeWizard() {
     // Synchronous guard: two clicks in the same tick both saw submitting=false.
     starting.current = true;
     setSubmitting(true);
+    setNetworkLimit(null);
     setAnalysisDone(false);
     setApiError(null);
     pendingResult.current = null;
@@ -1096,6 +1104,20 @@ export function AnalyzeWizard() {
   const bgIndex =
     step === "import" ? 0 : step === "email" ? 1 : step === "questions" ? (questionPhase === "goal" ? 2 : 3) : -1;
   const liveState = apiError ? "failed" : readyResult ? "ready" : "running";
+  const networkLimitVerify =
+    networkLimit === "verified" ? (
+      <p className="text-[13px] font-medium text-foreground">C&apos;est confirmé. Tu peux relancer l&apos;analyse.</p>
+    ) : (
+      <EmailCodeVerify
+        requestBody={{ email: submitEmail(), purpose: "continue" }}
+        verifyBody={(code) => ({ email: submitEmail(), code })}
+        requestLabel="Vérifier mon email pour continuer"
+        onVerified={() => {
+          track("access_verified", { purpose: "network_limit" });
+          setNetworkLimit("verified");
+        }}
+      />
+    );
 
   return (
     <div className={step === "analyzing" ? "mx-auto max-w-lg px-5 py-12 sm:py-16" : "relative isolate"}>
@@ -1217,6 +1239,7 @@ export function AnalyzeWizard() {
                 <p className="text-[15px] font-semibold text-foreground">L&apos;analyse n&apos;a pas pu être terminée.</p>
                 <p className="mt-1 text-[13.5px] text-muted">{apiError}</p>
                 <p className="mt-1 text-[13px] text-muted-2">Tes réponses sont conservées.</p>
+                {networkLimit && <div className="mt-3">{networkLimitVerify}</div>}
                 <button
                   type="button"
                   onClick={() => void runAnalysis()}
@@ -1254,6 +1277,7 @@ export function AnalyzeWizard() {
       {step === "goal" && (
         <StepGoal goal={goal} onSelect={handleSelectGoal} onContinue={handleGoalContinue} error={apiError} />
       )}
+      {step === "goal" && networkLimit && <div className="mt-5">{networkLimitVerify}</div>}
       {step === "analyzing" && loaderVariant === "immersive" && (
         <AnalysisImmersive
           done={analysisDone}

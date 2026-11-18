@@ -43,6 +43,8 @@ import { buildPaywallPreview, lockedCategories, paywallPreviewContents } from "@
 import { displayListingTitle, goalExplanation, personalizeResult } from "@/lib/goalPersonalization";
 import { ListingContext } from "@/components/result/ListingContext";
 import { GoalPrompt } from "@/components/result/GoalPrompt";
+import { OwnershipVerify } from "@/components/result/OwnershipVerify";
+import { maskEmail } from "@/lib/access/maskEmail";
 import { EMAIL_CONFIGURED } from "@/lib/env";
 
 export const metadata: Metadata = {
@@ -335,6 +337,12 @@ export default async function ResultPage({
           <ShareCard result={analysis.result} />
           <DeleteAnalysis analysisId={id} serverAllowed={access.verified} />
         </>
+      )}
+      {/* Owner on a browser that cannot change this report yet (another
+          device, or a report older than edit tokens): prove the report's
+          email to get "Supprimer" / "Compléter la fiche" back. */}
+      {unlocked && analysis.email && !isDirectLinkReport(analysis.email) && (
+        <OwnershipVerify analysisId={id} maskedEmail={maskEmail(analysis.email)} serverAllowed={access.verified} />
       )}
 
       {unlocked && access.unlimited === "legacy_plus" && (

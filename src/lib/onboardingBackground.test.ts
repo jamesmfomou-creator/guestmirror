@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   ONBOARDING_BACKGROUND_SHARE,
   ONBOARDING_FORCED_VALUE,
@@ -7,7 +7,8 @@ import {
   resolveOnboardingVariant,
 } from "@/lib/onboardingExperiment";
 import { editTokenFor, isValidEditToken } from "@/lib/analysisEditToken";
-import { STANDARD_LIMITS, SUBSCRIBER_LIMITS, clientIp, decide } from "@/lib/analyzeRateLimit";
+import { STANDARD_LIMITS, SUBSCRIBER_LIMITS, clientIp, decide, ipCounterKey, withoutIpLimit } from "@/lib/analyzeRateLimit";
+import { editSecrets, hashIdentifier } from "@/lib/serverSecret";
 import { updateAnalysisInputSchema } from "@/lib/validation";
 
 describe("onboarding experiment", () => {
@@ -39,7 +40,7 @@ describe("analysis edit token", () => {
   const id = "3ee754e2-8302-406b-8fbe-067fc39fd28d";
 
   it("is deterministic and valid only for its own analysis", () => {
-    const t = editTokenFor(id);
+    const t = editTokenFor(id)!;
     expect(t).toHaveLength(32);
     expect(editTokenFor(id)).toBe(t);
     expect(isValidEditToken(id, t)).toBe(true);
@@ -50,7 +51,56 @@ describe("analysis edit token", () => {
     expect(isValidEditToken(id, null)).toBe(false);
     expect(isValidEditToken(id, "")).toBe(false);
     expect(isValidEditToken(id, "x".repeat(32))).toBe(false);
-    expect(isValidEditToken(id, editTokenFor(id).slice(0, 31))).toBe(false);
+    expect(isValidEditToken(id, editTokenFor(id)!.slice(0, 31))).toBe(false);
+  });
+});
+
+describe("edit secret: dedicated ANALYSIS_EDIT_SECRET with a compatible transition", () => {
+  const id = "3ee754e2-8302-406b-8fbe-067fc39fd28d";
+  const saved = { ...process.env };
+  afterEach(() => {
+    for (const k of ["ANALYSIS_EDIT_SECRET", "ANALYSIS_EDIT_ACCEPT_DERIVED", "SUPABASE_SERVICE_ROLE_KEY", "NODE_ENV", "VERCEL_ENV"]) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+  const env = (vars: Record<string, string | undefined>) => {
+    for (const [k, v] of Object.entries(vars)) {
+      if (v === undefined) delete process.env[k];
+      else (process.env as Record<string, string>)[k] = v;
+    }
+  };
+
+  it("before the dedicated secret: tokens come from the service-key derivation", () => {
+    env({ ANALYSIS_EDIT_SECRET: undefined, SUPABASE_SERVICE_ROLE_KEY: "service-key-for-tests" });
+    expect(editSecrets().source).toBe("derived");
+  });
+
+  it("setting the dedicated secret keeps tokens already handed out valid", () => {
+    env({ ANALYSIS_EDIT_SECRET: undefined, SUPABASE_SERVICE_ROLE_KEY: "service-key-for-tests" });
+    const oldToken = editTokenFor(id)!;
+    env({ ANALYSIS_EDIT_SECRET: "a-dedicated-secret-of-more-than-32-characters" });
+    expect(editSecrets().source).toBe("dedicated");
+    const newToken = editTokenFor(id)!;
+    expect(newToken).not.toBe(oldToken);
+    expect(isValidEditToken(id, newToken)).toBe(true);
+    expect(isValidEditToken(id, oldToken)).toBe(true);
+  });
+
+  it("ANALYSIS_EDIT_ACCEPT_DERIVED=false ends the transition: only the dedicated secret works", () => {
+    env({ ANALYSIS_EDIT_SECRET: undefined, SUPABASE_SERVICE_ROLE_KEY: "service-key-for-tests" });
+    const oldToken = editTokenFor(id)!;
+    env({ ANALYSIS_EDIT_SECRET: "a-dedicated-secret-of-more-than-32-characters", ANALYSIS_EDIT_ACCEPT_DERIVED: "false" });
+    expect(isValidEditToken(id, oldToken)).toBe(false);
+    expect(isValidEditToken(id, editTokenFor(id)!)).toBe(true);
+  });
+
+  it("production without any secret fails closed: no token issued or accepted, no hash", () => {
+    env({ ANALYSIS_EDIT_SECRET: undefined, SUPABASE_SERVICE_ROLE_KEY: undefined, VERCEL_ENV: "production" });
+    expect(editSecrets().source).toBe("none");
+    expect(editTokenFor(id)).toBeNull();
+    expect(isValidEditToken(id, "x".repeat(32))).toBe(false);
+    expect(hashIdentifier("ip", "1.2.3.4")).toBeNull();
   });
 });
 
@@ -70,7 +120,7 @@ describe("analyze rate limit", () => {
   });
 
   it("blocks an IP past its daily limit even when spread over the day", () => {
-    const d = decide({ email: [], ip: times(STANDARD_LIMITS.ipPerDay, 20) }, now, STANDARD_LIMITS);
+    const d = decide({ email: [], ip: times(STANDARD_LIMITS.ipPerDay, 14) }, now, STANDARD_LIMITS);
     expect(d).toMatchObject({ allowed: false, scope: "ip", window: "day" });
   });
 
@@ -82,6 +132,22 @@ describe("analyze rate limit", () => {
     const busy = { email: times(STANDARD_LIMITS.emailPerHour + 5, 2), ip: [] };
     expect(decide(busy, now, STANDARD_LIMITS).allowed).toBe(false);
     expect(decide(busy, now, SUBSCRIBER_LIMITS).allowed).toBe(true);
+  });
+
+  it("counts IPv6 per /64 (one line), IPv4 per address", () => {
+    expect(ipCounterKey("2a01:cb00:1234:5678:aaaa:bbbb:cccc:dddd")).toBe("2a01:cb00:1234:5678::/64");
+    expect(ipCounterKey("2a01:cb00:1234:5678::1")).toBe("2a01:cb00:1234:5678::/64");
+    expect(ipCounterKey("2a01:cb00:1234:9999::1")).not.toBe(ipCounterKey("2a01:cb00:1234:5678::1"));
+    expect(ipCounterKey("::ffff:192.0.2.7")).toBe("192.0.2.7");
+    expect(ipCounterKey("192.0.2.7")).toBe("192.0.2.7");
+  });
+
+  it("a verified email is not held by the IP counter, but still by its own email limit", () => {
+    const busyNetwork = { email: [], ip: times(STANDARD_LIMITS.ipPerHour + 10, 1) };
+    expect(decide(busyNetwork, now, STANDARD_LIMITS).allowed).toBe(false);
+    expect(decide(busyNetwork, now, withoutIpLimit(STANDARD_LIMITS)).allowed).toBe(true);
+    const busyEmail = { email: times(STANDARD_LIMITS.emailPerHour, 2), ip: [] };
+    expect(decide(busyEmail, now, withoutIpLimit(STANDARD_LIMITS))).toMatchObject({ allowed: false, scope: "email" });
   });
 
   it("reads the client IP from the edge headers", () => {
