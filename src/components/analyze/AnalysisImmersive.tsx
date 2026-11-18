@@ -223,7 +223,11 @@ export function AnalysisImmersive({
 
       <div className="mt-7 w-full">
         {done ? (
-          <SuccessBeat photo={livePhotos[0] ? srcOf(livePhotos[0]) : null} reduceMotion={reduceMotion} />
+          <SuccessBeat
+            photo={livePhotos[0] ? srcOf(livePhotos[0]) : null}
+            reduceMotion={reduceMotion}
+            label={embedded ? "Analyse terminée." : "Ton diagnostic est prêt."}
+          />
         ) : fetching ? (
           <FetchingCard reduceMotion={reduceMotion} />
         ) : (
@@ -665,7 +669,7 @@ function FetchingCard({ reduceMotion, label = "Récupération de ton annonce…"
   );
 }
 
-function SuccessBeat({ photo, reduceMotion }: { photo: string | null; reduceMotion: boolean }) {
+function SuccessBeat({ photo, reduceMotion, label }: { photo: string | null; reduceMotion: boolean; label: string }) {
   return (
     <motion.div
       className="flex flex-col items-center"
@@ -686,7 +690,7 @@ function SuccessBeat({ photo, reduceMotion }: { photo: string | null; reduceMoti
       <span className="mt-5 flex h-12 w-12 items-center justify-center rounded-full bg-score-high/10">
         <Check size={24} className="text-score-high" />
       </span>
-      <p className="mt-3 text-lg font-semibold text-foreground">Ton diagnostic est prêt.</p>
+      <p className="mt-3 text-lg font-semibold text-foreground">{label}</p>
     </motion.div>
   );
 }
