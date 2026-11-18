@@ -12,12 +12,15 @@ import { editSecrets, hashIdentifier } from "@/lib/serverSecret";
 import { updateAnalysisInputSchema } from "@/lib/validation";
 
 describe("onboarding experiment", () => {
-  it("is off by default: nobody is assigned, everyone sees the control", () => {
-    expect(ONBOARDING_BACKGROUND_SHARE).toBe(0);
-    expect(drawOnboardingVariant(() => 0)).toBeNull();
-    expect(resolveOnboardingVariant(null)).toBe("control");
-    // A stale "background" cookie maps back to control while the share is 0 (rollback).
-    expect(resolveOnboardingVariant("background")).toBe("control");
+  it("current share is 30 %", () => {
+    expect(ONBOARDING_BACKGROUND_SHARE).toBe(0.3);
+  });
+
+  it("share 0 (rollback): nobody is assigned, everyone sees the control", () => {
+    expect(drawOnboardingVariant(() => 0, 0)).toBeNull();
+    expect(resolveOnboardingVariant(null, 0)).toBe("control");
+    // A stale "background" cookie maps back to control while the share is 0.
+    expect(resolveOnboardingVariant("background", 0)).toBe("control");
   });
 
   it("draws by share when switched on", () => {
