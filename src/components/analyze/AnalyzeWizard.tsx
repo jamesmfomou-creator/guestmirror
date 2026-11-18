@@ -1210,11 +1210,26 @@ export function AnalyzeWizard() {
       {step === "questions" && (
         <div className="mt-2 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start lg:gap-14">
           <div className="lg:sticky lg:top-28">
-            <AnalysisLiveCard
-              preview={url.trim() ? (listingPreview.status === "idle" ? { status: "unavailable" } : listingPreview) : { status: "idle" }}
-              screenshotUrls={images.map((img) => img.previewUrl)}
-              state={liveState}
-            />
+            {/* While it runs (and once ready): the immersive loader itself,
+                embedded next to the questions -- same photos, scan, steps.
+                No tracking callbacks: its events belong to the loader
+                experiment, which leaves background attempts out. A failure
+                is shown by the compact card, which can say so. */}
+            {liveState === "failed" ? (
+              <AnalysisLiveCard
+                preview={url.trim() ? (listingPreview.status === "idle" ? { status: "unavailable" } : listingPreview) : { status: "idle" }}
+                screenshotUrls={images.map((img) => img.previewUrl)}
+                state={liveState}
+              />
+            ) : (
+              <AnalysisImmersive
+                embedded
+                done={liveState === "ready"}
+                preview={url.trim() ? (listingPreview.status === "idle" ? { status: "unavailable" } : listingPreview) : { status: "idle" }}
+                screenshotUrls={images.map((img) => img.previewUrl)}
+                startedAtMs={startedAt.current ?? undefined}
+              />
+            )}
             {readyResult && !apiError && (
               <div role="status" aria-live="polite" className="animate-fade-up mt-4 rounded-[var(--radius-lg)] border border-accent/30 bg-accent-soft px-4 py-4 text-left">
                 <p className="text-[15px] font-semibold text-foreground">Ton diagnostic est prêt</p>

@@ -65,7 +65,14 @@ export function AnalysisImmersive({
   onFinalizing,
   onTransitionEnd,
   startedAtMs,
+  embedded = false,
 }: {
+  /**
+   * Background onboarding: shown next to the questions instead of full page
+   * (no page-height block, the title is not the page heading). Same content,
+   * same sequence, same honesty rules. Defaults to the full-page loader.
+   */
+  embedded?: boolean;
   /** When the analysis really started (background onboarding: before this loader appeared). Defaults to mount time. */
   startedAtMs?: number;
   done: boolean;
@@ -197,10 +204,16 @@ export function AnalysisImmersive({
   const showReassurance = !done && elapsedMs >= REASSURANCE_AT_MS;
 
   return (
-    <div className="animate-fade-up flex min-h-[70vh] flex-col items-center pt-2 text-center">
-      <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-        {BRAND_NAME} analyse ton annonce…
-      </h1>
+    <div className={`animate-fade-up flex flex-col items-center text-center ${embedded ? "" : "min-h-[70vh] pt-2"}`}>
+      {embedded ? (
+        <p className="text-balance text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          {BRAND_NAME} analyse ton annonce…
+        </p>
+      ) : (
+        <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          {BRAND_NAME} analyse ton annonce…
+        </h1>
+      )}
       <p className="mt-2 max-w-sm text-sm text-muted sm:text-base">
         Découvre comment ton annonce se présente aux voyageurs.
       </p>
