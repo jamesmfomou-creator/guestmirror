@@ -50,6 +50,7 @@ export function Paywall({
   preview,
   emailsReportLink,
   addonAvailable = false,
+  singleCopy = false,
 }: {
   analysisId: string;
   canceled?: boolean;
@@ -65,6 +66,12 @@ export function Paywall({
   emailsReportLink?: boolean;
   /** The one-time "10 analyses" pack can be added to the Conciergerie checkout. */
   addonAvailable?: boolean;
+  /**
+   * Free result reveal_v1 (lib/resultVersion.ts): the "Aha" A/B test is
+   * closed, so the heading no longer depends on ab_variant (the A wording is
+   * kept). Offers, prices, checkout and the v2 presentation are unchanged.
+   */
+  singleCopy?: boolean;
 }) {
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -194,25 +201,29 @@ export function Paywall({
         <>
           <div className="text-center">
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              {abVariant === "B" ? "Passe du diagnostic à l'action." : "Débloque ton analyse complète"}
+              {abVariant === "B" && !singleCopy ? "Passe du diagnostic à l'action." : "Débloque ton analyse complète"}
             </h2>
             <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
-              {abVariant === "B"
+              {abVariant === "B" && !singleCopy
                 ? "Découvre les points faibles de ton annonce et les recommandations concrètes pour l'améliorer."
                 : "Découvre exactement quoi améliorer sur ton annonce."}
             </p>
           </div>
 
-          <ul className="card mx-auto mt-6 grid max-w-xl gap-2.5 p-5 text-sm text-foreground sm:grid-cols-2">
-            {UNLOCK_BENEFITS.map((benefit) => (
-              <li key={benefit} className="flex items-start gap-2.5">
-                <span aria-hidden="true" className="mt-0.5 font-semibold text-accent-hover">
-                  ✓
-                </span>
-                <span>{benefit}</span>
-              </li>
-            ))}
-          </ul>
+          {/* reveal_v1: the plan card above already lists what THIS report
+              contains (real counts), so the generic list is not repeated. */}
+          {!singleCopy && (
+            <ul className="card mx-auto mt-6 grid max-w-xl gap-2.5 p-5 text-sm text-foreground sm:grid-cols-2">
+              {UNLOCK_BENEFITS.map((benefit) => (
+                <li key={benefit} className="flex items-start gap-2.5">
+                  <span aria-hidden="true" className="mt-0.5 font-semibold text-accent-hover">
+                    ✓
+                  </span>
+                  <span>{benefit}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       )}
 
@@ -232,7 +243,8 @@ export function Paywall({
           Toutes les formules
         </p>
       )}
-      <div className={preview ? "mt-4" : "mt-7"}>
+      {/* The three offers: target of "Découvrir mes formules" (ImprovementPlanCard). */}
+      <div id="formules" className={`scroll-mt-24 outline-none ${preview ? "mt-4" : "mt-7"}`}>
         <PricingCards
           highlight="one_time"
           showConciergeBanner={showConciergeBanner}
