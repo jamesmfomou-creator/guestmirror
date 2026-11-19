@@ -10,3 +10,16 @@
  *               loader of the loader experiment, unchanged).
  */
 export const RESULT_VERSION = "reveal_v1";
+
+/**
+ * Version of the whole journey (onboarding questions, loader messages, free
+ * result framing), attached to every analytics event next to result_version:
+ *   (none)          before 2026-11-19 ~02:30 UTC.
+ *   goal_value_v1   goal question reworded (+ improve_photos), optional
+ *                   "préoccupation" question on the same screen, explanatory
+ *                   messages in the loaders, the free weakness tied to the
+ *                   goal (lib/goalValue.ts). Compare before/after by this key.
+ * Server-side events (Stripe webhook: payment_completed) do not carry it:
+ * attribute them through analysis_id to the analysis' own events.
+ */
+export const JOURNEY_VERSION = "goal_value_v1";

@@ -3,6 +3,8 @@ import { DEMO_RESULT } from "@/lib/demo-data";
 import type { AnalysisResult } from "@/lib/types";
 import { buildFreeReveal } from "@/lib/freeReveal";
 import { normalizeAnalysisResult } from "@/lib/resultShape";
+import { INSIGHT_TRANSITION, insightFraming } from "@/lib/goalValue";
+import { GOALS } from "@/lib/types";
 
 const w = (title: string, severity: string, explanation: string, recommendation: string) => ({ title, severity, explanation, recommendation });
 const LONG = "Cette explication décrit précisément ce qu'un voyageur remarque en découvrant l'annonce.";
@@ -99,6 +101,54 @@ describe("buildFreeReveal: counts come from the report", () => {
   });
 });
 
+describe("buildFreeReveal: tied to the goal (journey goal_value_v1)", () => {
+  const mixed = withWeaknesses([
+    w("Description trop vague sur le stationnement", "high", LONG + " (stationnement)", "C-PARK"),
+    w("Photo de couverture peu différenciante", "medium", LONG + " (couverture)", "C-COVER"),
+    w("Titre trop générique", "low", LONG + " (titre)", "C-TITLE"),
+  ]);
+
+  it("no goal: most severe point, neutral framing", () => {
+    const out = buildFreeReveal(mixed);
+    expect(out.insight?.title).toBe("Description trop vague sur le stationnement");
+    expect(out.framing).toEqual({ intro: insightFraming(null, false).intro, transition: INSIGHT_TRANSITION, relatedToGoal: false });
+  });
+
+  it("photos goal: a real visual weakness (medium) is preferred, framed as about the presentation", () => {
+    const out = buildFreeReveal(mixed, "improve_photos");
+    expect(out.insight).toEqual({ title: "Photo de couverture peu différenciante", explanation: LONG + " (couverture)", severity: "medium" });
+    expect(out.framing?.relatedToGoal).toBe(true);
+    expect(out.framing?.intro).toMatch(/photos et ta présentation, voici un point/);
+  });
+
+  it("photos goal, no visual weakness: the most severe point, and the intro says it is about something else", () => {
+    const out = buildFreeReveal(withWeaknesses([w("Description trop vague sur le stationnement", "high", LONG, "C1")]), "improve_photos");
+    expect(out.insight?.title).toBe("Description trop vague sur le stationnement");
+    expect(out.framing?.relatedToGoal).toBe(false);
+    expect(out.framing?.intro).toMatch(/concerne toutefois un autre aspect/);
+  });
+
+  it("a low-severity point is never chosen over a more severe one just for the topic", () => {
+    const out = buildFreeReveal(withWeaknesses([w("Description trop vague", "high", LONG, "C1"), w("Titre trop générique", "low", LONG, "C2")]), "improve_appeal");
+    expect(out.insight?.title).toBe("Description trop vague");
+  });
+
+  it("every goal: same point counts, a framing sentence, no promise of results, no correction", () => {
+    for (const goal of GOALS) {
+      const out = buildFreeReveal(mixed, goal);
+      expect(out.weaknessCount).toBe(3);
+      expect(out.framing?.intro.length).toBeGreaterThan(20);
+      const text = JSON.stringify(out);
+      expect(text).not.toMatch(/garanti|augmente(ra|r) (tes|vos) réservations/i);
+      for (const secret of ["C-PARK", "C-COVER", "C-TITLE"]) expect(text).not.toContain(secret);
+    }
+  });
+
+  it("no insight: no framing", () => {
+    expect(buildFreeReveal(withWeaknesses([]), "improve_appeal").framing).toBeNull();
+  });
+});
+
 describe("buildFreeReveal: never leaks the paid report", () => {
   const fixtures: [string, AnalysisResult][] = [
     ["demo report", DEMO_RESULT],
@@ -107,16 +157,19 @@ describe("buildFreeReveal: never leaks the paid report", () => {
     ["legacy malformed row", normalizeAnalysisResult({ ...DEMO_RESULT, weaknesses: "<parameter>x</parameter>", top_priorities: "y" })],
   ];
   for (const [name, r] of fixtures) {
-    it(`${name}: no correction, priority, rewrite, photo analysis, plan or question in the projection`, () => {
-      const serialized = JSON.stringify(buildFreeReveal(r));
-      for (const secret of premiumStrings(r)) expect(serialized).not.toContain(secret);
-      expect(serialized).not.toContain("LA-CORRECTION-SECRETE");
+    it(`${name}: no correction, priority, rewrite, photo analysis, plan or question in the projection (every goal)`, () => {
+      for (const goal of [null, ...GOALS]) {
+        const serialized = JSON.stringify(buildFreeReveal(r, goal));
+        for (const secret of premiumStrings(r)) expect(serialized).not.toContain(secret);
+        expect(serialized).not.toContain("LA-CORRECTION-SECRETE");
+      }
     });
   }
 
   it("only plain strings and numbers leave the function", () => {
     const out = buildFreeReveal(DEMO_RESULT);
-    expect(Object.keys(out).sort()).toEqual(["hesitation", "insight", "otherWeaknessCount", "reportHighlights", "reportMore", "weaknessCount"]);
+    expect(Object.keys(out).sort()).toEqual(["framing", "hesitation", "insight", "otherWeaknessCount", "reportHighlights", "reportMore", "weaknessCount"]);
     expect(Object.keys(out.insight!).sort()).toEqual(["explanation", "severity", "title"]);
+    expect(Object.keys(out.framing!).sort()).toEqual(["intro", "relatedToGoal", "transition"]);
   });
 });

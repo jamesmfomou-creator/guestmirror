@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { GOALS } from "@/lib/types";
 
 export const analyzeRequestSchema = z.object({
   email: z.string().trim().email(),
@@ -10,7 +11,7 @@ export const analyzeRequestSchema = z.object({
   previous_analysis_id: z.string().uuid().nullable().optional(),
   user_type: z.enum(["host", "concierge", "cohost", "other"]).nullable().optional(),
   property_count_range: z.enum(["1", "2-5", "6-20", "21+"]).nullable().optional(),
-  goal: z.enum(["improve_appeal", "reduce_hesitation", "verify_improvements", "optimize_multiple"]).nullable().optional(),
+  goal: z.enum(GOALS).nullable().optional(),
   promo_code: z.string().trim().max(64).nullable().optional(),
   // Client-generated correlation id (see AnalyzeWizard.tsx's attemptId,
   // already sent to /api/track) -- used for server-side log correlation
@@ -39,7 +40,7 @@ export const updateAnalysisInputSchema = z
     nightly_price: z.string().trim().max(20).nullable().optional(),
     // Answers given while (or after) the analysis runs -- same enums as
     // analyzeRequestSchema. Display only: they never touch the result.
-    goal: z.enum(["improve_appeal", "reduce_hesitation", "verify_improvements", "optimize_multiple"]).nullable().optional(),
+    goal: z.enum(GOALS).nullable().optional(),
     user_type: z.enum(["host", "concierge", "cohost", "other"]).nullable().optional(),
     property_count_range: z.enum(["1", "2-5", "6-20", "21+"]).nullable().optional(),
   })

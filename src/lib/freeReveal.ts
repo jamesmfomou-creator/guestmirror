@@ -1,5 +1,7 @@
-import type { AnalysisResult } from "@/lib/types";
+import type { AnalysisResult, Goal } from "@/lib/types";
 import { buildPaywallPreview } from "@/lib/paywallPreview";
+import { matchesGoal } from "@/lib/goalPersonalization";
+import { INSIGHT_TRANSITION, insightFraming } from "@/lib/goalValue";
 
 // What the FREE result may reveal of a report (result_version "reveal_v1").
 //
@@ -20,11 +22,20 @@ import { buildPaywallPreview } from "@/lib/paywallPreview";
 // weaknesses that are complete enough to stand on their own. No reliable one:
 // no insight (the page then shows the visitor's first hesitation, also from
 // the analysis, or nothing). Counts are what the report really holds.
+//
+// Journey goal_value_v1: with a goal that has a topic (lib/goalPersonalization
+// GOAL_TOPICS), a weakness whose own title matches that topic is preferred,
+// provided it is at least "medium" -- the paid report lists goal-related
+// weaknesses first too, so the free point and the report agree. Never a
+// low-severity point over a more severe one just for the topic. `framing`
+// says how the point relates to the goal, from that match only.
 
 export type RevealSeverity = "high" | "medium" | "low";
 
 export interface FreeReveal {
   insight: { title: string; explanation: string; severity: RevealSeverity } | null;
+  /** Wording around the insight (lib/goalValue.ts): plain sentences, never report content. */
+  framing: { intro: string; transition: string; relatedToGoal: boolean } | null;
   /** Fallback when no insight: the analysis' own first-hesitation sentence. */
   hesitation: string | null;
   weaknessCount: number;
@@ -50,7 +61,7 @@ const clean = (s: unknown): string | null => (typeof s === "string" ? s.replace(
 const isSeverity = (v: unknown): v is RevealSeverity => v === "high" || v === "medium" || v === "low";
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-export function buildFreeReveal(result: AnalysisResult): FreeReveal {
+export function buildFreeReveal(result: AnalysisResult, goal: Goal | null = null): FreeReveal {
   const raw = result as unknown as Record<string, unknown>;
   const weaknesses = Array.isArray(raw.weaknesses) ? raw.weaknesses : [];
 
@@ -68,7 +79,11 @@ export function buildFreeReveal(result: AnalysisResult): FreeReveal {
     .filter((c): c is { title: string; explanation: string; severity: RevealSeverity; index: number } => c !== null)
     .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.index - b.index);
 
-  const pick = candidates[0] ?? null;
+  const related = goal
+    ? candidates.find((c) => c.severity !== "low" && matchesGoal(c.title, goal)) ?? null
+    : null;
+  const pick = related ?? candidates[0] ?? null;
+  const relatedToGoal = pick !== null && goal !== null && matchesGoal(pick.title, goal);
   const weaknessCount = weaknesses.length;
   const otherWeaknessCount = Math.max(0, weaknessCount - (pick ? 1 : 0));
 
@@ -105,6 +120,7 @@ export function buildFreeReveal(result: AnalysisResult): FreeReveal {
   const hesitation = clean(raw.first_hesitation);
   return {
     insight: pick ? { title: pick.title, explanation: pick.explanation, severity: pick.severity } : null,
+    framing: pick ? { intro: insightFraming(goal, relatedToGoal).intro, transition: INSIGHT_TRANSITION, relatedToGoal } : null,
     hesitation: pick ? null : hesitation && hesitation.length >= 20 && !/<\/?parameter\b/.test(hesitation) ? hesitation : null,
     weaknessCount,
     otherWeaknessCount,

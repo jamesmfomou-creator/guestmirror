@@ -31,12 +31,15 @@ export function StepProfile({
   onSelectPropertyCountRange,
   onSelectUserType,
   onContinue,
+  onSkip,
 }: {
   propertyCountRange: PropertyCountRange | null;
   userType: UserType | null;
   onSelectPropertyCountRange: (value: PropertyCountRange) => void;
   onSelectUserType: (value: UserType) => void;
   onContinue: () => void;
+  /** "Passer cette étape" (defaults to onContinue). */
+  onSkip?: () => void;
 }) {
   return (
     <div className="animate-fade-up">
@@ -81,7 +84,7 @@ export function StepProfile({
       </Button>
       <button
         type="button"
-        onClick={onContinue}
+        onClick={onSkip ?? onContinue}
         className="mt-4 w-full text-center text-sm font-medium text-muted underline-offset-4 transition-colors hover:text-foreground hover:underline"
       >
         Passer cette étape

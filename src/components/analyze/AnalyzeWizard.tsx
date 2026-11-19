@@ -8,6 +8,7 @@ import { StepImport } from "./StepImport";
 import { StepProfile } from "./StepProfile";
 import { StepEmail } from "./StepEmail";
 import { StepGoal } from "./StepGoal";
+import type { Concern } from "@/lib/goalValue";
 import { StepAnalyzing } from "./StepAnalyzing";
 import { AnalysisAhaFlow } from "./AnalysisAhaFlow";
 import { AnalysisImmersive, type ListingPreviewState, type VisualStartedInfo } from "./AnalysisImmersive";
@@ -145,6 +146,9 @@ export function AnalyzeWizard() {
   const [userType, setUserType] = useState<UserType | null>(null);
   const [propertyCountRange, setPropertyCountRange] = useState<PropertyCountRange | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
+  // Optional "préoccupation" (journey goal_value_v1): analytics only, never
+  // stored on the analysis, never sent with it.
+  const [concern, setConcern] = useState<Concern | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -403,8 +407,14 @@ export function AnalyzeWizard() {
     track("onboarding_goal_selected", { goal: value });
   }
 
+  function handleSelectConcern(value: Concern | null) {
+    setConcern(value);
+    if (value) track("onboarding_concern_selected", { concern: value });
+  }
+
   function handleGoalContinue() {
-    track("onboarding_completed", { goal });
+    if (!concern) track("onboarding_question_skipped", { question: "concern", flow: "control" });
+    track("onboarding_completed", { goal, concern });
     runAnalysis();
   }
 
@@ -945,7 +955,7 @@ export function AnalyzeWizard() {
   }
 
   function finishQuestions() {
-    track("onboarding_completed", { goal, flow: "background" });
+    track("onboarding_completed", { goal, concern, flow: "background" });
     questionPhaseRef.current = "done";
     setQuestionPhase("done");
     if (apiError) return; // the error panel offers the retry
@@ -1184,6 +1194,10 @@ export function AnalyzeWizard() {
           onSelectPropertyCountRange={setPropertyCountRange}
           onSelectUserType={setUserType}
           onContinue={goToEmail}
+          onSkip={() => {
+            track("onboarding_question_skipped", { question: "profile", flow: "control" });
+            goToEmail();
+          }}
         />
       )}
       {step === "email" && (
@@ -1269,9 +1283,17 @@ export function AnalyzeWizard() {
               <StepGoal
                 goal={goal}
                 onSelect={handleSelectGoalBackground}
-                onContinue={() => setQuestionPhase("profile")}
-                onSkip={() => setQuestionPhase("profile")}
+                onContinue={() => {
+                  if (!concern) track("onboarding_question_skipped", { question: "concern", flow: "background" });
+                  setQuestionPhase("profile");
+                }}
+                onSkip={() => {
+                  track("onboarding_question_skipped", { question: "goal", flow: "background" });
+                  setQuestionPhase("profile");
+                }}
                 continueLabel="Continuer"
+                concern={concern}
+                onSelectConcern={handleSelectConcern}
               />
             )}
             {questionPhase === "profile" && (
@@ -1281,6 +1303,10 @@ export function AnalyzeWizard() {
                 onSelectPropertyCountRange={setPropertyCountRange}
                 onSelectUserType={setUserType}
                 onContinue={finishQuestions}
+                onSkip={() => {
+                  track("onboarding_question_skipped", { question: "profile", flow: "background" });
+                  finishQuestions();
+                }}
               />
             )}
             {questionPhase === "done" && !apiError && !readyResult && (
@@ -1290,7 +1316,14 @@ export function AnalyzeWizard() {
         </div>
       )}
       {step === "goal" && (
-        <StepGoal goal={goal} onSelect={handleSelectGoal} onContinue={handleGoalContinue} error={apiError} />
+        <StepGoal
+          goal={goal}
+          onSelect={handleSelectGoal}
+          onContinue={handleGoalContinue}
+          error={apiError}
+          concern={concern}
+          onSelectConcern={handleSelectConcern}
+        />
       )}
       {step === "goal" && networkLimit && <div className="mt-5">{networkLimitVerify}</div>}
       {/* Background onboarding always continues with the immersive loader:

@@ -91,7 +91,11 @@ export type PropertyCountRange = "1" | "2-5" | "6-20" | "21+";
 // StepGoal.tsx). Never sent to the AI: the analysis and its score depend on
 // the listing only. The result page uses it to ORDER and flag what the
 // analysis found (lib/goalPersonalization.ts), without changing any of it.
-export type Goal = "improve_appeal" | "reduce_hesitation" | "verify_improvements" | "optimize_multiple";
+// improve_photos: added with journey goal_value_v1 (2026-11-19); the database
+// accepts it from supabase/migrations/0012_goal_improve_photos.sql (until that
+// migration runs, lib/store.ts drops it rather than failing the write).
+export const GOALS = ["improve_appeal", "reduce_hesitation", "improve_photos", "verify_improvements", "optimize_multiple"] as const;
+export type Goal = (typeof GOALS)[number];
 
 export interface AnalysisInput {
   listing_url: string | null;

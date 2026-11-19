@@ -3,7 +3,7 @@ import { getAbVariant } from "@/lib/ab";
 import { getPaywallVariant } from "@/lib/paywallExperiment";
 import { getLoaderVariant } from "@/lib/loaderExperiment";
 import { getOnboardingVariant } from "@/lib/onboardingExperiment";
-import { RESULT_VERSION } from "@/lib/resultVersion";
+import { JOURNEY_VERSION, RESULT_VERSION } from "@/lib/resultVersion";
 import { PRICING_VERSION } from "@/lib/plans";
 
 /**
@@ -201,6 +201,16 @@ export const ANALYTICS_EVENTS = [
   // Free result reveal_v1 (lib/resultVersion.ts): the free insight was shown
   // (kind: weakness | hesitation; severity for a weakness). Names only.
   "free_insight_viewed",
+  // Journey goal_value_v1 (lib/resultVersion.ts JOURNEY_VERSION):
+  //  - onboarding_concern_selected: the optional "Qu'est-ce qui te préoccupe
+  //    le plus ?" answer (concern: enum of lib/goalValue.ts CONCERNS). Only
+  //    in analytics: never stored on the analysis.
+  //  - onboarding_question_skipped: a question left without an answer
+  //    (question: goal | concern | profile; flow: control | background).
+  //  - offers_viewed: the three offers (#formules) entered the viewport.
+  "onboarding_concern_selected",
+  "onboarding_question_skipped",
+  "offers_viewed",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];
@@ -246,6 +256,8 @@ export function track(event: AnalyticsEvent, props?: Props) {
     pricing_version: PRICING_VERSION,
     // Free result version: compare before/after periods, never mix them.
     result_version: RESULT_VERSION,
+    // Journey version (onboarding + loader + free result framing).
+    journey_version: JOURNEY_VERSION,
   };
 
   try {

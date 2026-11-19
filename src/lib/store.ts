@@ -158,7 +158,7 @@ export async function createAnalysis(params: {
 
   if (SUPABASE_CONFIGURED) {
     const supabase = getSupabaseAdmin()!;
-    const { error } = await supabase.from("analyses").insert({
+    const row = {
       id: record.id,
       user_id: record.user_id,
       email: record.email,
@@ -177,7 +177,16 @@ export async function createAnalysis(params: {
       promo_code: record.promo_code,
       attempt_id: params.attemptId ?? null,
       goal: record.goal,
-    });
+    };
+    let { error } = await supabase.from("analyses").insert(row);
+    // A goal the database does not accept yet (improve_photos before
+    // supabase/migrations/0012_goal_improve_photos.sql runs) must never cost
+    // the analysis that was just paid for: store it without the goal.
+    if (error && isGoalCheckViolation(error) && record.goal) {
+      console.warn(`[store] goal "${record.goal}" refused by the database (check constraint); analysis stored without goal`);
+      record.goal = null;
+      ({ error } = await supabase.from("analyses").insert({ ...row, goal: null }));
+    }
     if (error) {
       // 23505 = unique_violation: a concurrent request for the same attempt
       // inserted first. That row is the analysis; return it rather than
@@ -367,6 +376,11 @@ export async function lockAnalysis(id: string) {
   }
 }
 
+/** Postgres check_violation on analyses.goal (constraint from 0009/0012). */
+function isGoalCheckViolation(error: { code?: string; message?: string }): boolean {
+  return error.code === "23514" && /goal/i.test(error.message ?? "");
+}
+
 export async function updateAnalysisInput(
   id: string,
   input: {
@@ -381,7 +395,17 @@ export async function updateAnalysisInput(
 ) {
   if (SUPABASE_CONFIGURED) {
     const supabase = getSupabaseAdmin()!;
-    const { error } = await supabase.from("analyses").update({ ...input, updated_at: nowIso() }).eq("id", id);
+    let { error } = await supabase.from("analyses").update({ ...input, updated_at: nowIso() }).eq("id", id);
+    // Same as insertAnalysis: a goal the database does not accept yet is
+    // dropped; the other answers are still saved. The caller sees a failure
+    // only if nothing else was sent.
+    if (error && isGoalCheckViolation(error) && input.goal) {
+      console.warn(`[store] goal "${input.goal}" refused by the database (check constraint); answers saved without goal`);
+      const { goal: _dropped, ...rest } = input;
+      void _dropped;
+      if (Object.keys(rest).length === 0) throw new Error("Supabase update failed: goal not accepted yet");
+      ({ error } = await supabase.from("analyses").update({ ...rest, updated_at: nowIso() }).eq("id", id));
+    }
     if (error) throw new Error(`Supabase update failed: ${error.message}`);
     return;
   }

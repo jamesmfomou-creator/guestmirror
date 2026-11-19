@@ -117,7 +117,9 @@ export default async function ResultPage({
   // what this report really holds, same source as the v2 paywall preview.
   // Free result (reveal_v1): the only projection of the report that reaches a
   // locked page, besides the paywall v2 preview (names and counts).
-  const freeReveal = !unlocked && !incomplete ? buildFreeReveal(analysis.result) : null;
+  // Journey goal_value_v1: the revealed weakness is tied to the stored goal
+  // (lib/goalValue.ts), wording only; no goal: the neutral framing.
+  const freeReveal = !unlocked && !incomplete ? buildFreeReveal(analysis.result, analysis.goal) : null;
 
   const previous = analysis.previous_analysis_id
     ? await getAnalysis(analysis.previous_analysis_id)
@@ -137,7 +139,10 @@ export default async function ResultPage({
   return (
     <div className="px-5 pb-24 pt-12 sm:pt-16">
       {unlocked && sp.unlocked === "1" && (
-        <AnalyticsBeacon event="purchase_completed" props={{ analysisId: id }} />
+        // Client signal only, once per report and browser (a reopened
+        // ?unlocked=1 URL used to count again). Confirmed payments are
+        // payment_completed, sent by the Stripe webhook with a dedupe key.
+        <AnalyticsBeacon event="purchase_completed" props={{ analysisId: id }} onceKey={id} />
       )}
       {unlocked && sp.unlocked === "1" && (
         <PostPurchaseFeedback
@@ -268,6 +273,7 @@ export default async function ResultPage({
               propertyCountRange={analysis.property_count_range}
               addonAvailable={addonAvailable}
               singleCopy
+              hidePreviewContents
               {...(paywallPreview ? { preview: paywallPreview, emailsReportLink } : {})}
             />
           )}
@@ -289,6 +295,8 @@ export default async function ResultPage({
           {goalMode === "rescan" && <RescanCTA analysisId={id} />}
           {(goalMode === "topic" && personal?.goal === "improve_appeal"
             ? (["cover", "photos", "title", "weaknesses", "description", "questions"] as const)
+            : goalMode === "topic" && personal?.goal === "improve_photos"
+              ? (["photos", "cover", "title", "weaknesses", "description", "questions"] as const)
             : goalMode === "topic" && personal?.goal === "reduce_hesitation"
               ? (["weaknesses", "questions", "description", "cover", "title", "photos"] as const)
               : (["weaknesses", "cover", "title", "description", "photos", "questions"] as const)
