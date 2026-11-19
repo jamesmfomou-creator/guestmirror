@@ -37,17 +37,19 @@ export function Header() {
       ];
 
   return (
-    <header className="sticky top-3 z-40 px-4 sm:top-4 sm:px-5">
+    <header className="sticky top-3 z-40 px-4 max-[374px]:px-3 sm:top-4 sm:px-5">
+      {/* Below 375px (iPhone SE 1st gen, small Androids at 320-360px) the logo and the CTA are
+          tightened so they sit side by side without overlapping. */}
       <div
         className={cn(
-          "mx-auto flex max-w-5xl items-center justify-between rounded-full border py-2 pr-2 pl-5 transition-all duration-500",
+          "mx-auto flex max-w-5xl items-center justify-between gap-2 rounded-full border py-2 pr-2 pl-5 transition-all duration-500 max-[374px]:pl-3",
           scrolled
             ? "border-border bg-card/80 shadow-[0_18px_40px_-24px_rgba(21,18,14,0.35)] backdrop-blur-xl"
             : "border-transparent bg-transparent"
         )}
       >
-        <Logo />
-        <nav className="flex items-center gap-1 text-[13.5px] text-muted">
+        <Logo className="shrink-0 max-[374px]:gap-1.5 max-[374px]:text-[15px]" />
+        <nav className="flex min-w-0 items-center gap-1 text-[13.5px] text-muted">
           {links.map((l) => (
             <Link
               key={l.href}
@@ -60,10 +62,10 @@ export function Header() {
           <Link
             href="/analyze"
             onClick={() => track("cta_test_clicked", { cta_location: "navbar" })}
-            className="btn-ink group ml-2 inline-flex items-center gap-1.5 rounded-full px-4 py-2.5 text-[13.5px] font-medium transition-colors"
+            className="btn-ink group ml-2 inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2.5 text-[13.5px] font-medium transition-colors max-[374px]:ml-0 max-[374px]:px-3 max-[374px]:text-[12.5px]"
           >
             Tester mon annonce
-            <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-0.5" />
+            <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-0.5 max-[374px]:hidden" />
           </Link>
         </nav>
       </div>

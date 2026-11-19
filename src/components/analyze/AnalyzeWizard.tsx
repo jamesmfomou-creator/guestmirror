@@ -1126,7 +1126,7 @@ export function AnalyzeWizard() {
           <div aria-hidden className="hero-grid pointer-events-none absolute inset-x-0 -top-24 -z-10 h-[620px]" />
           <div
             aria-hidden
-            className="pointer-events-none absolute -top-56 left-1/2 -z-10 h-[520px] w-[min(900px,140vw)] -translate-x-1/2 rounded-full bg-accent/[0.08] blur-[120px]"
+            className="pointer-events-none absolute -top-56 left-1/2 -z-10 h-[520px] w-[min(900px,100%)] -translate-x-1/2 rounded-full bg-accent/[0.08] blur-[120px]"
           />
         </>
       )}

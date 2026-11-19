@@ -77,13 +77,15 @@ export default async function LandingPage() {
           aria-hidden
           className="pointer-events-none absolute -top-48 left-1/2 h-[560px] w-[min(1000px,140vw)] -translate-x-1/2 rounded-full bg-accent/[0.09] blur-[120px]"
         />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-16 px-5 pt-14 pb-20 sm:pt-20 lg:grid-cols-[1.12fr_1fr] lg:gap-10 lg:pt-24 lg:pb-28">
+        {/* grid-cols-1 = minmax(0,1fr): a wide child can no longer widen the
+            column past the screen and push the form out on small phones. */}
+        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-16 px-5 pt-14 pb-20 sm:pt-20 lg:grid-cols-[1.12fr_1fr] lg:gap-10 lg:pt-24 lg:pb-28">
           {/* Centred on mobile, left-aligned from lg (desktop layout unchanged). */}
           <div className="flex flex-col items-center text-center lg:block lg:text-left">
             <Reveal y={8}>
-              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card/70 px-3.5 py-2 text-[12.5px] backdrop-blur sm:gap-2 sm:px-4 sm:text-[14px]">
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card/70 px-3.5 py-2 text-[12.5px] backdrop-blur max-[359px]:gap-1 max-[359px]:px-3 max-[359px]:text-[11px] sm:gap-2 sm:px-4 sm:text-[14px]">
                 <span className="font-bold tracking-tight text-foreground uppercase">Diagnostic IA</span>
-                <Zap aria-hidden size={15} className="fill-accent text-accent" />
+                <Zap aria-hidden size={15} className="fill-accent text-accent max-[359px]:hidden" />
                 <span className="font-medium text-muted">Résultat en moins d&apos;une minute</span>
               </span>
             </Reveal>
