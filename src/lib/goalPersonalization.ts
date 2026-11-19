@@ -69,6 +69,9 @@ const TOPIC_EXCLUSIONS: Record<GoalTopic, RegExp[]> = {
 const GOAL_TOPICS: Record<Goal, GoalTopic[]> = {
   improve_appeal: ["visual"],
   reduce_hesitation: ["clarity"],
+  // Photos and presentation: the same visual topic (photos, cover, light,
+  // title) -- the analysis has no separate photo-only finding type.
+  improve_photos: ["visual"],
   verify_improvements: [],
   optimize_multiple: [],
 };
@@ -76,8 +79,9 @@ const GOAL_TOPICS: Record<Goal, GoalTopic[]> = {
 /** Second-person reminder of the goal, for the result page. */
 export const GOAL_REMINDERS: Record<Goal, string> = {
   improve_appeal: "Donner davantage envie de réserver",
-  reduce_hesitation: "Identifier ce qui peut faire hésiter les voyageurs",
-  verify_improvements: "Vérifier les améliorations apportées à ton annonce",
+  reduce_hesitation: "Comprendre ce qui peut faire hésiter les voyageurs",
+  improve_photos: "Améliorer tes photos et ta présentation",
+  verify_improvements: "Vérifier les améliorations déjà apportées à ton annonce",
   optimize_multiple: "Optimiser plusieurs logements Airbnb",
 };
 

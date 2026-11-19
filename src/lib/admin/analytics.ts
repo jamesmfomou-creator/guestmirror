@@ -37,6 +37,9 @@ export type Period = "today" | "7d" | "30d";
 export const GOAL_LABELS: Record<Goal, string> = {
   improve_appeal: "Améliorer mon annonce pour donner davantage envie de réserver",
   reduce_hesitation: "Identifier ce qui peut faire hésiter les voyageurs",
+  // Journey goal_value_v1 (2026-11-19). The onboarding labels were reworded
+  // that day; the stored values, and these dashboard labels, are unchanged.
+  improve_photos: "Améliorer mes photos et ma présentation",
   verify_improvements: "Vérifier les améliorations apportées à mon annonce",
   optimize_multiple: "Optimiser plusieurs logements Airbnb",
 };

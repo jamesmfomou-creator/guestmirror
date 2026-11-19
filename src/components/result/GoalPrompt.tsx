@@ -6,7 +6,7 @@ import { Target } from "lucide-react";
 import { track } from "@/lib/analytics";
 import { saveAnalysisAnswers } from "@/lib/analysisOwnership";
 import { GOAL_REMINDERS } from "@/lib/goalPersonalization";
-import type { Goal } from "@/lib/types";
+import { GOALS, type Goal } from "@/lib/types";
 import { useCanEditAnalysis } from "./useCanEditAnalysis";
 
 // Shown on a result only when no goal was given (answered nowhere during
@@ -14,7 +14,6 @@ import { useCanEditAnalysis } from "./useCanEditAnalysis";
 // Choosing one stores it and re-renders the page: the same report, reordered
 // for that goal (lib/goalPersonalization.ts) -- no new analysis, same score.
 
-const GOALS: Goal[] = ["improve_appeal", "reduce_hesitation", "verify_improvements", "optimize_multiple"];
 
 export function GoalPrompt({ analysisId, serverAllowed }: { analysisId: string; serverAllowed: boolean }) {
   const router = useRouter();

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, Home, Loader2 } from "lucide-react";
 import { BRAND_NAME } from "@/lib/brand";
+import { AnalysisValueMessages } from "./AnalysisValueMessages";
 import { loaderImageUrl, type ListingPreview } from "@/lib/listingPreview";
 import {
   DESCRIPTION_LINE_MS,
@@ -260,6 +261,10 @@ export function AnalysisImmersive({
           </li>
         ))}
       </ol>
+
+      {/* Journey goal_value_v1: what is being looked at and why -- an
+          explanation, not progress (no check, no "terminé"). Gone once done. */}
+      {!done && <AnalysisValueMessages className="mt-6" />}
 
       {showReassurance && (
         <p className="animate-fade-up mt-6 max-w-xs text-sm text-muted-2" role="status">

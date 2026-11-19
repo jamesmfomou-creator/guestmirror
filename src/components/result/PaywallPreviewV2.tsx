@@ -25,6 +25,7 @@ export function PaywallPreviewV2({
   loading,
   disabled,
   onUnlock,
+  hideContents = false,
 }: {
   analysisId: string;
   preview: PaywallPreview;
@@ -33,6 +34,8 @@ export function PaywallPreviewV2({
   loading: boolean;
   disabled: boolean;
   onUnlock: () => void;
+  /** The page already lists the report's contents above (ImprovementPlanCard). */
+  hideContents?: boolean;
 }) {
   const hiddenWeaknesses = preview.weaknessCount - preview.weaknesses.length;
   const contents = paywallPreviewContents(preview);
@@ -93,7 +96,7 @@ export function PaywallPreviewV2({
         </ul>
       )}
 
-      {contents.length > 0 && (
+      {!hideContents && contents.length > 0 && (
         <>
           <p className="mt-6 text-xs font-semibold uppercase tracking-wide text-muted-2">
             Ce que contient ton rapport

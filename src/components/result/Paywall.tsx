@@ -51,6 +51,7 @@ export function Paywall({
   emailsReportLink,
   addonAvailable = false,
   singleCopy = false,
+  hidePreviewContents = false,
 }: {
   analysisId: string;
   canceled?: boolean;
@@ -72,6 +73,12 @@ export function Paywall({
    * kept). Offers, prices, checkout and the v2 presentation are unchanged.
    */
   singleCopy?: boolean;
+  /**
+   * Journey goal_value_v1: the free result's "Ton plan d'amélioration" card
+   * already lists what the report contains, so the v2 head does not repeat
+   * that list (its weakness titles and its button are unchanged).
+   */
+  hidePreviewContents?: boolean;
 }) {
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +105,11 @@ export function Paywall({
     track("paywall_viewed", { analysisId, input_method: inputMethod, user_type: userType, property_count_range: propertyCountRange });
     track("pricing_viewed", { analysisId });
   }, 0.1);
+  // The three offers themselves on screen (journey goal_value_v1): the
+  // denominator for "chose an offer", whatever the paywall head above them.
+  const offersRef = useInViewOnce<HTMLDivElement>(() => {
+    track("offers_viewed", { analysisId, presentation: preview ? "v2" : "control" });
+  }, 0.25);
 
   // UX nudge only -- never hides or blocks the other plans.
   const showConciergeBanner =
@@ -196,6 +208,7 @@ export function Paywall({
           loading={loadingPlan === "one_time"}
           disabled={loadingPlan !== null}
           onUnlock={() => handleSelect("one_time")}
+          hideContents={hidePreviewContents}
         />
       ) : (
         <>
@@ -244,7 +257,7 @@ export function Paywall({
         </p>
       )}
       {/* The three offers: target of "Découvrir mes formules" (ImprovementPlanCard). */}
-      <div id="formules" className={`scroll-mt-24 outline-none ${preview ? "mt-4" : "mt-7"}`}>
+      <div ref={offersRef} id="formules" className={`scroll-mt-24 outline-none ${preview ? "mt-4" : "mt-7"}`}>
         <PricingCards
           highlight="one_time"
           showConciergeBanner={showConciergeBanner}
