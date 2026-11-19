@@ -16,13 +16,16 @@ export function ImprovementPlanCard({
   analysisId,
   insightShown,
   weaknessCount,
-  reportContents,
+  reportHighlights,
+  reportMore,
   showOffersButton = true,
 }: {
   analysisId: string;
   insightShown: boolean;
   weaknessCount: number;
-  reportContents: string[];
+  /** buildFreeReveal().reportHighlights / reportMore: real sections and counts only. */
+  reportHighlights: string[];
+  reportMore: string[];
   /** false when a Conciergerie credit unlocks the report instead (no paywall on the page). */
   showOffersButton?: boolean;
 }) {
@@ -47,22 +50,43 @@ export function ImprovementPlanCard({
         <h2 className="text-lg font-semibold tracking-tight text-foreground">Ton plan d&apos;amélioration</h2>
         <Lock aria-hidden size={16} className="shrink-0 text-muted-2" />
       </div>
-      <ul className="mt-4 space-y-3 text-[15px]">
-        {insightShown && (
-          <li className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-score-high/15">
-              <Check aria-hidden size={12} className="text-score-high" />
-            </span>
-            <span className="text-foreground">1 point expliqué gratuitement</span>
-          </li>
-        )}
-        {reportContents.map((line) => (
-          <li key={line} className="flex items-start gap-3">
-            <Lock aria-hidden size={16} className="mt-0.5 shrink-0 text-muted-2" />
-            <span className="text-foreground">{line}</span>
-          </li>
-        ))}
-      </ul>
+      {insightShown && (
+        <p className="mt-3 flex items-center gap-2 text-[13.5px] text-muted">
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-score-high/15">
+            <Check aria-hidden size={10} className="text-score-high" />
+          </span>
+          1 point expliqué gratuitement ci-dessus
+        </p>
+      )}
+      {reportHighlights.length > 0 && (
+        <>
+          <p className="mt-4 text-[13px] font-semibold uppercase tracking-wide text-muted-2">Dans ton rapport complet</p>
+          <ul className="mt-2.5 space-y-2.5 text-[15px]">
+            {reportHighlights.map((line) => (
+              <li key={line} className="flex items-start gap-3">
+                <span aria-hidden className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                <span className="text-foreground">{line}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {reportMore.length > 0 && (
+        <details className="group mt-3 text-[14px]">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium text-accent-hover [&::-webkit-details-marker]:hidden">
+            <span className="transition-transform group-open:rotate-90" aria-hidden>›</span>
+            Voir tout le contenu du rapport
+          </summary>
+          <ul className="mt-2.5 space-y-2 pl-4 text-muted">
+            {reportMore.map((line) => (
+              <li key={line} className="flex items-start gap-2.5">
+                <span aria-hidden className="mt-[8px] h-1 w-1 shrink-0 rounded-full bg-muted-2" />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       {showOffersButton && (
       <>
       <button

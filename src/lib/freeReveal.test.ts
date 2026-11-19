@@ -50,7 +50,7 @@ describe("buildFreeReveal: what is revealed", () => {
     const out = buildFreeReveal(withWeaknesses([]));
     expect(out.insight).toBeNull();
     expect(out.hesitation).toBe(DEMO_RESULT.first_hesitation);
-    expect(out.reportContents.join(" ")).not.toMatch(/point faible/);
+    expect([...out.reportHighlights, ...out.reportMore].join(" ")).not.toMatch(/point faible/);
   });
 
   it("nothing at all to show: no insight, no hesitation, no invented text", () => {
@@ -61,13 +61,31 @@ describe("buildFreeReveal: what is revealed", () => {
 });
 
 describe("buildFreeReveal: counts come from the report", () => {
+  it("a section the report does not have is never listed", () => {
+    const out = buildFreeReveal({
+      ...DEMO_RESULT,
+      title_analysis: { ...DEMO_RESULT.title_analysis, suggested_titles: [] },
+      description_analysis: { ...DEMO_RESULT.description_analysis, improved_description: "" },
+      photo_analysis: [],
+      action_plan: [],
+    } as AnalysisResult);
+    expect([...out.reportHighlights, ...out.reportMore].join(" ")).not.toMatch(/titre|description réécrite|photo|plan d'action/);
+    expect(out.reportMore).toEqual([]);
+  });
+
   it("lists only sections the report has, with their real numbers", () => {
     const out = buildFreeReveal(DEMO_RESULT);
     const others = DEMO_RESULT.weaknesses.length - 1;
-    expect(out.reportContents).toContain(`${others} autres points faibles, avec leur explication`);
-    expect(out.reportContents).toContain(`${DEMO_RESULT.title_analysis.suggested_titles.length} titres Airbnb prêts à copier`);
-    expect(out.reportContents).toContain("Ta description réécrite, prête à coller");
-    expect(out.reportContents).toContain(`Un plan d'action en ${DEMO_RESULT.action_plan.length} étapes`);
+    expect(out.reportHighlights).toEqual([
+      `${others} autres points faibles à découvrir, avec leur explication`,
+      `La correction de chaque point et tes ${DEMO_RESULT.top_priorities.length} changements prioritaires, dans l'ordre`,
+      `${DEMO_RESULT.title_analysis.suggested_titles.length} titres Airbnb prêts à copier`,
+      "Ta description réécrite, prête à coller",
+    ]);
+    expect(out.reportMore).toEqual([
+      `${DEMO_RESULT.photo_analysis.length} photos analysées une par une, avec l'ordre recommandé`,
+      `Un plan d'action en ${DEMO_RESULT.action_plan.length} étapes`,
+    ]);
   });
 
   it("one weakness only: 0 others, singular wording, no fake 'autres'", () => {
@@ -76,8 +94,8 @@ describe("buildFreeReveal: counts come from the report", () => {
       title_analysis: { ...DEMO_RESULT.title_analysis, suggested_titles: ["Un titre"] },
     } as AnalysisResult);
     expect(out.otherWeaknessCount).toBe(0);
-    expect(out.reportContents.join(" ")).not.toMatch(/autres? points? faibles?/);
-    expect(out.reportContents).toContain("1 titre Airbnb prêt à copier");
+    expect(out.reportHighlights.join(" ")).not.toMatch(/autres? points? faibles?/);
+    expect(out.reportHighlights).toContain("1 titre Airbnb prêt à copier");
   });
 });
 
@@ -98,7 +116,7 @@ describe("buildFreeReveal: never leaks the paid report", () => {
 
   it("only plain strings and numbers leave the function", () => {
     const out = buildFreeReveal(DEMO_RESULT);
-    expect(Object.keys(out).sort()).toEqual(["hesitation", "insight", "otherWeaknessCount", "reportContents", "weaknessCount"]);
+    expect(Object.keys(out).sort()).toEqual(["hesitation", "insight", "otherWeaknessCount", "reportHighlights", "reportMore", "weaknessCount"]);
     expect(Object.keys(out.insight!).sort()).toEqual(["explanation", "severity", "title"]);
   });
 });

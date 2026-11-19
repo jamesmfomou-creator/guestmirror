@@ -2,6 +2,7 @@ import { AnalysisResult, SCORE_LABELS, ScoreBreakdown } from "@/lib/types";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { ScoreBar } from "@/components/ui/ScoreBar";
 import { verdictFor, scoreSummarySentence } from "@/lib/utils";
+import { ClampedText } from "./ClampedText";
 import { BRAND_NAME } from "@/lib/brand";
 
 const ALL_KEYS: (keyof ScoreBreakdown)[] = [
@@ -62,11 +63,13 @@ export function ScoreHeader({
             {scoreSummarySentence(result.overall_score)}
           </p>
         ) : (
-          <div className="mt-7 max-w-md">
+          <div className="mt-6 max-w-md">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-2">
               Ce que j&apos;ai compris en 5 secondes
             </p>
-            <p className="mt-2 text-balance text-lg text-foreground">{result.summary}</p>
+            {/* Full AI text, display clamped to 3 lines with "Lire la suite":
+                the first real weakness stays close under the score. */}
+            <ClampedText text={result.summary} className="mt-2 text-balance text-[17px] leading-relaxed text-foreground sm:text-lg" />
           </div>
         )
       ) : (

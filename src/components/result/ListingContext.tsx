@@ -56,13 +56,14 @@ export function ListingContext({
         </div>
       )}
       {goalReminder && (
-        <div className={`flex items-start gap-3 bg-accent-soft/60 px-4 py-3.5 text-left sm:px-5 ${hasListing ? "border-t border-border" : ""}`}>
-          <Target aria-hidden size={16} className="mt-0.5 shrink-0 text-accent-hover" />
+        // Compact band: the diagnostic below stays the visual priority.
+        <div className={`flex items-start gap-2.5 bg-accent-soft/60 px-4 py-2.5 text-left sm:px-5 ${hasListing ? "border-t border-border" : ""}`}>
+          <Target aria-hidden size={14} className="mt-[3px] shrink-0 text-accent-hover" />
           <div className="min-w-0">
-            <p className="text-[14px] text-foreground">
+            <p className="text-[13.5px] text-foreground">
               <span className="font-semibold">Ton objectif :</span> {goalReminder}
             </p>
-            {goalExplanation && <p className="mt-0.5 text-[13px] leading-relaxed text-muted">{goalExplanation}</p>}
+            {goalExplanation && <p className="mt-0.5 text-[12.5px] leading-snug text-muted">{goalExplanation}</p>}
           </div>
         </div>
       )}
