@@ -10,6 +10,8 @@ import {
 } from "@/lib/admin/analytics";
 import type { Proportion } from "@/lib/admin/paywallExperimentStats";
 import { listFeedback } from "@/lib/feedback";
+import { getSubscribersSnapshot } from "@/lib/admin/subscribers";
+import { SubscribersSection } from "./SubscribersSection";
 import { BRAND_NAME } from "@/lib/brand";
 
 export const metadata = { robots: { index: false, follow: false } };
@@ -115,6 +117,8 @@ export default async function AdminAnalyticsPage({
   // Not period-scoped (all-time) -- feedback volume is low enough that a
   // rolling funnel window isn't useful here, unlike the rest of this page.
   const feedback = await listFeedback();
+  // Live from Stripe (read only): every GuestMirror subscriber, new ones included.
+  const subscribers = await getSubscribersSnapshot();
   const feedbackPositive = feedback.filter((f) => f.feedbackRating === "positive").length;
   const feedbackNegative = feedback.filter((f) => f.feedbackRating === "negative").length;
   const feedbackRated = feedbackPositive + feedbackNegative;
@@ -155,6 +159,8 @@ export default async function AdminAnalyticsPage({
         <Kpi label="Revenue" value={eur(data.revenue)} />
         <Kpi label="Conversion landing → paiement" value={pct(data.globalConversionRate)} />
       </div>
+
+      <SubscribersSection snapshot={subscribers} />
 
       {/* Funnel table */}
       <section className="mt-10">
