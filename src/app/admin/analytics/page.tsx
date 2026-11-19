@@ -12,6 +12,7 @@ import type { Proportion } from "@/lib/admin/paywallExperimentStats";
 import { listFeedback } from "@/lib/feedback";
 import { getSubscribersSnapshot } from "@/lib/admin/subscribers";
 import { SubscribersSection } from "./SubscribersSection";
+import { Bar, CHAPTERS, Chapter, HeroStat, Kpi } from "./ui";
 import { BRAND_NAME } from "@/lib/brand";
 
 export const metadata = { robots: { index: false, follow: false } };
@@ -122,50 +123,124 @@ export default async function AdminAnalyticsPage({
   const feedbackPositive = feedback.filter((f) => f.feedbackRating === "positive").length;
   const feedbackNegative = feedback.filter((f) => f.feedbackRating === "negative").length;
   const feedbackRated = feedbackPositive + feedbackNegative;
+  // Funnel bars are relative to the largest step (a later step can exceed the
+  // first one: steps count distinct visitors per event, not a strict cohort).
+  const funnelMax = Math.max(0, ...data.funnel.map((s) => s.count));
 
   return (
-    <div className="mx-auto max-w-5xl px-5 py-12">
-      <h1 className="text-2xl font-semibold tracking-tight">{BRAND_NAME} — Analytics</h1>
-      <p className="mt-1 text-sm text-muted">
-        Funnel landing → paiement. Dernière mise à jour : {new Date().toLocaleString("fr-FR")}
-      </p>
+    <div className="grain mx-auto max-w-6xl px-4 pb-20 pt-6 sm:px-6 sm:pt-8">
+      {/* HERO: ink surface, same language as the landing's closing CTA. */}
+      <header className="theme-ink relative overflow-hidden rounded-[28px] px-5 py-8 sm:rounded-[32px] sm:px-10 sm:py-12">
+        <div aria-hidden className="hero-grid pointer-events-none absolute inset-0 opacity-[0.35] invert" />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-32 -top-40 h-[420px] w-[520px] rounded-full bg-accent/25 blur-[110px]"
+        />
+        <div className="relative">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="label-mono flex items-center gap-3 text-muted-2">
+              <span className="inline-flex items-center gap-2 text-accent">
+                <span aria-hidden className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+                </span>
+                Live
+              </span>
+              <span aria-hidden className="h-px w-8 bg-border" />
+              <span>{BRAND_NAME} · Admin</span>
+            </div>
+            <nav aria-label="Période" className="inline-flex rounded-full border border-border bg-white/[0.04] p-1">
+              {(["today", "7d", "30d"] as Period[]).map((p) => (
+                <Link
+                  key={p}
+                  href={`/admin/analytics?period=${p}`}
+                  aria-current={p === period ? "page" : undefined}
+                  className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors max-[374px]:px-2.5 max-[374px]:text-[12px] sm:px-4 ${
+                    p === period ? "btn-sheen bg-accent text-white" : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  {PERIOD_LABELS[p]}
+                </Link>
+              ))}
+            </nav>
+          </div>
 
-      {!data.configured && (
-        <p className="mt-6 rounded-xl bg-score-low/10 px-4 py-3 text-sm text-score-low">
-          Supabase n&apos;est pas configuré : aucune donnée à afficher.
-        </p>
-      )}
+          <h1 className="text-display mt-8 text-[2.6rem] text-foreground sm:text-[3.6rem] lg:text-[4.2rem]">
+            Tableau de <span className="text-accent">bord.</span>
+          </h1>
+          <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
+            Funnel landing → paiement, revenus et abonnés en direct de Stripe. Mis à jour le{" "}
+            {new Date().toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Paris" })}.
+          </p>
 
-      <div className="mt-6 flex gap-2">
-        {(["today", "7d", "30d"] as Period[]).map((p) => (
-          <Link
-            key={p}
-            href={`/admin/analytics?period=${p}`}
-            className={`rounded-full border px-4 py-1.5 text-sm font-medium ${
-              p === period
-                ? "border-foreground bg-foreground text-background"
-                : "border-border text-muted hover:bg-background-alt"
-            }`}
-          >
-            {PERIOD_LABELS[p]}
-          </Link>
-        ))}
-      </div>
+          {!data.configured && (
+            <p className="admin-callout mt-6 border-score-low/40 bg-score-low/10 text-score-low">
+              Supabase n&apos;est pas configuré : aucune donnée à afficher.
+            </p>
+          )}
 
-      {/* KPI summary */}
-      <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Kpi label="Visiteurs uniques" value={data.uniqueVisitors} />
-        <Kpi label="Paiements complétés" value={data.funnel[data.funnel.length - 1]?.count ?? 0} />
-        <Kpi label="Revenue" value={eur(data.revenue)} />
-        <Kpi label="Conversion landing → paiement" value={pct(data.globalConversionRate)} />
-      </div>
+          <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-6">
+            <div className="col-span-2 lg:col-span-3">
+              <HeroStat
+                size="lg"
+                label="MRR (Stripe)"
+                value={subscribers.configured && !subscribers.error ? eur(subscribers.mrrEur) : "—"}
+                hint={subscribers.configured && !subscribers.error ? `${subscribers.payingCount} abonné${subscribers.payingCount > 1 ? "s" : ""} qui paie${subscribers.payingCount > 1 ? "nt" : ""}` : "Stripe indisponible sur cet environnement"}
+                accent
+              />
+            </div>
+            <div className="col-span-2 lg:col-span-3">
+              <HeroStat size="lg" label={`Revenue · ${PERIOD_LABELS[period]}`} value={eur(data.revenue)} hint="encaissé sur la période" />
+            </div>
+            <div className="lg:col-span-2">
+              <HeroStat label="Paiements" value={data.funnel[data.funnel.length - 1]?.count ?? 0} />
+            </div>
+            <div className="lg:col-span-2">
+              <HeroStat label="Visiteurs uniques" value={data.uniqueVisitors} />
+            </div>
+            <div className="col-span-2 lg:col-span-2">
+              <HeroStat label="Conversion" value={pct(data.globalConversionRate)} hint="landing → paiement" />
+            </div>
+          </div>
+        </div>
+      </header>
 
+      {/* Chapter nav */}
+      <nav
+        aria-label="Sections"
+        className="no-scrollbar sticky top-[84px] z-30 -mx-4 mt-6 overflow-x-auto px-4 sm:top-[92px] sm:mx-0 sm:px-0"
+      >
+        <div className="inline-flex min-w-max gap-1 rounded-full border border-border bg-card/85 p-1 shadow-[0_8px_24px_-16px_rgba(28,26,23,0.4)] backdrop-blur-md">
+          {CHAPTERS.map((c, i) => (
+            <a
+              key={c.id}
+              href={`#${c.id}`}
+              className="rounded-full px-3.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-background-alt hover:text-foreground"
+            >
+              <span className="mr-1.5 font-mono text-[10.5px] text-accent">{String(i + 1).padStart(2, "0")}</span>
+              {c.label}
+            </a>
+          ))}
+        </div>
+      </nav>
+
+      <div className="mt-14">
+      <Chapter
+        id="revenus"
+        title={<>Qui paie, <em>chaque mois.</em></>}
+        description="Les abonnements lus en direct dans Stripe : montants, échéances, alertes de paiement."
+      />
       <SubscribersSection snapshot={subscribers} />
 
+      <Chapter
+        id="funnel"
+        title={<>De la visite <em>au paiement.</em></>}
+        description={`Chaque étape en visiteurs uniques, sur la période « ${PERIOD_LABELS[period]} ».`}
+      />
       {/* Funnel table */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Funnel — utilisateurs uniques</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Funnel — utilisateurs uniques</h3>
+        <p className="admin-note">
           <strong>Définition :</strong> chaque étape compte des <strong>visiteurs uniques</strong>{" "}
           (anonymous_id / session_id), un par personne quel que soit le nombre de fois où elle
           déclenche l&apos;événement. À comparer avec le bloc <strong>« Performance des analyses
@@ -173,21 +248,25 @@ export default async function AdminAnalyticsPage({
           générer plusieurs tentatives si elle relance ou réessaie une analyse) — c&apos;est
           pourquoi les deux blocs affichent des totaux différents pour une période identique.
         </p>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
-          <table className="w-full min-w-[480px] text-sm">
+        <div className="admin-table-wrap mt-3">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Étape</th>
                 <th className="px-4 py-2.5 font-medium">Visiteurs uniques</th>
                 <th className="px-4 py-2.5 font-medium">Taux vs. étape précédente</th>
+                <th className="w-[38%] px-4 py-2.5 font-medium">Volume relatif</th>
               </tr>
             </thead>
             <tbody>
               {data.funnel.map((step) => (
                 <tr key={step.key} className="border-b border-border last:border-0">
-                  <td className="px-4 py-2.5">{step.label}</td>
-                  <td className="px-4 py-2.5 font-medium tabular-nums">{step.count}</td>
-                  <td className="px-4 py-2.5 tabular-nums text-muted">{pct(step.rateFromPrevious)}</td>
+                  <td className="px-4 py-3">{step.label}</td>
+                  <td className="px-4 py-3 font-medium tabular-nums">{step.count}</td>
+                  <td className="px-4 py-3 tabular-nums text-muted">{pct(step.rateFromPrevious)}</td>
+                  <td className="px-4 py-3">
+                    <Bar ratio={funnelMax > 0 ? step.count / funnelMax : null} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -195,10 +274,15 @@ export default async function AdminAnalyticsPage({
         </div>
       </section>
 
+      <Chapter
+        id="analyses"
+        title={<>Ce que vit <em>chaque analyse.</em></>}
+        description={<>Durées, fiabilité serveur, erreurs et méthode d&apos;import, en tentatives techniques.</>}
+      />
       {/* Analysis loading performance */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Performance des analyses — tentatives techniques</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Performance des analyses — tentatives techniques</h3>
+        <p className="admin-note">
           <strong>Définition :</strong> chaque nombre ci-dessous compte des{" "}
           <strong>tentatives d&apos;analyse</strong> (attemptId, un identifiant généré à chaque
           clic sur « Analyser »), pas des visiteurs uniques — une même personne qui relance ou
@@ -207,7 +291,7 @@ export default async function AdminAnalyticsPage({
           Basé sur les événements disponibles depuis la mise en place de ce tracking — les
           événements antérieurs n&apos;y figurent pas.
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Kpi label="Tentatives démarrées" value={data.analysisPerformance.attemptsStarted} />
           <Kpi label="Tentatives complétées" value={data.analysisPerformance.attemptsCompleted} />
           <Kpi label="Taux de complétion" value={pct(data.analysisPerformance.completionRate)} />
@@ -220,10 +304,10 @@ export default async function AdminAnalyticsPage({
           <Kpi label="Abandons" value={data.analysisPerformance.attemptsAbandoned} />
         </div>
 
-        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">
+        <p className="admin-caption mt-8">
           Temps de finalisation (90% cosmétique → résolution)
         </p>
-        <p className="mt-1 text-sm text-muted-2">
+        <p className="admin-note">
           Le repère « 90% » est un timer client fixe (barre de progression), pas une vraie étape
           serveur — ce délai mesure donc le temps entre ce repère cosmétique et la résolution
           réelle (succès ou échec). La moyenne globale mélange succès et échecs ; comme les échecs
@@ -237,7 +321,7 @@ export default async function AdminAnalyticsPage({
           <Kpi label="Moyenne — global (mélangé)" value={seconds(data.analysisPerformance.avgFinalizingS)} />
         </div>
 
-        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">
+        <p className="admin-caption mt-8">
           Répartition des abandons par dernière étape connue
         </p>
         <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-2">
@@ -250,16 +334,16 @@ export default async function AdminAnalyticsPage({
           numbers come from events written by /api/analyze itself (see
           lib/analysisAttempts.ts); they exist only from the day that
           instrumentation shipped. */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Fiabilité — serveur et récupération</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Fiabilité — serveur et récupération</h3>
+        <p className="admin-note">
           <strong>Côté serveur</strong> : une ligne de vérité par tentative, écrite par le serveur
           lui-même, que le navigateur soit encore là ou non. Le taux de succès serveur ={" "}
           terminées ÷ (terminées + échouées + interrompues) ; les échecs d&apos;extraction du lien
           Airbnb (aucune analyse lancée) et les tentatives encore en cours n&apos;y entrent pas.
           Disponible uniquement depuis la mise en place de ce suivi.
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Kpi label="Tentatives reçues (serveur)" value={data.reliability.serverAttempts} />
           <Kpi label="Terminées (serveur)" value={data.reliability.serverCompleted} />
           <Kpi label="Taux de succès serveur" value={pct(data.reliability.serverSuccessRate)} />
@@ -270,10 +354,10 @@ export default async function AdminAnalyticsPage({
           <Kpi label="Doublons évités — déjà en cours" value={data.reliability.duplicateRequestsInFlight} />
         </div>
 
-        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">
+        <p className="admin-caption mt-8">
           Requêtes perdues par le navigateur et récupération
         </p>
-        <p className="mt-1 text-sm text-muted-2">
+        <p className="admin-note">
           Une « requête perdue » = le navigateur n&apos;a jamais reçu la réponse (page suspendue,
           changement de réseau, délai dépassé). Elle est « récupérée » si le visiteur a quand même
           fini sur son résultat (même tentative, sans nouvelle analyse). Les tentatives récupérées
@@ -289,10 +373,10 @@ export default async function AdminAnalyticsPage({
         </div>
 
         {data.reliability.serverErrors.length > 0 && (
-          <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+          <div className="admin-table-wrap mt-4">
             <table className="w-full min-w-[420px] text-sm">
               <thead>
-                <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <tr className="admin-thead">
                   <th className="px-4 py-2.5 font-medium">Erreur serveur</th>
                   <th className="px-4 py-2.5 font-medium">Phase</th>
                   <th className="px-4 py-2.5 font-medium">Tentatives</th>
@@ -315,17 +399,17 @@ export default async function AdminAnalyticsPage({
       {/* Error breakdown: which causes actually produce the failures (see
           categorizeAnthropicError in lib/ai.ts and the codes set in
           api/analyze/route.ts / AnalyzeWizard.tsx). */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Répartition des erreurs</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Répartition des erreurs</h3>
+        <p className="admin-note">
           Une ligne par code d&apos;erreur, dédupliquée par tentative (attemptId). Seules les
           tentatives ayant échoué depuis la mise en place de la catégorisation détaillée
           affichent un code spécifique — les échecs antérieurs apparaissent sous « Inconnu ».
         </p>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+        <div className="admin-table-wrap mt-3">
           <table className="w-full min-w-[420px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Cause</th>
                 <th className="px-4 py-2.5 font-medium">Occurrences</th>
                 <th className="px-4 py-2.5 font-medium">% des échecs</th>
@@ -356,17 +440,17 @@ export default async function AdminAnalyticsPage({
           actually spent, independent of the client-side 90%-cap progress
           bar above. Only analyses run since this instrumentation shipped
           carry these fields (see each row's "n" sample size). */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Répartition du temps par étape</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Répartition du temps par étape</h3>
+        <p className="admin-note">
           Mesuré côté serveur pour chaque analyse complétée (y compris celles récupérées après une
           requête perdue, via l&apos;événement serveur). &quot;n&quot; = nombre d&apos;analyses
           couvertes par cette instrumentation dans la période sélectionnée.
         </p>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+        <div className="admin-table-wrap mt-3">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Étape</th>
                 <th className="px-4 py-2.5 font-medium">Moyenne</th>
                 <th className="px-4 py-2.5 font-medium">Médiane</th>
@@ -388,13 +472,13 @@ export default async function AdminAnalyticsPage({
           </table>
         </div>
 
-        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">
+        <p className="admin-caption mt-8">
           Volumétrie de l&apos;appel IA (tokens, par analyse complétée)
         </p>
-        <div className="mt-2 overflow-x-auto rounded-xl border border-border">
+        <div className="admin-table-wrap mt-2">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Mesure</th>
                 <th className="px-4 py-2.5 font-medium">Moyenne</th>
                 <th className="px-4 py-2.5 font-medium">Médiane</th>
@@ -420,15 +504,15 @@ export default async function AdminAnalyticsPage({
       {/* Per-method breakdown: a screenshot submission never counts toward
           the Airbnb-URL bucket or vice versa -- each event carries its own
           input_method, see lib/admin/analytics.ts. */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Méthode d&apos;import</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Méthode d&apos;import</h3>
+        <p className="admin-note">
           Lien Airbnb, capture d&apos;écran, ou les deux à la fois pour la même analyse.
         </p>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+        <div className="admin-table-wrap mt-3">
           <table className="w-full min-w-[520px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Méthode</th>
                 <th className="px-4 py-2.5 font-medium">Soumissions</th>
                 <th className="px-4 py-2.5 font-medium">Analyses démarrées</th>
@@ -446,22 +530,27 @@ export default async function AdminAnalyticsPage({
         </div>
       </section>
 
+      <Chapter
+        id="profils"
+        title={<>Qui sont <em>les utilisateurs.</em></>}
+        description={<>Profil déclaré pendant l&apos;onboarding, croisé avec la conversion.</>}
+      />
       {/* Profil des utilisateurs: nombre de biens / type x conversion.
           See lib/admin/analytics.ts's userProfile -- built entirely from
           analytics_events metadata (StepProfile answers propagated
           through paywall_viewed / {plan}_offer_clicked / payment_completed). */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Profil des utilisateurs</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Profil des utilisateurs</h3>
+        <p className="admin-note">
           Basé sur la question posée après l&apos;import (facultative) — les analyses
           antérieures à sa mise en place n&apos;y figurent pas.
         </p>
 
-        <p className="mt-4 text-xs font-medium uppercase tracking-wide text-muted-2">Par nombre de biens</p>
-        <div className="mt-2 overflow-x-auto rounded-xl border border-border">
+        <p className="admin-caption mt-8">Par nombre de biens</p>
+        <div className="admin-table-wrap mt-2">
           <table className="w-full min-w-[680px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Biens</th>
                 <th className="px-4 py-2.5 font-medium">Analyses</th>
                 <th className="px-4 py-2.5 font-medium">Paywalls vus</th>
@@ -481,11 +570,11 @@ export default async function AdminAnalyticsPage({
           </table>
         </div>
 
-        <p className="mt-6 text-xs font-medium uppercase tracking-wide text-muted-2">Par type</p>
-        <div className="mt-2 overflow-x-auto rounded-xl border border-border">
+        <p className="admin-caption mt-8">Par type</p>
+        <div className="admin-table-wrap mt-2">
           <table className="w-full min-w-[680px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Type</th>
                 <th className="px-4 py-2.5 font-medium">Analyses</th>
                 <th className="px-4 py-2.5 font-medium">Paywalls vus</th>
@@ -508,16 +597,16 @@ export default async function AdminAnalyticsPage({
 
       {/* Onboarding "objectif" (variant B uniquement, voir StepGoal.tsx) --
           pour orienter le contenu/positionnement, pas un test A/B en soi. */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Objectifs des utilisateurs (onboarding)</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Objectifs des utilisateurs (onboarding)</h3>
+        <p className="admin-note">
           Réponse à « Quel est ton objectif avec cette annonce ? » — posée après l&apos;email,
           variante B uniquement.
         </p>
-        <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+        <div className="admin-table-wrap mt-4">
           <table className="w-full min-w-[480px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Objectif</th>
                 <th className="px-4 py-2.5 font-medium">Réponses</th>
                 <th className="px-4 py-2.5 font-medium">Part</th>
@@ -544,18 +633,23 @@ export default async function AdminAnalyticsPage({
         )}
       </section>
 
+      <Chapter
+        id="tests"
+        title={<>Les expériences <em>en cours.</em></>}
+        description={<>Chaque test avec ses intervalles de confiance : un écart n&apos;est un résultat que s&apos;il est net.</>}
+      />
       {/* A/B test: pre-paywall "Aha moment" */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">A/B Test — Aha moment</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">A/B Test — Aha moment</h3>
+        <p className="admin-note">
           Variante A = flow actuel, Variante B = loader &quot;Aha moment&quot; renforcé avant le
           paywall. Seuls les événements portant une variante sont comptés — le trafic antérieur à
           ce test n&apos;y figure pas.
         </p>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+        <div className="admin-table-wrap mt-3">
           <table className="w-full min-w-[520px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Métrique</th>
                 <th className="px-4 py-2.5 font-medium">Variante A</th>
                 <th className="px-4 py-2.5 font-medium">Variante B</th>
@@ -639,9 +733,9 @@ export default async function AdminAnalyticsPage({
       </section>
 
       {/* Paywall presentation experiment: control vs v2 */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Test paywall — contrôle vs v2 (depuis les nouveaux tarifs)</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Test paywall — contrôle vs v2 (depuis les nouveaux tarifs)</h3>
+        <p className="admin-note">
           Expérience indépendante du test A/B ci-dessus (un visiteur est dans A ou B, et séparément
           dans « contrôle » ou « v2 »). Contrôle = page verrouillée d&apos;origine. v2 = aperçu
           construit à partir des résultats de l&apos;analyse + bouton « Débloquer mes
@@ -650,7 +744,7 @@ export default async function AdminAnalyticsPage({
           sont des intervalles de confiance à 95 %.
         </p>
         <p
-          className={`mt-3 rounded-xl px-4 py-3 text-sm ${
+          className={`admin-callout mt-4 ${
             data.paywallExperiment.verdict === "difference"
               ? "bg-accent-soft text-accent-hover"
               : "bg-background-alt text-muted"
@@ -663,10 +757,10 @@ export default async function AdminAnalyticsPage({
           {data.paywallExperiment.verdict === "difference" &&
             "Écart net sur le taux de clic du paywall : les intervalles de confiance à 95 % des deux variantes ne se chevauchent pas. À confirmer sur les paiements, plus rares, avant de généraliser."}
         </p>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+        <div className="admin-table-wrap mt-3">
           <table className="w-full min-w-[520px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Métrique</th>
                 <th className="px-4 py-2.5 font-medium">Contrôle</th>
                 <th className="px-4 py-2.5 font-medium">v2</th>
@@ -715,11 +809,11 @@ export default async function AdminAnalyticsPage({
             </tbody>
           </table>
         </div>
-        <h3 className="mt-5 text-sm font-semibold">Croisement avec le test A/B</h3>
-        <div className="mt-2 overflow-x-auto rounded-xl border border-border">
+        <h4 className="admin-h3 mt-10 text-[1.05rem]!">Croisement avec le test A/B</h4>
+        <div className="admin-table-wrap mt-2">
           <table className="w-full min-w-[520px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Cellule</th>
                 <th className="px-4 py-2.5 font-medium">Résultats vus</th>
                 <th className="px-4 py-2.5 font-medium">Paywall vu</th>
@@ -758,9 +852,9 @@ export default async function AdminAnalyticsPage({
       </section>
 
       {/* Analysis loader experiment: control vs immersive */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Test loader — contrôle vs immersif</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Test loader — contrôle vs immersif</h3>
+        <p className="admin-note">
           Expérience indépendante des deux tests ci-dessus. Contrôle = écran d&apos;attente du bras A/B
           du visiteur, inchangé. Immersif = les vraies photos, le vrai titre et des extraits de la
           description de l&apos;annonce pendant l&apos;analyse. Chaque ligne compte des tentatives
@@ -769,7 +863,7 @@ export default async function AdminAnalyticsPage({
           échoué ensuite. Les fourchettes sont des intervalles de confiance à 95 %.
         </p>
         <p
-          className={`mt-3 rounded-xl px-4 py-3 text-sm ${
+          className={`admin-callout mt-4 ${
             data.loaderExperiment.verdict === "difference" ? "bg-accent-soft text-accent-hover" : "bg-background-alt text-muted"
           }`}
         >
@@ -780,10 +874,10 @@ export default async function AdminAnalyticsPage({
           {data.loaderExperiment.verdict === "difference" &&
             "Écart net sur le taux d'analyses menées jusqu'au résultat : les intervalles de confiance à 95 % ne se chevauchent pas."}
         </p>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+        <div className="admin-table-wrap mt-3">
           <table className="w-full min-w-[520px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Métrique</th>
                 <th className="px-4 py-2.5 font-medium">Contrôle</th>
                 <th className="px-4 py-2.5 font-medium">Immersif</th>
@@ -817,17 +911,22 @@ export default async function AdminAnalyticsPage({
         </div>
       </section>
 
+      <Chapter
+        id="offres"
+        title={<>Ce qui se <em>vend.</em></>}
+        description={<>Les trois offres, le pack d&apos;analyses et l&apos;historique des anciens tarifs.</>}
+      />
       {/* Pricing v2: the three offers */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Offres — Analyse unique, Conciergerie, Accès à vie</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Offres — Analyse unique, Conciergerie, Accès à vie</h3>
+        <p className="admin-note">
           Depuis le changement de prix uniquement (version {data.offers.pricingVersion}). Un achat est
           un paiement confirmé par Stripe (webhook), jamais un simple retour de paiement. La
           conversion rapporte les visiteurs ayant acheté l&apos;offre aux visiteurs ayant vu le
           paywall. Abonnements actifs, MRR et accès à vie sont un instantané actuel.
           {!data.offers.grantsReadable && " (Instantané indisponible : la migration 0010 n'est pas encore appliquée.)"}
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Kpi label="Conciergerie actifs" value={data.offers.activeConciergerie} />
           <Kpi label="MRR Conciergerie" value={eur(data.offers.conciergerieMrr)} />
           <Kpi label="Accès à vie actifs" value={data.offers.activeLifetime} />
@@ -837,10 +936,10 @@ export default async function AdminAnalyticsPage({
           <Kpi label="Remboursements" value={data.offers.refunds} />
           <Kpi label="Litiges" value={data.offers.disputes} />
         </div>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+        <div className="admin-table-wrap mt-3">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Offre</th>
                 <th className="px-4 py-2.5 font-medium">Clics</th>
                 <th className="px-4 py-2.5 font-medium">Paiements commencés</th>
@@ -876,21 +975,21 @@ export default async function AdminAnalyticsPage({
           </table>
         </div>
 
-        <h3 className="mt-6 text-sm font-semibold">Pack 10 analyses supplémentaires — 12,90 €</h3>
-        <p className="mt-1 text-sm text-muted-2">
+        <h4 className="admin-h3 mt-10 text-[1.05rem]!">Pack 10 analyses supplémentaires — 12,90 €</h4>
+        <p className="admin-note">
           « Avec l&apos;abonnement » : option cochée dans le récapitulatif Conciergerie. « Espace abonné » : acheté plus tard
           depuis un rapport. Achats confirmés par Stripe uniquement.
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Kpi label="Taux d'ajout à l'abonnement" value={proportionLabel(data.offers.addon.attachRate)} />
           <Kpi label="Paiements Conciergerie avec pack" value={data.offers.addon.conciergerieCheckoutsWithAddon} />
           <Kpi label="Paiements Conciergerie sans pack" value={data.offers.addon.conciergerieCheckoutsWithoutAddon} />
           <Kpi label="Échecs / remb. / litiges" value={`${data.offers.addon.failures} / ${data.offers.addon.refunds} / ${data.offers.addon.disputes}`} />
         </div>
-        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+        <div className="admin-table-wrap mt-3">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Origine</th>
                 <th className="px-4 py-2.5 font-medium">Proposé</th>
                 <th className="px-4 py-2.5 font-medium">Choisi</th>
@@ -924,9 +1023,9 @@ export default async function AdminAnalyticsPage({
       </section>
 
       {/* Pricing: one-time vs Plus */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Pricing historique — anciens tarifs inclus</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Pricing historique — anciens tarifs inclus</h3>
+        <p className="admin-note">
           <strong>Abonnements Plus actifs</strong> et <strong>MRR</strong> sont un instantané
           actuel de l&apos;état réel des abonnements (indépendant de la période sélectionnée) — un
           abonnement toujours actif y reste compté même si son événement de départ date de plus de
@@ -935,7 +1034,7 @@ export default async function AdminAnalyticsPage({
           nouveaux abonnements) n&apos;est jamais mélangé au MRR, qui reflète le taux mensuel
           récurrent actuel, pas une somme encaissée.
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Kpi label="Abonnements Plus actifs (6,90 €)" value={data.pricing.activePlusSubscriptions} />
           <Kpi label="MRR Plus" value={eur(data.pricing.mrr)} />
           <Kpi label="Nouveaux abonnements" value={data.pricing.newSubscriptions} />
@@ -947,10 +1046,10 @@ export default async function AdminAnalyticsPage({
           <Kpi label="Échecs de paiement abo." value={data.pricing.paymentFailures} />
         </div>
 
-        <div className="mt-5 overflow-x-auto rounded-xl border border-border">
+        <div className="admin-table-wrap mt-5">
           <table className="w-full min-w-[420px] text-sm">
             <thead>
-              <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+              <tr className="admin-thead">
                 <th className="px-4 py-2.5 font-medium">Étape</th>
                 <th className="px-4 py-2.5 font-medium">Visiteurs uniques</th>
               </tr>
@@ -967,16 +1066,21 @@ export default async function AdminAnalyticsPage({
         </div>
       </section>
 
+      <Chapter
+        id="acquisition"
+        title={<>D&apos;où viennent <em>les visiteurs.</em></>}
+        description={<>Sources et campagnes, de la visite au revenu.</>}
+      />
       {/* By source */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Par source</h2>
+      <section className="admin-sub">
+        <h3 className="admin-h3">Par source</h3>
         {data.bySource.length === 0 ? (
           <p className="mt-3 text-sm text-muted-2">Aucune donnée sur cette période.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <div className="admin-table-wrap mt-3">
             <table className="w-full min-w-[560px] text-sm">
               <thead>
-                <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <tr className="admin-thead">
                   <th className="px-4 py-2.5 font-medium">Source</th>
                   <th className="px-4 py-2.5 font-medium">Views</th>
                   <th className="px-4 py-2.5 font-medium">Analyses</th>
@@ -1003,15 +1107,15 @@ export default async function AdminAnalyticsPage({
       </section>
 
       {/* By campaign */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Par campagne</h2>
+      <section className="admin-sub">
+        <h3 className="admin-h3">Par campagne</h3>
         {data.byCampaign.length === 0 ? (
           <p className="mt-3 text-sm text-muted-2">Aucune donnée sur cette période.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <div className="admin-table-wrap mt-3">
             <table className="w-full min-w-[560px] text-sm">
               <thead>
-                <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <tr className="admin-thead">
                   <th className="px-4 py-2.5 font-medium">Campagne</th>
                   <th className="px-4 py-2.5 font-medium">Views</th>
                   <th className="px-4 py-2.5 font-medium">Analyses</th>
@@ -1037,9 +1141,14 @@ export default async function AdminAnalyticsPage({
         )}
       </section>
 
+      <Chapter
+        id="utilisateurs"
+        title={<>Les gens <em>derrière les chiffres.</em></>}
+        description={<>Usage répété, liste des utilisateurs et retours après achat, depuis le début.</>}
+      />
       {/* Repeat usage (all-time) */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Analyses uniques (depuis le début)</h2>
+      <section className="admin-sub">
+        <h3 className="admin-h3">Analyses uniques (depuis le début)</h3>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Kpi label="Utilisateurs uniques" value={data.repeatUsage.uniqueAnalysisUsers} />
           <Kpi label="Analyses totales" value={data.repeatUsage.totalAnalyses} />
@@ -1050,18 +1159,18 @@ export default async function AdminAnalyticsPage({
       </section>
 
       {/* User list (all-time) */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Utilisateurs (depuis le début)</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub">
+        <h3 className="admin-h3">Utilisateurs (depuis le début)</h3>
+        <p className="admin-note">
           Classés par nombre d&apos;analyses, du plus actif au moins actif.
         </p>
         {data.users.length === 0 ? (
           <p className="mt-3 text-sm text-muted-2">Aucun utilisateur pour l&apos;instant.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <div className="admin-table-wrap mt-3">
             <table className="w-full min-w-[560px] text-sm">
               <thead>
-                <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <tr className="admin-thead">
                   <th className="px-4 py-2.5 font-medium">#</th>
                   <th className="px-4 py-2.5 font-medium">Email</th>
                   <th className="px-4 py-2.5 font-medium">Analyses</th>
@@ -1096,13 +1205,13 @@ export default async function AdminAnalyticsPage({
           the explicit consent checkbox, shown here as its own column so
           it's easy to tell which testimonials are actually usable
           publicly (see TestimonialsSection, which only reads permission=true). */}
-      <section className="mt-10 mb-10">
-        <h2 className="text-lg font-semibold">Feedback utilisateurs</h2>
-        <p className="mt-1 text-sm text-muted-2">
+      <section className="admin-sub mb-6">
+        <h3 className="admin-h3">Feedback utilisateurs</h3>
+        <p className="admin-note">
           Recueilli après achat (facultatif) — voir la case à cocher pour le consentement de
           témoignage.
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Kpi label="Réponses" value={feedback.length} />
           <Kpi label="% positif" value={feedbackRated > 0 ? `${Math.round((feedbackPositive / feedbackRated) * 100)}%` : "—"} />
           <Kpi label="% négatif" value={feedbackRated > 0 ? `${Math.round((feedbackNegative / feedbackRated) * 100)}%` : "—"} />
@@ -1111,10 +1220,10 @@ export default async function AdminAnalyticsPage({
         {feedback.length === 0 ? (
           <p className="mt-4 text-sm text-muted-2">Aucun retour pour l&apos;instant.</p>
         ) : (
-          <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+          <div className="admin-table-wrap mt-4">
             <table className="w-full min-w-[900px] text-sm">
               <thead>
-                <tr className="border-b border-border bg-background-alt text-left text-xs uppercase tracking-wide text-muted-2">
+                <tr className="admin-thead">
                   <th className="px-4 py-2.5 font-medium">Date</th>
                   <th className="px-4 py-2.5 font-medium">Avis</th>
                   <th className="px-4 py-2.5 font-medium">Commentaire</th>
@@ -1149,15 +1258,7 @@ export default async function AdminAnalyticsPage({
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-function Kpi({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="card p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-2">{label}</p>
-      <p className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
+      </div>
     </div>
   );
 }

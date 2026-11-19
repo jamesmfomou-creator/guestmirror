@@ -1,4 +1,5 @@
 import type { SubscriberRow, SubscribersSnapshot } from "@/lib/admin/subscribers";
+import { Kpi } from "./ui";
 
 // "Abonnés & MRR": live Stripe snapshot (lib/admin/subscribers.ts). Server
 // component, admin only (Basic Auth on /admin, see proxy.ts).
@@ -32,34 +33,34 @@ const day = (isoDate: string | null) =>
 export function SubscribersSection({ snapshot }: { snapshot: SubscribersSnapshot }) {
   const ended = snapshot.rows.filter((r) => !r.countsInMrr);
   return (
-    <section className="mt-10">
-      <h2 className="text-lg font-semibold">Abonnés &amp; MRR (Stripe, en direct)</h2>
-      <p className="mt-1 text-sm text-muted-2">
+    <section className="admin-sub">
+      <h3 className="admin-h3">Abonnés &amp; MRR (Stripe, en direct)</h3>
+      <p className="admin-note">
         Tous les abonnements GuestMirror lus directement dans Stripe à chaque affichage (Conciergerie et ancienne offre
         Plus) : les nouveaux abonnés apparaissent automatiquement. MRR = abonnements actifs, en essai ou en retard de
         paiement. Les achats uniques et l&apos;accès à vie n&apos;en font pas partie.
       </p>
 
       {!snapshot.configured ? (
-        <p className="mt-3 rounded-xl bg-score-mid/10 px-4 py-3 text-sm text-score-mid">Stripe n&apos;est pas configuré sur cet environnement.</p>
+        <p className="admin-callout mt-4 border-score-mid/40 bg-score-mid/10 text-score-mid">Stripe n&apos;est pas configuré sur cet environnement.</p>
       ) : snapshot.error ? (
-        <p className="mt-3 rounded-xl bg-score-low/10 px-4 py-3 text-sm text-score-low">{snapshot.error}</p>
+        <p className="admin-callout mt-4 border-score-low/40 bg-score-low/10 text-score-low">{snapshot.error}</p>
       ) : (
         <>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Tile label="MRR" value={eur(snapshot.mrrEur)} />
-            <Tile label="Abonnés qui paient" value={snapshot.payingCount} />
-            <Tile label="MRR qui s'arrête (résiliations)" value={eur(snapshot.mrrEndingEur)} />
-            <Tile label="Abonnements terminés" value={ended.length} />
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Kpi label="MRR" value={eur(snapshot.mrrEur)} tone="accent" />
+            <Kpi label="Abonnés qui paient" value={snapshot.payingCount} />
+            <Kpi label="MRR qui s'arrête (résiliations)" value={eur(snapshot.mrrEndingEur)} tone={snapshot.mrrEndingEur > 0 ? "bad" : "default"} />
+            <Kpi label="Abonnements terminés" value={ended.length} />
           </div>
 
           {snapshot.rows.length === 0 ? (
             <p className="mt-4 text-sm text-muted">Aucun abonnement pour l&apos;instant.</p>
           ) : (
-            <div className="card mt-4 overflow-x-auto">
+            <div className="admin-table-wrap mt-4">
               <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="border-b border-border text-xs uppercase tracking-wide text-muted-2">
-                  <tr>
+                <thead>
+                  <tr className="admin-thead">
                     <th className="px-4 py-2.5 font-medium">Client</th>
                     <th className="px-4 py-2.5 font-medium">Offre</th>
                     <th className="px-4 py-2.5 font-medium">€/mois</th>
@@ -110,14 +111,5 @@ export function SubscribersSection({ snapshot }: { snapshot: SubscribersSnapshot
         </>
       )}
     </section>
-  );
-}
-
-function Tile({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="card p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-2">{label}</p>
-      <p className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
-    </div>
   );
 }
