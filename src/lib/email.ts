@@ -151,3 +151,36 @@ export async function sendUnlockEmail(params: {
     `,
   });
 }
+
+/**
+ * Sent once when a Conciergerie subscription or a lifetime access is
+ * confirmed by Stripe (webhook, never the success page). Explains how to log
+ * in to Mon espace. The one-time report email (sendUnlockEmail) is unchanged.
+ */
+export async function sendSpaceReadyEmail(params: { to: string; offer: "lifetime" | "conciergerie" }): Promise<void> {
+  if (!EMAIL_CONFIGURED) return;
+  const url = `${SITE_URL}/espace`;
+  const offer =
+    params.offer === "lifetime"
+      ? "<strong>Accès à vie</strong> : tes analyses sont illimitées, chaque rapport de ton adresse s'affiche en entier."
+      : "<strong>Conciergerie</strong> : 20 analyses complètes par mois d'abonnement.";
+  await sendEmail({
+    to: params.to,
+    subject: `Ton espace ${BRAND_NAME} est prêt`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; color: #1c1a17;">
+        <h1 style="font-size: 20px;">Ton espace ${BRAND_NAME} est prêt</h1>
+        <p>Merci ! Ton offre est activée — ${offer}</p>
+        <p>Dans ton espace, tu retrouves toutes tes analyses, ton offre, et tu lances de nouvelles analyses avec tes droits.</p>
+        <p style="margin: 24px 0;">
+          <a href="${url}" style="background: #d9673f; color: #fff; padding: 12px 24px; border-radius: 999px; text-decoration: none; font-weight: 600; display: inline-block;">
+            Accéder à mon espace
+          </a>
+        </p>
+        <p><strong>Pour te connecter :</strong> saisis cette adresse (${params.to}) sur ${url}, puis le code à 6 chiffres que tu reçois par e-mail. Aucun mot de passe à créer. Utilise aussi cette adresse pour tes nouvelles analyses.</p>
+        <p style="font-size: 13px; color: #6f6a62;">Une question ? Réponds simplement à cet e-mail.</p>
+        <p style="font-size: 13px; color: #6f6a62;">— L'équipe ${BRAND_NAME}</p>
+      </div>
+    `,
+  });
+}

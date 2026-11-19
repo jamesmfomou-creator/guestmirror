@@ -30,10 +30,12 @@ export function Header() {
         { href: "#exemple", label: "Exemple" },
         { href: "#tarifs", label: "Tarifs" },
         { href: "/compare", label: "Comparer" },
+        { href: "/espace", label: "Mon espace", wide: true },
       ]
     : [
         { href: "/compare", label: "Comparer" },
         { href: "/pricing", label: "Tarifs" },
+        { href: "/espace", label: "Mon espace", wide: true },
       ];
 
   return (
@@ -54,7 +56,9 @@ export function Header() {
             <Link
               key={l.href}
               href={l.href}
-              className="hidden rounded-full px-3.5 py-2 transition-colors hover:bg-foreground/[0.04] hover:text-foreground md:inline"
+              // "Mon espace" from lg only: at md the bar has no room for it
+              // (it stays in the footer on every screen).
+              className={`hidden rounded-full px-3.5 py-2 transition-colors hover:bg-foreground/[0.04] hover:text-foreground ${"wide" in l ? "lg:inline" : "md:inline"}`}
             >
               {l.label}
             </Link>

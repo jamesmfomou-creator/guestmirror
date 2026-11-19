@@ -127,7 +127,7 @@ const IDLE_RECOVERY: RecoveryState = {
   lastStatus: null,
 };
 
-export function AnalyzeWizard() {
+export function AnalyzeWizard({ knownEmail = null }: { knownEmail?: string | null } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -142,7 +142,9 @@ export function AnalyzeWizard() {
       previewUrl: URL.createObjectURL(file),
     }));
   });
-  const [email, setEmail] = useState("");
+  // Logged in to Mon espace: the proven address, so rights apply to the new
+  // report (still editable). Never read from the URL.
+  const [email, setEmail] = useState(knownEmail ?? "");
   const [userType, setUserType] = useState<UserType | null>(null);
   const [propertyCountRange, setPropertyCountRange] = useState<PropertyCountRange | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);

@@ -4,6 +4,7 @@ import type { NextResponse } from "next/server";
 import { DEMO_MODE, EMAIL_CONFIGURED } from "@/lib/env";
 import { sendAccessCodeEmail } from "@/lib/email";
 import {
+  deleteSession,
   findSession,
   insertSession,
   insertVerification,
@@ -122,4 +123,17 @@ export async function currentIdentity(): Promise<SessionIdentity | null> {
   } catch {
     return null;
   }
+}
+
+/** Logout: revokes this browser's session server side and clears the cookie. */
+export async function endSession(res: NextResponse): Promise<void> {
+  const token = (await cookies()).get(ACCESS_COOKIE)?.value;
+  if (token && token.length <= 200) {
+    try {
+      await deleteSession(sha256(token));
+    } catch (err) {
+      console.error("[access] session revoke failed:", err instanceof Error ? err.message : err);
+    }
+  }
+  res.cookies.set(ACCESS_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 0 });
 }

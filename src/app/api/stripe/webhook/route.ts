@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { sendUnlockEmail } from "@/lib/email";
+import { sendSpaceReadyEmail, sendUnlockEmail } from "@/lib/email";
 import { claimStripeEvent, completeStripeEvent } from "@/lib/access/accessStore";
 import { handleStripeEvent } from "@/lib/stripe/webhookHandlers";
 import { isAddonPackPrice } from "@/lib/plans";
@@ -137,6 +137,7 @@ export async function POST(req: NextRequest) {
           console.error(`[stripe] analytics failed event=${event.id}:`, err instanceof Error ? err.message : err);
         }),
       sendUnlockEmail,
+      sendSpaceReadyEmail,
       retrieveSubscription: (id) => stripe.subscriptions.retrieve(id),
       retrievePaymentIntentMetadata: async (id) => (await stripe.paymentIntents.retrieve(id)).metadata ?? {},
       retrieveInvoicePaymentIntent: async (invoiceId) => {
