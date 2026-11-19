@@ -254,7 +254,8 @@ export default async function ResultPage({
             analysisId={id}
             insightShown={freeReveal.insight !== null}
             weaknessCount={freeReveal.weaknessCount}
-            reportContents={freeReveal.reportContents}
+            reportHighlights={freeReveal.reportHighlights}
+            reportMore={freeReveal.reportMore}
             showOffersButton={!creditUsable}
           />
           {!creditUsable && (

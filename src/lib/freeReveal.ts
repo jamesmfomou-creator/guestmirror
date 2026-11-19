@@ -30,8 +30,15 @@ export interface FreeReveal {
   weaknessCount: number;
   /** Weaknesses not revealed for free. */
   otherWeaknessCount: number;
-  /** One line per section the paid report really contains (counts from the report). */
-  reportContents: string[];
+  /**
+   * What the paid report really contains, one line per section (counts from
+   * the report). `highlights`: what matters most (other weaknesses,
+   * corrections and priorities, titles, rewritten description); `more`: the
+   * rest (photo analysis, action plan), shown on demand. Never a section the
+   * report does not have.
+   */
+  reportHighlights: string[];
+  reportMore: string[];
 }
 
 const SEVERITY_RANK: Record<RevealSeverity, number> = { high: 0, medium: 1, low: 2 };
@@ -66,32 +73,34 @@ export function buildFreeReveal(result: AnalysisResult): FreeReveal {
   const otherWeaknessCount = Math.max(0, weaknessCount - (pick ? 1 : 0));
 
   const preview = buildPaywallPreview(result);
-  const reportContents: string[] = [];
+  const reportHighlights: string[] = [];
+  const reportMore: string[] = [];
   if (otherWeaknessCount > 0) {
-    reportContents.push(
+    reportHighlights.push(
       pick
-        ? `${plural(otherWeaknessCount, "autre point faible", "autres points faibles")}, avec leur explication`
+        ? `${plural(otherWeaknessCount, "autre point faible", "autres points faibles")} à découvrir, avec leur explication`
         : `${plural(otherWeaknessCount, "point faible relevé", "points faibles relevés")}, avec leur explication`
     );
   }
-  if (weaknessCount > 0) {
-    reportContents.push(pick ? "La correction concrète de chaque point, y compris celui-ci" : "La correction concrète de chaque point");
-  }
-  if (preview.priorityCount > 0) {
-    reportContents.push(
-      preview.priorityCount === 1 ? "Le changement prioritaire à faire, expliqué" : `Tes ${preview.priorityCount} changements prioritaires, dans l'ordre`
-    );
-  }
+  const priorities =
+    preview.priorityCount === 0
+      ? null
+      : preview.priorityCount === 1
+        ? "le changement prioritaire à faire"
+        : `tes ${preview.priorityCount} changements prioritaires, dans l'ordre`;
+  if (weaknessCount > 0 && priorities) reportHighlights.push(`La correction de chaque point et ${priorities}`);
+  else if (weaknessCount > 0) reportHighlights.push("La correction concrète de chaque point");
+  else if (priorities) reportHighlights.push(priorities.charAt(0).toUpperCase() + priorities.slice(1));
   if (preview.suggestedTitleCount > 0) {
-    reportContents.push(plural(preview.suggestedTitleCount, "titre Airbnb prêt à copier", "titres Airbnb prêts à copier"));
+    reportHighlights.push(plural(preview.suggestedTitleCount, "titre Airbnb prêt à copier", "titres Airbnb prêts à copier"));
   }
-  if (preview.hasImprovedDescription) reportContents.push("Ta description réécrite, prête à coller");
+  if (preview.hasImprovedDescription) reportHighlights.push("Ta description réécrite, prête à coller");
   if (preview.photoCount > 0) {
-    reportContents.push(
+    reportMore.push(
       `${plural(preview.photoCount, "photo analysée", "photos analysées une par une")}${preview.hasPhotoOrder ? ", avec l'ordre recommandé" : ""}`
     );
   }
-  if (preview.actionCount > 0) reportContents.push(`Un plan d'action en ${plural(preview.actionCount, "étape", "étapes")}`);
+  if (preview.actionCount > 0) reportMore.push(`Un plan d'action en ${plural(preview.actionCount, "étape", "étapes")}`);
 
   const hesitation = clean(raw.first_hesitation);
   return {
@@ -99,6 +108,7 @@ export function buildFreeReveal(result: AnalysisResult): FreeReveal {
     hesitation: pick ? null : hesitation && hesitation.length >= 20 && !/<\/?parameter\b/.test(hesitation) ? hesitation : null,
     weaknessCount,
     otherWeaknessCount,
-    reportContents,
+    reportHighlights,
+    reportMore,
   };
 }
