@@ -245,3 +245,81 @@ body {
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------------
+   Admin dashboard (/admin/analytics only): landing language applied to dense
+   data. Classes are set by page.tsx; tables keep their own cell utilities.
+   ------------------------------------------------------------------------ */
+.admin-sub {
+  margin-top: 3rem;
+}
+.admin-h3 {
+  font-family: var(--font-display-sans), ui-sans-serif, sans-serif;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+.admin-note {
+  margin-top: 0.5rem;
+  max-width: 52rem;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted-2);
+}
+.admin-note strong {
+  color: var(--muted);
+  font-weight: 600;
+}
+.admin-caption {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.admin-kpi {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 1px 2px rgba(28, 26, 23, 0.04), 0 12px 28px -22px rgba(28, 26, 23, 0.35);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.admin-kpi:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 2px 4px rgba(28, 26, 23, 0.05), 0 18px 34px -22px rgba(28, 26, 23, 0.45);
+}
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(28, 26, 23, 0.04), 0 16px 36px -28px rgba(28, 26, 23, 0.35);
+}
+.admin-thead {
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--background), var(--background-alt));
+}
+.admin-thead th {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+.admin-table-wrap tbody tr {
+  transition: background-color 0.15s ease;
+}
+.admin-table-wrap tbody tr:hover {
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+}
+.admin-table-wrap td {
+  font-size: 13.5px;
+}
+.admin-callout {
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  padding: 0.85rem 1.1rem;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
