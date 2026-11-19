@@ -324,6 +324,86 @@ export async function getLatestUnlockedAnalysisByEmail(
   return { id: data.id as string, overall_score: data.overall_score as number };
 }
 
+/** One line of "Mes analyses" (Mon espace): names and figures only, never the report. */
+export interface AnalysisSummary {
+  id: string;
+  createdAt: string;
+  overallScore: number | null;
+  /** Airbnb title stored at analysis time, else the analysed title, else null. */
+  title: string | null;
+  city: string | null;
+  isUnlocked: boolean;
+}
+
+/** Escapes LIKE wildcards: "_" or "%" in an address must match only itself. */
+export function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+const SUMMARY_LIMIT = 200;
+
+/**
+ * Every analysis filed under `email`, newest first (Mon espace). The caller
+ * must have PROVED this email (lib/access/session.ts) -- this never checks it.
+ * Case-insensitive exact match: analyses.email is stored as typed.
+ */
+export async function listAnalysesByEmail(email: string): Promise<AnalysisSummary[]> {
+  const wanted = email.trim().toLowerCase();
+  if (!wanted) return [];
+  const summarize = (r: { id: string; created_at: string; overall_score: unknown; city: unknown; is_unlocked: unknown; listing_title?: unknown; current_title?: unknown }): AnalysisSummary => {
+    const pick = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 140) : null);
+    return {
+      id: r.id,
+      createdAt: r.created_at,
+      overallScore: typeof r.overall_score === "number" ? r.overall_score : null,
+      title: pick(r.listing_title) ?? pick(r.current_title),
+      city: pick(r.city),
+      isUnlocked: r.is_unlocked === true,
+    };
+  };
+  if (SUPABASE_CONFIGURED) {
+    // Typed as plain string: supabase-js would otherwise parse the JSON paths
+    // into a type too deep for the compiler. Only these columns are read.
+    const columns: string =
+      "id, created_at, overall_score, city, is_unlocked, email, listing_title:result_json->>listing_title, current_title:result_json->title_analysis->>current_title";
+    const { data, error } = await getSupabaseAdmin()!
+      .from("analyses")
+      .select(columns)
+      .ilike("email", escapeLikePattern(wanted))
+      .order("created_at", { ascending: false })
+      .limit(SUMMARY_LIMIT);
+    if (error) throw new Error(`analyses list failed: ${error.message}`);
+    // Belt and braces: exact match only, whatever the pattern matched.
+    const rows = (data ?? []) as unknown as (Parameters<typeof summarize>[0] & { email: unknown })[];
+    return rows
+      .filter((r) => typeof r.email === "string" && r.email.trim().toLowerCase() === wanted)
+      .map((r) => summarize(r));
+  }
+  // Local demo store: scan the record files.
+  let files: string[] = [];
+  try {
+    files = fs.readdirSync(STORE_DIR).filter((f) => f.endsWith(".json") && !f.startsWith("attempt-"));
+  } catch {
+    return [];
+  }
+  return files
+    .map((f) => readLocalRecord(f.replace(/\.json$/, "")))
+    .filter((r): r is AnalysisRecord => r !== null && typeof r.email === "string" && r.email.trim().toLowerCase() === wanted)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, SUMMARY_LIMIT)
+    .map((r) =>
+      summarize({
+        id: r.id,
+        created_at: r.created_at,
+        overall_score: r.overall_score,
+        city: r.city,
+        is_unlocked: r.is_unlocked,
+        listing_title: (r.result as unknown as Record<string, unknown>)?.listing_title,
+        current_title: r.result?.title_analysis?.current_title,
+      })
+    );
+}
+
 export async function unlockAnalysis(id: string, paymentStatus: PaymentStatus = "paid") {
   if (SUPABASE_CONFIGURED) {
     const supabase = getSupabaseAdmin()!;

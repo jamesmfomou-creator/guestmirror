@@ -33,7 +33,11 @@ const deps = {
   sendUnlockEmail: async (p: { to: string; analysisId: string }) => {
     emails.push(p.analysisId);
   },
+  sendSpaceReadyEmail: async (p: { to: string; offer: "lifetime" | "conciergerie" }) => {
+    spaceEmails.push(`${p.offer}:${p.to}`);
+  },
 };
+const spaceEmails: string[] = [];
 
 beforeAll(async () => {
   process.env.TMPDIR = fs.mkdtempSync(path.join(os.tmpdir(), "gm-webhook-test-"));
@@ -263,5 +267,53 @@ describe("safety", () => {
     const old = { id: "in_old", lines: { data: [{ price: { id: LIVE.conciergerie }, period: { start: 10, end: 20 } }] }, subscription: "sub_old" };
     expect(m.handlers.invoiceSubscriptionId(old as never)).toBe("sub_old");
     expect(m.handlers.invoiceLine(old as never)).toEqual({ priceId: LIVE.conciergerie, start: 10, end: 20 });
+  });
+});
+
+describe("Mon espace: 'Ton espace GuestMirror est prêt' (confirmed purchases only, once)", () => {
+  it("lifetime: sent once on the confirmed payment, never on a redelivery; never for a one-time report", async () => {
+    const id = await report("space-life@example.com");
+    const s = paymentSession({ offer: "lifetime", analysisId: id, email: "space-life@example.com", pi: "pi_space_life" });
+    await handle(event("checkout.session.completed", s));
+    await handle(event("checkout.session.completed", s)); // redelivery
+    expect(spaceEmails.filter((e) => e === "lifetime:space-life@example.com")).toHaveLength(1);
+
+    const id2 = await report("space-one@example.com");
+    await handle(event("checkout.session.completed", paymentSession({ offer: "one_time", analysisId: id2, email: "space-one@example.com" })));
+    expect(spaceEmails.some((e) => e.endsWith(":space-one@example.com"))).toBe(false);
+  });
+
+  it("lifetime with a delayed payment: nothing until it succeeds", async () => {
+    const id = await report("space-late@example.com");
+    const s = paymentSession({ offer: "lifetime", analysisId: id, email: "space-late@example.com", pi: "pi_space_late", paid: false });
+    await handle(event("checkout.session.completed", s));
+    expect(spaceEmails.some((e) => e.endsWith(":space-late@example.com"))).toBe(false);
+    await handle(event("checkout.session.async_payment_failed", s));
+    expect(spaceEmails.some((e) => e.endsWith(":space-late@example.com"))).toBe(false);
+  });
+
+  it("Conciergerie: sent with the first paid invoice only, not with renewals", async () => {
+    const start = nowS() - 60;
+    const before = spaceEmails.filter((e) => e.startsWith("conciergerie:")).length;
+    const id = await report("conciergerie@example.com");
+    await handle(event("checkout.session.completed", subSession({ analysisId: id, sub: "sub_SPACE" })));
+    expect(spaceEmails.filter((e) => e.startsWith("conciergerie:")).length).toBe(before);
+    await handle(event("invoice.paid", invoice({ sub: "sub_SPACE", start, end: start + 30 * 86400, reason: "subscription_create" })));
+    expect(spaceEmails.filter((e) => e.startsWith("conciergerie:")).length).toBe(before + 1);
+    await handle(event("invoice.paid", invoice({ sub: "sub_SPACE", start: start + 30 * 86400, end: start + 60 * 86400 })));
+    expect(spaceEmails.filter((e) => e.startsWith("conciergerie:")).length).toBe(before + 1);
+  });
+});
+
+describe("Mon espace: listAnalysesByEmail", () => {
+  it("exact address only (case-insensitive); '_' and '%' are not wildcards", async () => {
+    await report("Owner_A@Example.com");
+    await report("ownerXa@example.com");
+    await report("other@example.com");
+    const mine = await m.store.listAnalysesByEmail("owner_a@example.com");
+    expect(mine).toHaveLength(1);
+    expect(Object.keys(mine[0]).sort()).toEqual(["city", "createdAt", "id", "isUnlocked", "overallScore", "title"]);
+    expect(await m.store.listAnalysesByEmail("%@example.com")).toHaveLength(0);
+    expect(m.store.escapeLikePattern("a_b%c\\d")).toBe("a\\_b\\%c\\\\d");
   });
 });

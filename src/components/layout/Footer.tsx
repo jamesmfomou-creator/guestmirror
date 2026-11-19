@@ -15,6 +15,7 @@ export function Footer() {
             <Link href="/analyze" className="transition-colors hover:text-foreground">Analyser mon annonce</Link>
             <Link href="/compare" className="transition-colors hover:text-foreground">Comparer</Link>
             <Link href="/pricing" className="transition-colors hover:text-foreground">Tarifs</Link>
+            <Link href="/espace" className="transition-colors hover:text-foreground">Mon espace</Link>
             <Link href="/privacy" className="transition-colors hover:text-foreground">Confidentialité</Link>
             <Link href="/terms" className="transition-colors hover:text-foreground">Conditions</Link>
           </nav>

@@ -54,6 +54,12 @@ export interface WebhookDeps {
     metadata: Record<string, unknown>;
   }) => Promise<void>;
   sendUnlockEmail: (params: { to: string; analysisId: string }) => Promise<void>;
+  /**
+   * "Ton espace GuestMirror est prêt": once per lifetime purchase (first
+   * recording of its payment) and per Conciergerie subscription (its first
+   * paid invoice). Optional: tests and older callers can omit it.
+   */
+  sendSpaceReadyEmail?: (params: { to: string; offer: "lifetime" | "conciergerie" }) => Promise<void>;
   /** Legacy Plus checkout needs the subscription's period end from Stripe. */
   retrieveSubscription?: (id: string) => Promise<Stripe.Subscription>;
   /**
@@ -241,6 +247,16 @@ async function fulfilPaidSession(session: Stripe.Checkout.Session, info: NonNull
       if (to) await deps.sendUnlockEmail({ to, analysisId });
     } catch {
       // the report is unlocked regardless of the notification email
+    }
+  }
+  // Lifetime: how to reach Mon espace. isNew = first recording of this
+  // payment, so a redelivered event never sends it twice. Sent to the
+  // checkout address, the one the lifetime rights are filed under.
+  if (isNew && isLifetime && email && deps.sendSpaceReadyEmail) {
+    try {
+      await deps.sendSpaceReadyEmail({ to: email, offer: "lifetime" });
+    } catch {
+      // the rights are granted regardless of the notification email
     }
   }
   return isLifetime ? "lifetime_granted" : "report_unlocked";
@@ -522,6 +538,15 @@ async function onInvoicePaid(invoice: Stripe.Invoice, deps: WebhookDeps): Promis
     await deps.track({ eventName: "subscription_renewed", email: updated.email, dedupeKey, metadata: renewalMetadata("conciergerie") });
   }
   await unlockPendingReport(updated, deps);
+  // First paid invoice of the subscription: how to reach Mon espace. One such
+  // invoice per subscription, and each Stripe event is processed once.
+  if (invoice.billing_reason === "subscription_create" && deps.sendSpaceReadyEmail) {
+    try {
+      await deps.sendSpaceReadyEmail({ to: updated.email, offer: "conciergerie" });
+    } catch {
+      // the rights are granted regardless of the notification email
+    }
+  }
   return "conciergerie_period_opened";
 }
 

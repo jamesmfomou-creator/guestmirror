@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getAnalysis } from "@/lib/store";
+import { getAnalysis, listAnalysesByEmail } from "@/lib/store";
+import { getSubscriptionByEmail } from "@/lib/subscriptions";
 import { getAccessForEmail } from "@/lib/access/reportAccess";
 import { currentIdentity, requestAccessCode } from "@/lib/access/session";
 import { maskEmail } from "@/lib/access/maskEmail";
-import { normalizeEmail } from "@/lib/access/accessStore";
+import { listGrantsByEmail, normalizeEmail } from "@/lib/access/accessStore";
 import { isDirectLinkReport } from "@/lib/contentLink";
 import { SUPABASE_CONFIGURED } from "@/lib/env";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -23,6 +24,9 @@ import { hashIdentifier } from "@/lib/serverSecret";
 //  - "continue": a visitor blocked by the per-IP abuse limit (busy shared
 //    network) proves they own the email they just typed; the IP counter then
 //    stops applying to them (the email limit still does).
+//  - "account": login to Mon espace (/espace) with a typed address. Sent only
+//    when that address has already used GuestMirror (an analysis, an offer);
+//    the answer is the same either way, so nobody learns who is a customer.
 //
 // Every address gets at most MAX_CODES_PER_HOUR codes (lib/access/session.ts);
 // "continue", the only use with a typed address, is also capped per client
@@ -30,7 +34,7 @@ import { hashIdentifier } from "@/lib/serverSecret";
 
 const bodySchema = z.union([
   z.object({ analysisId: z.string().uuid(), purpose: z.enum(["rights", "ownership"]).optional() }),
-  z.object({ email: z.string().trim().email().max(254), purpose: z.literal("continue") }),
+  z.object({ email: z.string().trim().email().max(254), purpose: z.enum(["continue", "account"]) }),
 ]);
 const NO_STORE = { "Cache-Control": "no-store" };
 const CONTINUE_CODES_PER_IP_HOUR = 10;
@@ -84,6 +88,20 @@ async function continueAllowedFromIp(req: NextRequest): Promise<boolean> {
   }
 }
 
+/** An analysis, a grant (Conciergerie / lifetime) or a legacy subscription under this address. */
+async function hasUsedGuestMirror(email: string): Promise<boolean> {
+  try {
+    const [analyses, grants, legacy] = await Promise.all([
+      listAnalysesByEmail(email),
+      listGrantsByEmail(email),
+      getSubscriptionByEmail(email),
+    ]);
+    return analyses.length > 0 || grants.length > 0 || legacy !== null;
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(req: NextRequest) {
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return json({ ok: false, error: "Requête invalide." }, 400);
@@ -96,6 +114,10 @@ export async function POST(req: NextRequest) {
     if (identity?.email === email) return json({ ok: true, alreadyVerified: true });
     if (!(await continueAllowedFromIp(req))) {
       return json({ ok: false, error: "Trop de codes demandés depuis ce réseau. Réessaie dans une heure." }, 429);
+    }
+    if (body.purpose === "account" && !(await hasUsedGuestMirror(email))) {
+      // Same answer as a real send: never reveal whether an address is a customer.
+      return json({ ok: true, sentTo: maskEmail(email) });
     }
     return send(email);
   }

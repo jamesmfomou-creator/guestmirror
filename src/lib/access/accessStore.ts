@@ -852,6 +852,18 @@ export async function insertSession(
   writeDb(db);
 }
 
+/** Revokes a session (logout): the cookie's token stops working everywhere at once. */
+export async function deleteSession(tokenHash: string): Promise<void> {
+  if (SUPABASE_CONFIGURED) {
+    const { error } = await getSupabaseAdmin()!.from("access_sessions").delete().eq("token_hash", tokenHash);
+    if (error) throw new Error(`access_sessions delete failed: ${error.message}`);
+    return;
+  }
+  const db = readDb();
+  db.sessions = db.sessions.filter((s) => s.token_hash !== tokenHash);
+  writeDb(db);
+}
+
 export interface SessionIdentity {
   email: string;
   /** Non-null: only the rights bought in this checkout session are usable. */
