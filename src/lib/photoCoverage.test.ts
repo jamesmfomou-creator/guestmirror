@@ -6,7 +6,6 @@ import {
   GALLERY_COUNT_VERIFIED,
   buildUrlCoverage,
   coverageNote,
-  coveragePromptBlock,
   describeSentPhotos,
   hedgeUnverifiedAbsences,
   isUnverifiedAbsenceClaim,
