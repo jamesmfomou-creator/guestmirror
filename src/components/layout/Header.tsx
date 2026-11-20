@@ -6,13 +6,16 @@ import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { track } from "@/lib/analytics";
+import { isLandingPath } from "@/lib/landingPath";
 import { Logo } from "./Logo";
 
 // Floating glass bar. On the landing page the links scroll to its sections;
 // elsewhere they go to the matching pages.
 export function Header() {
   const pathname = usePathname();
-  const onLanding = pathname === "/";
+  // Not `pathname === "/"`: an ISR regeneration of the landing renders it as
+  // "/index" on the server (lib/landingPath.ts), which broke hydration.
+  const onLanding = isLandingPath(pathname);
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
