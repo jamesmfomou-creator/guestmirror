@@ -81,6 +81,9 @@ export interface AnalysisResult {
   // submissions only, set server side in api/analyze -- never produced by
   // the model). Absent on older reports and screenshot submissions.
   listing_title?: string | null;
+  // Which photos the AI actually saw (lib/photoCoverage.ts), set server side
+  // in api/analyze -- never produced by the model. Absent on older reports.
+  photo_coverage?: import("@/lib/photoCoverage").PhotoCoverage | null;
 }
 
 export type PaymentStatus = "none" | "pending" | "paid";

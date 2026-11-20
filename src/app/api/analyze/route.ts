@@ -13,6 +13,7 @@ import { DEMO_MODE } from "@/lib/env";
 import { DEMO_IMAGES, DEMO_RESULT, DEMO_RESULT_AFTER } from "@/lib/demo-data";
 import { extractAirbnbListing, downloadImageAsBase64 } from "@/lib/airbnbExtract";
 import { optimizeImages } from "@/lib/imageOptimize";
+import { buildUrlCoverage, screenshotCoverage, type PhotoCoverage } from "@/lib/photoCoverage";
 import { isEligibleForLegacyRetest } from "@/lib/access/accessStore";
 import { editTokenFor } from "@/lib/analysisEditToken";
 import { checkAnalyzeRateLimit, rateIdentity } from "@/lib/analyzeRateLimit";
@@ -227,6 +228,10 @@ export async function POST(req: NextRequest) {
   let effectiveCity = data.city || null;
   let effectiveGuestCapacity = data.guest_capacity || null;
   let urlExtractionDurationMs: number | null = null;
+  // What the AI will actually see of the photos (lib/photoCoverage.ts).
+  // Screenshots by default; replaced below for a link import.
+  let photoCoverage: PhotoCoverage = screenshotCoverage(data.images.length, Boolean(data.listing_url));
+  let photoDownloadFailures = 0;
 
   try {
     // Listing URL, no user-provided images: the URL used to be passed to the
@@ -266,6 +271,13 @@ export async function POST(req: NextRequest) {
       }
 
       effectiveImages = usable;
+      // Gallery size + which selected photos really arrived (a failed
+      // download leaves a gap: the AI is told the exact positions it sees).
+      photoCoverage = buildUrlCoverage(extraction.data.galleryImageCount, downloaded.map((img) => img !== null));
+      photoDownloadFailures = downloaded.length - usable.length;
+      console.log(
+        `[airbnb] photo_coverage gallery_total=${photoCoverage.galleryTotal ?? "unknown"} selected=${downloaded.length} sent=${photoCoverage.sent} complete=${photoCoverage.complete} ${attemptTag}`
+      );
       extractedListingText = {
         title: extraction.data.title,
         description: extraction.data.description,
@@ -376,6 +388,7 @@ export async function POST(req: NextRequest) {
       input,
       extractedListingText,
       attemptId,
+      photoCoverage,
     }).then((r) => {
       aiCallDurationMs = Date.now() - aiStartedAt;
       return r;
@@ -391,10 +404,10 @@ export async function POST(req: NextRequest) {
       return r;
     });
 
-    let result, aiInputTokens, aiOutputTokens, parsingDurationMs, retryCount, stopReason, model, attemptOutcomes;
+    let result, aiInputTokens, aiOutputTokens, parsingDurationMs, retryCount, stopReason, model, attemptOutcomes, absenceClaimsHedged;
     let storedImages: string[];
     try {
-      [{ result, aiInputTokens, aiOutputTokens, parsingDurationMs, retryCount, stopReason, model, attemptOutcomes }, storedImages] =
+      [{ result, aiInputTokens, aiOutputTokens, parsingDurationMs, retryCount, stopReason, model, attemptOutcomes, absenceClaimsHedged }, storedImages] =
         await Promise.all([aiPromise, storagePromise]);
     } catch (err) {
       // Preserve analyzeListing's own AnalysisError (code, message) when
@@ -416,6 +429,9 @@ export async function POST(req: NextRequest) {
     // Added after the AI call: the model never sees or produces this field.
     const extractedTitle = extractedListingText?.title?.replace(/\s+/g, " ").trim() || null;
     if (extractedTitle) result = { ...result, listing_title: extractedTitle };
+    // Kept with the report so the result page can say which photos were
+    // analysed (never produced by the model; absent on older reports).
+    result = { ...result, photo_coverage: photoCoverage };
 
     phase = "database";
     const dbStartedAt = Date.now();
@@ -455,6 +471,13 @@ export async function POST(req: NextRequest) {
       ai_input_tokens: aiInputTokens,
       ai_output_tokens: aiOutputTokens,
       image_count: effectiveImages.length,
+      // Photo pipeline reliability (lib/photoCoverage.ts): no image, no URL.
+      photo_source: photoCoverage.source,
+      photos_available: photoCoverage.galleryTotal,
+      photos_sent: photoCoverage.sent,
+      photo_download_failures: photoDownloadFailures,
+      gallery_complete: photoCoverage.complete,
+      absence_claims_hedged: absenceClaimsHedged,
       url_extraction_duration_ms: urlExtractionDurationMs,
       image_preprocessing_duration_ms: imagePreprocessingDurationMs,
       ai_call_duration_ms: aiCallDurationMs,

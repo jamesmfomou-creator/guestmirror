@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { coverageNote } from "@/lib/photoCoverage";
 import { notFound } from "next/navigation";
 import { getAnalysis } from "@/lib/store";
 import { resolveImageUrls } from "@/lib/images";
@@ -196,6 +197,7 @@ export default async function ResultPage({
         city={analysis.city}
         goalReminder={personal?.reminder ?? null}
         goalExplanation={personal ? goalExplanation(personal, unlocked) : null}
+        coverageNote={coverageNote(analysis.result.photo_coverage)}
       />
       {/* No goal given during the onboarding: ask once, discreetly, to the
           browser allowed to change this analysis. Never on the content link. */}

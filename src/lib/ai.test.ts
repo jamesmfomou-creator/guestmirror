@@ -293,7 +293,8 @@ describe("buildAnalysisRequest", () => {
     expect(text).toContain("Nombre de voyageurs : 4");
     expect(text).toContain("Titre actuel de l'annonce");
     expect(text).toContain("Nombre de chambres annoncé par Airbnb (donnée structurée fiable) : 2");
-    expect(text).toContain("Voici 2 capture(s) d'écran");
+    // Photo coverage (lib/photoCoverage.ts): no coverage passed = screenshots of unknown completeness.
+    expect(text).toContain("COUVERTURE DES PHOTOS : 2 captures d'écran importées par le propriétaire");
     expect((content[2] as Anthropic.ImageBlockParam).source).toEqual({ type: "base64", media_type: "image/png", data: "BBBB" });
   });
 
