@@ -12,6 +12,7 @@ import { DEMO_MODE } from "@/lib/env";
 import { DEMO_RESULT } from "@/lib/demo-data";
 import { BRAND_NAME } from "@/lib/brand";
 import { AIRBNB_TITLE_MAX_LENGTH, sanitizeAirbnbTitles, titleCharCount } from "@/lib/titles";
+import { coveragePromptBlock, hedgeUnverifiedAbsences, screenshotCoverage, type PhotoCoverage } from "@/lib/photoCoverage";
 import { aiResultSchema, describeShapeIssues } from "@/lib/resultShape";
 import { describeMalformation, repairLeakedToolInput, type RepairResult } from "@/lib/aiRepair";
 
@@ -302,6 +303,15 @@ FIABILITÉ FACTUELLE (TRÈS IMPORTANT) :
 - Si tu signales une incohérence, cite précisément et explicitement les deux éléments contradictoires que tu compares (ex: "le titre indique 6 voyageurs mais la description ne mentionne que 2 lits doubles"). Une incohérence qui ne cite pas ces deux éléments précis ne doit jamais être écrite. Si tu ne peux pas citer deux éléments réellement contradictoires, n'invente pas d'incohérence : n'en mentionne aucune.
 - Si une information est absente ou ambiguë (nombre de lits, de chambres, équipements, etc.), dis-le explicitement plutôt que de deviner (ex: "Je ne vois pas clairement combien de chambres compte ce logement à partir de ce qui est fourni"). Une estimation visuelle incertaine ne doit jamais être présentée comme un fait établi.
 
+PHOTOS REÇUES ET GALERIE (TRÈS IMPORTANT) :
+- Le message indique la COUVERTURE DES PHOTOS : galerie complète, galerie partielle, ou captures importées. Respecte-la strictement.
+- Ne transforme JAMAIS une absence d'information en défaut confirmé. Si la galerie est partielle ou s'il s'agit de captures, n'écris jamais qu'un espace (chambre, salle de bain, cuisine, extérieur, piscine…) est absent de l'annonce ou "n'est pas montré" : il peut figurer plus loin dans la galerie.
+  Interdit : "Ton annonce ne montre pas la chambre." / Attendu : "La chambre n'apparaît pas dans les 5 premières photos que j'ai reçues : vérifie qu'elle est bien visible dans ta galerie, et assez tôt."
+- Une telle remarque reste secondaire : jamais en "top_priorities[0]", jamais en sévérité "high", et elle ne doit pas faire baisser les scores. Note les photos uniquement sur ce que tu vois réellement.
+- Tu peux, en revanche, juger l'ORDRE des photos reçues : ce sont les premières que découvre le voyageur, et ce qui n'y apparaît pas arrive forcément plus tard.
+- Seulement si la galerie est indiquée COMPLÈTE, tu peux constater qu'un espace n'est montré dans aucune photo.
+- "photo_analysis" et "recommended_photo_order" ne portent que sur les photos reçues, numérotées dans l'ordre de réception.
+
 SPÉCIFICITÉ DES RECOMMANDATIONS :
 - Pour "top_priorities" et pour les "weaknesses[].recommendation" les plus importantes, ancre chaque recommandation dans une observation spécifique à CETTE annonce (un élément précis d'une photo, du titre ou de la description), explique pourquoi cela peut faire hésiter un voyageur, puis donne une action précise -- si possible avec un exemple concret adapté à cette annonce. N'écris jamais une recommandation qui pourrait s'appliquer telle quelle à n'importe quelle autre annonce Airbnb.
   Interdit (trop générique) : "Améliore tes photos." / Attendu : "Ta photo de couverture montre le salon alors que la terrasse est l'élément le plus différenciant visible dans la galerie ; teste une photo extérieure plus lumineuse en première position pour que l'atout du logement soit compris immédiatement."
@@ -556,6 +566,9 @@ export interface AnalyzeListingParams {
   // log correlation between a specific user-visible attempt and the raw
   // model call(s) it triggered. Never persisted, never sent to Anthropic.
   attemptId?: string | null;
+  // Which photos the model receives (lib/photoCoverage.ts). Absent = treated
+  // as screenshots of unknown completeness (compare, benchmark, old callers).
+  photoCoverage?: PhotoCoverage | null;
 }
 
 // Everything about the request that an experiment may vary. Production uses
@@ -588,7 +601,7 @@ export const PRODUCTION_REQUEST_OPTIONS: AnalysisRequestOptions = {
 };
 
 export function buildAnalysisRequest(
-  params: Pick<AnalyzeListingParams, "images" | "input" | "extractedListingText">,
+  params: Pick<AnalyzeListingParams, "images" | "input" | "extractedListingText" | "photoCoverage">,
   options: AnalysisRequestOptions = PRODUCTION_REQUEST_OPTIONS
 ): Anthropic.MessageCreateParamsNonStreaming {
   const contextLines = [
@@ -622,7 +635,7 @@ export function buildAnalysisRequest(
       type: "text",
       text: `Voici les informations fournies par le propriétaire :\n${
         contextLines.join("\n") || "(aucune information complémentaire fournie)"
-      }\n\nVoici ${params.images.length} capture(s) d'écran de l'annonce, dans l'ordre où elles apparaissent. Analyse la présentation de cette annonce et renvoie un ${BRAND_NAME} complet via l'outil ${ANALYSIS_TOOL_NAME}.`,
+      }\n\n${coveragePromptBlock(params.photoCoverage ?? screenshotCoverage(params.images.length))}\n\nAnalyse la présentation de cette annonce et renvoie un ${BRAND_NAME} complet via l'outil ${ANALYSIS_TOOL_NAME}.`,
     },
     ...params.images.map(
       (img): Anthropic.ImageBlockParam => ({
@@ -663,6 +676,8 @@ export async function analyzeListing(params: AnalyzeListingParams): Promise<{
   // attemptOutcome() of every model call, in order (["valid"],
   // ["repaired"], ["invalid:ai_schema_mismatch", "valid"], ...).
   attemptOutcomes: string[];
+  // Unverified absence claims rewritten as "à vérifier" (lib/photoCoverage.ts).
+  absenceClaimsHedged: number;
 }> {
   if (DEMO_MODE) {
     return {
@@ -674,6 +689,7 @@ export async function analyzeListing(params: AnalyzeListingParams): Promise<{
       stopReason: null,
       model: null,
       attemptOutcomes: [],
+      absenceClaimsHedged: 0,
     };
   }
 
@@ -755,7 +771,20 @@ export async function analyzeListing(params: AnalyzeListingParams): Promise<{
     }
     console.log(`[ai] attempt_outcomes ${logTag} outcomes=${attemptOutcomes.join(",")} next=done`);
 
-    const input = stripUnsupportedInconsistencyClaims(validation.input, sourceNumbers, logTag);
+    const stripped = stripUnsupportedInconsistencyClaims(validation.input, sourceNumbers, logTag);
+    // Backstop for the photo coverage rule: never let an absence the model
+    // could not verify read as a confirmed defect. Fail-open like the filters
+    // around it -- this must never become a new way for an analysis to fail.
+    let input = stripped;
+    let absenceClaimsHedged = 0;
+    try {
+      const hedged = hedgeUnverifiedAbsences(stripped, params.photoCoverage ?? screenshotCoverage(params.images.length));
+      input = hedged.result;
+      absenceClaimsHedged = hedged.hedged;
+      if (absenceClaimsHedged > 0) console.warn(`[ai] hedged_unverified_absence_claim ${logTag} count=${absenceClaimsHedged}`);
+    } catch (err) {
+      console.error(`[ai] hedgeUnverifiedAbsences failed ${logTag}, returning input unchanged:`, err);
+    }
 
     // The schema's maxLength/the prompt's instruction steer the model but
     // aren't a hard guarantee (same reasoning as the overall_score check
@@ -797,6 +826,7 @@ export async function analyzeListing(params: AnalyzeListingParams): Promise<{
       stopReason: response.stop_reason,
       model: response.model ?? MODEL,
       attemptOutcomes: [...attemptOutcomes],
+      absenceClaimsHedged,
     };
   }
 

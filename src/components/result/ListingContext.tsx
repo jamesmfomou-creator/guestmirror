@@ -1,4 +1,4 @@
-import { MapPin, Target } from "lucide-react";
+import { Images, MapPin, Target } from "lucide-react";
 
 // Top of the result page: which listing this diagnostic is about (its real
 // cover photo, its real title, its city when known) and the visitor's goal,
@@ -16,6 +16,7 @@ export function ListingContext({
   city,
   goalReminder,
   goalExplanation,
+  coverageNote = null,
   className = "",
 }: {
   /** null = no photo here (variant B already shows the cover above). */
@@ -24,6 +25,8 @@ export function ListingContext({
   city: string | null;
   goalReminder: string | null;
   goalExplanation: string | null;
+  /** Which photos the AI saw (lib/photoCoverage.ts coverageNote); null on older reports. */
+  coverageNote?: string | null;
   className?: string;
 }) {
   const hasListing = Boolean(photoUrl || title);
@@ -50,6 +53,12 @@ export function ListingContext({
               <p className="mt-1 flex items-center gap-1 text-[13px] text-muted">
                 <MapPin aria-hidden size={13} className="shrink-0" />
                 {city}
+              </p>
+            )}
+            {coverageNote && (
+              <p className="mt-1 flex items-start gap-1 text-[12.5px] leading-snug text-muted-2">
+                <Images aria-hidden size={13} className="mt-[2px] shrink-0" />
+                {coverageNote}
               </p>
             )}
           </div>

@@ -11,7 +11,14 @@ import { isAirbnbUrl } from "@/lib/airbnbUrl";
 export interface AirbnbListingData {
   title: string | null;
   description: string | null;
+  /** Photos selected for the analysis: the first MAX_ANALYZED_PHOTOS of the gallery, in gallery order. */
   imageUrls: string[];
+  /**
+   * Photos the listing publishes in its public data (JSON-LD), deduplicated
+   * -- what imageUrls was cut from. null when only the Open Graph cover was
+   * available (gallery size unknown). See lib/photoCoverage.ts.
+   */
+  galleryImageCount: number | null;
   city: string | null;
   guestCapacity: string | null;
   // Structured counts Airbnb itself publishes (see og:title, e.g. "Villa ·
@@ -35,7 +42,11 @@ export type AirbnbExtractResult =
     };
 
 const FETCH_TIMEOUT_MS = 8_000;
-const MAX_EXTRACTED_IMAGES = 5;
+// Photos sent to the model for a link import: the first ones of the gallery,
+// in gallery order (what a traveller sees first). The AI is told it only
+// sees these and how many the gallery publishes (lib/photoCoverage.ts), so it
+// never reproaches a room that is simply further down the gallery.
+export const MAX_ANALYZED_PHOTOS = 5;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
 
@@ -70,7 +81,7 @@ function parseRoomCounts(html: string): { bedroomCount: number | null; bedCount:
   };
 }
 
-function parseAirbnbHtml(html: string): AirbnbListingData | null {
+export function parseAirbnbHtml(html: string): AirbnbListingData | null {
   const roomCounts = parseRoomCounts(html);
   // Prefer JSON-LD: richer (full description, several photos, capacity,
   // city) than Open Graph tags, and just as public/intended-for-sharing.
@@ -80,13 +91,17 @@ function parseAirbnbHtml(html: string): AirbnbListingData | null {
       const parsed = JSON.parse(match[1]);
       const images: unknown = parsed?.image;
       if (!Array.isArray(images) || images.length === 0) continue;
-      const imageUrls = images.filter((u): u is string => typeof u === "string").slice(0, MAX_EXTRACTED_IMAGES);
+      // Whole gallery first (strings only, duplicates removed, order kept),
+      // then the selection -- the gallery size is no longer thrown away.
+      const gallery = [...new Set(images.filter((u): u is string => typeof u === "string" && /^https?:\/\//.test(u.trim())).map((u) => u.trim()))];
+      const imageUrls = gallery.slice(0, MAX_ANALYZED_PHOTOS);
       if (imageUrls.length === 0) continue;
       const occupancy = parsed?.containsPlace?.occupancy?.value;
       return {
         title: typeof parsed.name === "string" ? parsed.name : null,
         description: typeof parsed.description === "string" ? parsed.description : null,
         imageUrls,
+        galleryImageCount: gallery.length,
         city: typeof parsed?.address?.addressLocality === "string" ? parsed.address.addressLocality : null,
         guestCapacity: typeof occupancy === "number" ? String(occupancy) : null,
         ...roomCounts,
@@ -105,6 +120,8 @@ function parseAirbnbHtml(html: string): AirbnbListingData | null {
     title: ogTitle ? decodeHtmlEntities(ogTitle) : null,
     description: ogDescription ? decodeHtmlEntities(ogDescription) : null,
     imageUrls: [decodeHtmlEntities(ogImage)],
+    // Open Graph only exposes the cover: the real gallery size is unknown.
+    galleryImageCount: null,
     city: null,
     guestCapacity: null,
     ...roomCounts,
