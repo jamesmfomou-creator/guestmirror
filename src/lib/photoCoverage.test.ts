@@ -206,3 +206,24 @@ describe("case 8: compatibility with existing reports", () => {
     expect(coverageNote(buildUrlCoverage(4, [true, true, true, true], true))).toBe("Analyse réalisée sur les 4 photos de ta galerie, plus le titre et la description.");
   });
 });
+
+describe("guard: many ways of saying a room is absent (real-test follow-up)", () => {
+  const SHOULD_FLAG = [
+    "Ton annonce ne montre pas la chambre", "Tu ne montres pas ta chambre", "Aucune photo de la salle de bain", "On ne voit jamais la chambre",
+    "La chambre n'est jamais montrée", "La chambre n'est pas montrée", "Il manque une photo de la chambre", "Pas une seule image de la cuisine",
+    "La salle de bain est absente de la galerie", "Aucune chambre n'est visible", "La galerie ne contient aucune photo de chambre",
+    "Impossible de voir la chambre dans l'annonce", "Le voyageur ne sait pas à quoi ressemble la chambre", "Zéro photo de l'extérieur",
+    "Aucun visuel de la salle d'eau", "La chambre reste invisible", "Il n'y a aucune photo de la chambre", "La chambre n'apparaît sur aucune photo",
+    "Rien ne montre l'extérieur ou le quartier", "La cuisine est absente des photos", "Pas de photo de chambre", "Les toilettes ne figurent nulle part",
+  ];
+  const SHOULD_NOT_FLAG = [
+    "La chambre n'apparaît pas dans les 5 premières photos que j'ai reçues", "Dans les photos reçues, je ne vois pas la chambre : vérifie qu'elle est dans ta galerie",
+    "La photo de la chambre est sombre", "Le titre ne précise pas le nombre de chambres", "La cuisine semble petite", "Mets la photo de la terrasse en première position",
+    "La salle de bain est moderne mais mal cadrée", "Aucune photo n'est floue", "Ta chambre n'est pas assez lumineuse", "La salle de bain n'est pas mise en valeur",
+    "Les photos reçues ne montrent pas la chambre", "Sans photo de la terrasse en couverture, l'atout passe inaperçu", "La terrasse n'est pas assez mise en avant",
+    "Le salon n'est pas rangé", "La vue n'est pas exploitée en couverture",
+  ];
+  it.each(SHOULD_FLAG)("flags: %s", (t) => expect(isUnverifiedAbsenceClaim(t)).toBe(true));
+  it.each(SHOULD_NOT_FLAG)("leaves alone: %s", (t) => expect(isUnverifiedAbsenceClaim(t)).toBe(false));
+});
+

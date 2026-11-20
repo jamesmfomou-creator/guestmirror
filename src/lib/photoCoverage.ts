@@ -122,11 +122,19 @@ export function coverageNote(c: PhotoCoverage | null | undefined): string | null
 const SPACE = "(chambres?|salles? de bains?|salles? d.eau|toilettes|wc|cuisines?|coin cuisine|extérieurs?|jardins?|terrasses?|balcons?|piscines?|spa|jacuzzi|séjour|salon|façade|entrée|espaces?|pièces?|lits?|couchages?|vue d.ensemble|quartier|parking|dressing|bureau)";
 const ABSENCE = new RegExp(
   [
-    `(aucune?|pas de|pas une seule|absence (de|d.)|manque (de |d.)?|sans|ni) (photo|image|vue|visuel|cliché)s?[^.]{0,40}${SPACE}`,
-    `(ne|n.)\\s?(montre|montrent|présente|présentent|voit|vois|apparai[sî]t|apparaissent|figure|figurent)[^.]{0,20}(pas|aucune?|rien|nulle part|jamais)[^.]{0,40}${SPACE}`,
-    `${SPACE}[^.]{0,40}(n.est|ne sont|n.apparai[sî]t|n.apparaissent|ne figure|ne figurent)[^.]{0,12}(pas|jamais|nulle part)`,
+    // "aucune photo de la chambre", "il manque une photo de…", "zéro photo de l'extérieur"
+    `(aucune?|pas de|pas une seule|zéro|absence (de|d.)|(il )?manquen?t? (de |d.|une? |des )?|ni)\\s*(photos?|images?|vues?|visuels?|clichés?)[^.]{0,40}${SPACE}`,
+    // "aucune chambre n'est visible"
+    `aucune? ${SPACE}[^.]{0,15}(n.est|ne sont) (visibles?|montrée?s?|présentes?|photographiée?s?)`,
+    // "ton annonce ne montre pas la chambre", "la galerie ne contient aucune photo de chambre"
+    `(ne|n.)\\s?(montres?|montrent|présentes?|présentent|voit|vois|appara[iî]t|apparaissent|figure|figurent|contient|contiennent|comporte|comportent|inclut|incluent|propose|proposent|dévoile)[^.]{0,20}(pas|aucune?|rien|nulle part|jamais)[^.]{0,40}${SPACE}`,
+    // "la chambre n'est jamais montrée" -- but NOT "n'est pas assez lumineuse / mise en valeur / rangé"
+    `${SPACE}[^.]{0,40}(n.est|ne sont) (pas|jamais) (montrée?s?|visibles?|présentes?|photographiée?s?|représentée?s?)`,
+    // "la chambre n'apparaît sur aucune photo", "les toilettes ne figurent nulle part"
+    `${SPACE}[^.]{0,40}(n.appara[iî]t|n.apparaissent|ne figure|ne figurent)[^.]{0,6}(pas|jamais|nulle part|sur aucune|dans aucune)`,
     `${SPACE}[^.]{0,25}(absente?s?|manquante?s?|invisibles?|non montrée?s?|pas montrée?s?)`,
-    `(rien ne montre|aucune trace|on ne voit (pas|aucune?|jamais))[^.]{0,40}${SPACE}`,
+    // "rien ne montre l'extérieur", "impossible de voir la chambre", "ne sait pas à quoi ressemble la chambre"
+    `(rien ne montre|aucune trace|on ne voit (pas|aucune?|jamais)|impossible de (voir|savoir)|ne (sait|sais|savons|peut|peux) pas (voir|savoir|à quoi))[^.]{0,40}${SPACE}`,
   ].join("|"),
   "i"
 );
