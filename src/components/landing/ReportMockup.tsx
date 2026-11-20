@@ -23,7 +23,7 @@ export function ReportMockup() {
             }
             description="Découvre ce qui peut faire hésiter les voyageurs avant même qu'ils réservent."
           />
-          <Reveal delay={0.15} className="mt-10 flex flex-col items-start">
+          <Reveal delay={0.15} className="mt-10 flex flex-col items-center text-center lg:items-start lg:text-left">
             <CtaTrackedButton href="/analyze" size="lg" className="btn-sheen group gap-2" ctaLocation="report_preview">
               Analyser mon annonce Airbnb
               <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-0.5" />

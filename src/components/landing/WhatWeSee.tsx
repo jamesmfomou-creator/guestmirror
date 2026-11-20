@@ -16,7 +16,8 @@ export function WhatWeSee() {
   return (
     <section className="pb-24 sm:pb-32">
       <div className="mx-auto max-w-6xl px-5">
-        <Reveal className="flex flex-col justify-between gap-4 border-t border-border/70 pt-14 sm:flex-row sm:items-end">
+        {/* Centred below lg (phones, tablets), title / text side by side from lg. */}
+        <Reveal className="flex flex-col items-center justify-between gap-4 border-t border-border/70 pt-14 text-center lg:flex-row lg:items-end lg:text-left">
           <h3 className="text-display text-[2.2rem] text-foreground sm:text-[2.8rem] [&_em]:text-accent">
             Ce que {BRAND_NAME} <em>regarde</em>
           </h3>
