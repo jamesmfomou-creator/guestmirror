@@ -213,3 +213,25 @@ export function hedgeUnverifiedAbsences<T extends Partial<AnalysisResult>>(resul
     hedged,
   };
 }
+
+/**
+ * Whether the guard above may rewrite a report. OFF since 2026-11-20: a replay
+ * on the last 100 production reports showed it also demoted legitimate
+ * critiques (cover photo, description, framing -- free point changed on
+ * 10/100, priority #1 on 3/100), because it reads title and explanation as
+ * one text. Until a stricter matcher is validated, it only observes: the
+ * report stays exactly what the model wrote (after the other filters) and the
+ * number of items it WOULD have rewritten is still logged and recorded
+ * (analysis_server_completed.absence_claims_hedged).
+ */
+export const ABSENCE_GUARD_REWRITES = false;
+export const ABSENCE_GUARD_MODE: "rewrite" | "observe" = ABSENCE_GUARD_REWRITES ? "rewrite" : "observe";
+
+export function applyAbsenceGuard<T extends Partial<AnalysisResult>>(
+  result: T,
+  c: PhotoCoverage,
+  rewrite: boolean = ABSENCE_GUARD_REWRITES
+): { result: T; flagged: number } {
+  const { result: hedged, hedged: flagged } = hedgeUnverifiedAbsences(result, c);
+  return { result: rewrite ? hedged : result, flagged };
+}

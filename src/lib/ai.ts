@@ -12,7 +12,7 @@ import { DEMO_MODE } from "@/lib/env";
 import { DEMO_RESULT } from "@/lib/demo-data";
 import { BRAND_NAME } from "@/lib/brand";
 import { AIRBNB_TITLE_MAX_LENGTH, sanitizeAirbnbTitles, titleCharCount } from "@/lib/titles";
-import { coveragePromptBlock, hedgeUnverifiedAbsences, screenshotCoverage, type PhotoCoverage } from "@/lib/photoCoverage";
+import { ABSENCE_GUARD_MODE, applyAbsenceGuard, coveragePromptBlock, screenshotCoverage, type PhotoCoverage } from "@/lib/photoCoverage";
 import { aiResultSchema, describeShapeIssues } from "@/lib/resultShape";
 import { describeMalformation, repairLeakedToolInput, type RepairResult } from "@/lib/aiRepair";
 
@@ -676,7 +676,8 @@ export async function analyzeListing(params: AnalyzeListingParams): Promise<{
   // attemptOutcome() of every model call, in order (["valid"],
   // ["repaired"], ["invalid:ai_schema_mismatch", "valid"], ...).
   attemptOutcomes: string[];
-  // Unverified absence claims rewritten as "à vérifier" (lib/photoCoverage.ts).
+  // Unverified absence claims the guard flagged (lib/photoCoverage.ts); in
+  // "observe" mode they are counted only, the report is not rewritten.
   absenceClaimsHedged: number;
 }> {
   if (DEMO_MODE) {
@@ -772,18 +773,22 @@ export async function analyzeListing(params: AnalyzeListingParams): Promise<{
     console.log(`[ai] attempt_outcomes ${logTag} outcomes=${attemptOutcomes.join(",")} next=done`);
 
     const stripped = stripUnsupportedInconsistencyClaims(validation.input, sourceNumbers, logTag);
-    // Backstop for the photo coverage rule: never let an absence the model
-    // could not verify read as a confirmed defect. Fail-open like the filters
-    // around it -- this must never become a new way for an analysis to fail.
+    // Backstop for the photo coverage rule (lib/photoCoverage.ts). Observation
+    // only for now (ABSENCE_GUARD_REWRITES = false): the report is left as is
+    // and only the number of items it would have rewritten is counted.
+    // Fail-open like the filters around it -- this must never become a new
+    // way for an analysis to fail.
     let input = stripped;
     let absenceClaimsHedged = 0;
     try {
-      const hedged = hedgeUnverifiedAbsences(stripped, params.photoCoverage ?? screenshotCoverage(params.images.length));
-      input = hedged.result;
-      absenceClaimsHedged = hedged.hedged;
-      if (absenceClaimsHedged > 0) console.warn(`[ai] hedged_unverified_absence_claim ${logTag} count=${absenceClaimsHedged}`);
+      const guarded = applyAbsenceGuard(stripped, params.photoCoverage ?? screenshotCoverage(params.images.length));
+      input = guarded.result;
+      absenceClaimsHedged = guarded.flagged;
+      if (absenceClaimsHedged > 0) {
+        console.warn(`[ai] unverified_absence_claim mode=${ABSENCE_GUARD_MODE} ${logTag} count=${absenceClaimsHedged}`);
+      }
     } catch (err) {
-      console.error(`[ai] hedgeUnverifiedAbsences failed ${logTag}, returning input unchanged:`, err);
+      console.error(`[ai] absence guard failed ${logTag}, returning input unchanged:`, err);
     }
 
     // The schema's maxLength/the prompt's instruction steer the model but

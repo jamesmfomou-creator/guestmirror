@@ -13,7 +13,7 @@ import { DEMO_MODE } from "@/lib/env";
 import { DEMO_IMAGES, DEMO_RESULT, DEMO_RESULT_AFTER } from "@/lib/demo-data";
 import { extractAirbnbListing, downloadImageAsBase64 } from "@/lib/airbnbExtract";
 import { optimizeImages } from "@/lib/imageOptimize";
-import { buildUrlCoverage, screenshotCoverage, type PhotoCoverage } from "@/lib/photoCoverage";
+import { ABSENCE_GUARD_MODE, buildUrlCoverage, screenshotCoverage, type PhotoCoverage } from "@/lib/photoCoverage";
 import { isEligibleForLegacyRetest } from "@/lib/access/accessStore";
 import { editTokenFor } from "@/lib/analysisEditToken";
 import { checkAnalyzeRateLimit, rateIdentity } from "@/lib/analyzeRateLimit";
@@ -477,7 +477,9 @@ export async function POST(req: NextRequest) {
       photos_sent: photoCoverage.sent,
       photo_download_failures: photoDownloadFailures,
       gallery_complete: photoCoverage.complete,
+      // Items the absence guard flagged; "observe" = counted, report untouched.
       absence_claims_hedged: absenceClaimsHedged,
+      absence_guard_mode: ABSENCE_GUARD_MODE,
       url_extraction_duration_ms: urlExtractionDurationMs,
       image_preprocessing_duration_ms: imagePreprocessingDurationMs,
       ai_call_duration_ms: aiCallDurationMs,
