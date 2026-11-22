@@ -8,6 +8,7 @@ import { StepImport } from "./StepImport";
 import { StepProfile } from "./StepProfile";
 import { StepEmail } from "./StepEmail";
 import { StepGoal } from "./StepGoal";
+import { StepProfileChoice, StepReflection, goalFromReflection, type ReflectionAnswers, type ReflectionId } from "./StepReflection";
 import type { Concern } from "@/lib/goalValue";
 import { StepAnalyzing } from "./StepAnalyzing";
 import { AnalysisAhaFlow } from "./AnalysisAhaFlow";
@@ -47,7 +48,10 @@ import {
 // "questions": background onboarding only (lib/onboardingExperiment.ts) --
 // goal then profile, asked while the analysis already runs.
 type Step = "import" | "profile" | "email" | "goal" | "analyzing" | "questions";
-type QuestionPhase = "goal" | "profile" | "done";
+// Background flow: the three reflection questions (StepReflection.tsx), then
+// the profile choice. "goal" is kept for the control flow's single step.
+type QuestionPhase = "doubt" | "projection" | "priority" | "profile" | "done";
+const REFLECTION_ORDER: QuestionPhase[] = ["doubt", "projection", "priority"];
 
 const MAX_IMAGES = 10;
 const MIN_ANIMATION_MS = 3400;
@@ -195,8 +199,9 @@ export function AnalyzeWizard({ knownEmail = null }: { knownEmail?: string | nul
   // render matches the server's (control), the real variant follows at once.
   const onboardingVariant = useSyncExternalStore(noopSubscribe, getOnboardingVariant, () => "control" as const);
   const stepRef = useRef<Step>("import");
-  const [questionPhase, setQuestionPhase] = useState<QuestionPhase>("goal");
-  const questionPhaseRef = useRef<QuestionPhase>("goal");
+  const [questionPhase, setQuestionPhase] = useState<QuestionPhase>("doubt");
+  const questionPhaseRef = useRef<QuestionPhase>("doubt");
+  const [reflection, setReflection] = useState<ReflectionAnswers>({});
   // Background onboarding: the result, when it arrived while questions were on screen.
   const [readyResult, setReadyResult] = useState<AnalyzeResponse | null>(null);
   // Stopped by the per-IP abuse limit (busy shared network): verifying the
@@ -951,13 +956,14 @@ export function AnalyzeWizard({ knownEmail = null }: { knownEmail?: string | nul
 
   // ---- Background onboarding: questions while the analysis runs ---------
 
-  function handleSelectGoalBackground(value: Goal) {
-    goalBeforeReady.current = !pendingResult.current;
-    handleSelectGoal(value);
-  }
-
   function finishQuestions() {
-    track("onboarding_completed", { goal, concern, flow: "background" });
+    track("onboarding_completed", {
+      goal,
+      flow: "background",
+      doubt: reflection.doubt ?? null,
+      projection: reflection.projection ?? null,
+      priority: reflection.priority ?? null,
+    });
     questionPhaseRef.current = "done";
     setQuestionPhase("done");
     if (apiError) return; // the error panel offers the retry
@@ -967,6 +973,26 @@ export function AnalyzeWizard({ knownEmail = null }: { knownEmail?: string | nul
     }
     trackLoaderViewed(true);
     setStep("analyzing");
+  }
+
+  /** One reflection answer: recorded, goal derived (Q3, else Q1), next question. */
+  function answerReflection(id: ReflectionId, value: string) {
+    const next = { ...reflection, [id]: value };
+    setReflection(next);
+    track("onboarding_answer", { question: id, answer: value, flow: "background" });
+    const derived = goalFromReflection(next);
+    if (derived && derived !== goal) {
+      goalBeforeReady.current = !pendingResult.current;
+      setGoal(derived);
+      track("onboarding_goal_selected", { goal: derived, source: "reflection" });
+    }
+    // Short pause so the chosen answer is seen before the next question.
+    window.setTimeout(() => advanceReflection(id), 220);
+  }
+
+  function advanceReflection(id: ReflectionId) {
+    const i = REFLECTION_ORDER.indexOf(id);
+    setQuestionPhase(i >= 0 && i < REFLECTION_ORDER.length - 1 ? REFLECTION_ORDER[i + 1] : "profile");
   }
 
   function openReadyResult() {
@@ -1112,9 +1138,9 @@ export function AnalyzeWizard({ knownEmail = null }: { knownEmail?: string | nul
   ];
   const onboardingIndex = onboardingSteps.findIndex((s) => s.id === step);
   // Background onboarding: annonce → email → objectif → profil (the last two during the analysis).
-  const bgSteps = ["Ton annonce", "Ton email", "Ton objectif", "Ton profil"];
+  const bgSteps = ["Ton annonce", "Ton email", "3 questions", "Ton profil"];
   const bgIndex =
-    step === "import" ? 0 : step === "email" ? 1 : step === "questions" ? (questionPhase === "goal" ? 2 : 3) : -1;
+    step === "import" ? 0 : step === "email" ? 1 : step === "questions" ? (questionPhase === "profile" || questionPhase === "done" ? 3 : 2) : -1;
   const liveState = apiError ? "failed" : readyResult ? "ready" : "running";
   const networkLimitVerify =
     networkLimit === "verified" ? (
@@ -1281,30 +1307,25 @@ export function AnalyzeWizard({ knownEmail = null }: { knownEmail?: string | nul
                 </button>
               </div>
             )}
-            {questionPhase === "goal" && (
-              <StepGoal
-                goal={goal}
-                onSelect={handleSelectGoalBackground}
-                onContinue={() => {
-                  if (!concern) track("onboarding_question_skipped", { question: "concern", flow: "background" });
-                  setQuestionPhase("profile");
-                }}
+            {(questionPhase === "doubt" || questionPhase === "projection" || questionPhase === "priority") && (
+              <StepReflection
+                index={REFLECTION_ORDER.indexOf(questionPhase)}
+                answer={reflection[questionPhase]}
+                onAnswer={(value) => answerReflection(questionPhase, value)}
                 onSkip={() => {
-                  track("onboarding_question_skipped", { question: "goal", flow: "background" });
-                  setQuestionPhase("profile");
+                  track("onboarding_question_skipped", { question: questionPhase, flow: "background" });
+                  advanceReflection(questionPhase);
                 }}
-                continueLabel="Continuer"
-                concern={concern}
-                onSelectConcern={handleSelectConcern}
               />
             )}
             {questionPhase === "profile" && (
-              <StepProfile
-                propertyCountRange={propertyCountRange}
+              <StepProfileChoice
                 userType={userType}
-                onSelectPropertyCountRange={setPropertyCountRange}
-                onSelectUserType={setUserType}
-                onContinue={finishQuestions}
+                onSelect={(value) => {
+                  setUserType(value);
+                  track("profile_submitted", { user_type: value, flow: "background" });
+                  window.setTimeout(finishQuestions, 220);
+                }}
                 onSkip={() => {
                   track("onboarding_question_skipped", { question: "profile", flow: "background" });
                   finishQuestions();

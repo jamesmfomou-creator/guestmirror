@@ -212,6 +212,9 @@ export const ANALYTICS_EVENTS = [
   "onboarding_concern_selected",
   "onboarding_question_skipped",
   "offers_viewed",
+  // Background onboarding reflection questions (StepReflection.tsx):
+  // question = doubt | projection | priority, answer = option value.
+  "onboarding_answer",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];
