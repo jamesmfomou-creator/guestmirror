@@ -29,21 +29,21 @@ const ROWS = [
     title: "Photos",
     text: "L'atout principal n'est pas suffisamment mis en avant.",
     chip: "À améliorer",
-    tone: "bg-rose-50 text-rose-600 ring-rose-100",
+    tone: "bg-rose-50 text-rose-700 ring-rose-200",
   },
   {
     icon: Type,
     title: "Titre",
     text: "Il peut être plus attractif et précis.",
     chip: "À optimiser",
-    tone: "bg-amber-50 text-amber-600 ring-amber-100",
+    tone: "bg-amber-50 text-amber-700 ring-amber-200",
   },
   {
     icon: AlignLeft,
     title: "Description",
     text: "Elle manque de clarté sur certains points clés.",
     chip: "À enrichir",
-    tone: "bg-amber-50 text-amber-600 ring-amber-100",
+    tone: "bg-amber-50 text-amber-700 ring-amber-200",
   },
 ] as const;
 
@@ -100,8 +100,8 @@ function DiagnosticScreen({ compact = false }: { compact?: boolean }) {
         {!compact && (
           <span className="ml-auto flex items-center gap-[0.4em] text-[0.82em]">
             <span className="rounded-full bg-white/12 px-[0.9em] py-[0.35em] font-medium">Diagnostic</span>
-            <span className="px-[0.7em] text-white/70">Recommandations</span>
-            <span className="px-[0.7em] text-white/70">Plan d&apos;action</span>
+            <span className="px-[0.7em] text-white/85">Recommandations</span>
+            <span className="px-[0.7em] text-white/85">Plan d&apos;action</span>
           </span>
         )}
       </div>
@@ -124,7 +124,7 @@ function DiagnosticScreen({ compact = false }: { compact?: boolean }) {
                 sizes="(min-width: 1024px) 220px, 60vw"
                 className="aspect-[4/3] h-auto w-full object-cover"
               />
-              <span className="absolute top-[0.6em] left-[0.6em] inline-flex items-center gap-[0.35em] rounded-full bg-white/90 px-[0.6em] py-[0.25em] text-[0.78em] font-medium text-neutral-700 shadow-sm backdrop-blur">
+              <span className="absolute top-[0.6em] left-[0.6em] inline-flex items-center gap-[0.35em] rounded-full bg-white/95 px-[0.6em] py-[0.25em] text-[0.78em] font-semibold text-neutral-800 shadow-sm backdrop-blur">
                 <Image src="/brand/airbnb-logo.png" alt="" width={14} height={14} className="h-[1.1em] w-[1.1em]" />
                 Annonce Airbnb
               </span>
@@ -152,7 +152,7 @@ function DiagnosticScreen({ compact = false }: { compact?: boolean }) {
                   <AlertTriangle aria-hidden className="h-[1em] w-[1em]" />
                   Des points à améliorer
                 </span>
-                <p className="mt-[0.55em] text-[0.9em] leading-[1.35] text-neutral-700">
+                <p className="mt-[0.55em] text-[0.9em] leading-[1.35] font-medium text-neutral-800">
                   Ton annonce a du potentiel, mais certains éléments peuvent freiner les réservations.
                 </p>
               </div>
@@ -164,10 +164,10 @@ function DiagnosticScreen({ compact = false }: { compact?: boolean }) {
                   key={title}
                   className="flex items-center gap-[0.75em] rounded-[0.7em] border border-neutral-100 bg-white px-[0.8em] py-[0.6em] shadow-[0_0.1em_0.5em_-0.25em_rgba(28,24,40,0.15)]"
                 >
-                  <Icon aria-hidden className="h-[1.25em] w-[1.25em] shrink-0 text-neutral-500" />
+                  <Icon aria-hidden className="h-[1.25em] w-[1.25em] shrink-0 text-neutral-600" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-[0.95em] font-semibold">{title}</span>
-                    <span className="block truncate text-[0.8em] text-neutral-600">{text}</span>
+                    <span className="block truncate text-[0.8em] font-medium text-neutral-700">{text}</span>
                   </span>
                   <span className={`shrink-0 rounded-full px-[0.7em] py-[0.25em] text-[0.75em] font-semibold ring-1 ${tone}`}>
                     {chip}
@@ -183,7 +183,7 @@ function DiagnosticScreen({ compact = false }: { compact?: boolean }) {
           <Sparkles aria-hidden className="h-[1.6em] w-[1.6em] shrink-0 text-amber-400" />
           <span className="min-w-0 flex-1">
             <span className="block text-[0.98em] font-bold text-emerald-950">Notre recommandation clé</span>
-            <span className="block text-[0.82em] leading-[1.35] text-neutral-700">
+            <span className="block text-[0.82em] leading-[1.35] font-medium text-neutral-800">
               Mets en avant la vue et l&apos;espace extérieur dès la première photo pour capter plus d&apos;attention.
             </span>
           </span>
@@ -415,13 +415,13 @@ export function HeroLaptopDemo() {
         <AirbnbTile className="top-[-6%] right-[2.5%] z-10 h-[4.4rem] w-[4.4rem] 2xl:right-[0%]" />
 
         {/* Floating cards (left edge) */}
-        <Reveal delay={0.45} y={10} className="absolute top-[11%] left-[-8%] z-10">
+        <Reveal delay={0.45} y={10} className="absolute top-[11%] left-[-6%] z-10">
           <FloatingCard {...FLOATING[0]} />
         </Reveal>
-        <Reveal delay={0.55} y={10} className="absolute top-[27%] left-[-8.5%] z-10">
+        <Reveal delay={0.55} y={10} className="absolute top-[27%] left-[-6.5%] z-10">
           <FloatingCard {...FLOATING[1]} />
         </Reveal>
-        <Reveal delay={0.65} y={10} className="absolute top-[43%] left-[-7%] z-10">
+        <Reveal delay={0.65} y={10} className="absolute top-[43%] left-[-5%] z-10">
           <FloatingCard {...FLOATING[2]} />
         </Reveal>
       </div>

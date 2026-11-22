@@ -101,14 +101,8 @@ export default async function LandingPage() {
               ]}
             />
 
-            <Reveal delay={0.3}>
-              <p className="mx-auto mt-4 max-w-xl text-balance text-[1.2rem] leading-snug font-medium tracking-tight text-foreground/85 sm:mt-5 sm:text-2xl lg:mx-0">
-                Et comment rendre ton annonce <span className="text-foreground">plus attractive</span>, grâce à l&apos;IA.
-              </p>
-            </Reveal>
-
             <Reveal delay={0.38}>
-              <p className="mx-auto mt-3 max-w-lg text-pretty text-[15px] leading-relaxed text-muted sm:mt-4 sm:text-lg lg:mx-0">
+              <p className="mx-auto mt-4 max-w-lg text-pretty text-[15px] leading-relaxed text-muted sm:mt-6 sm:text-lg lg:mx-0">
                 Colle ton lien Airbnb. Notre IA repère les points qui peuvent faire hésiter les voyageurs et
                 t&apos;aide à améliorer ton annonce.
               </p>
