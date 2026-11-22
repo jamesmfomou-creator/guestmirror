@@ -10,6 +10,7 @@ import { UserType, PropertyCountRange } from "@/lib/types";
 import type { PaywallPreview } from "@/lib/paywallPreview";
 import { PaywallPreviewV2 } from "./PaywallPreviewV2";
 import { ConciergerieCheckoutSheet } from "./ConciergerieCheckoutSheet";
+import { SHOW_OFFERS_EVENT } from "./ImprovementPlanCard";
 import { ADDON_PACK, OFFERS, formatEur, type OfferId } from "@/lib/plans";
 
 type Plan = OfferId;
@@ -52,6 +53,7 @@ export function Paywall({
   addonAvailable = false,
   singleCopy = false,
   hidePreviewContents = false,
+  revealOnRequest = false,
 }: {
   analysisId: string;
   canceled?: boolean;
@@ -79,6 +81,12 @@ export function Paywall({
    * that list (its weakness titles and its button are unchanged).
    */
   hidePreviewContents?: boolean;
+  /**
+   * Offers hidden until the visitor clicks "Débloquer mon plan
+   * d'amélioration" (ImprovementPlanCard, SHOW_OFFERS_EVENT). Shown at once
+   * when coming back from a canceled checkout or with a #formules link.
+   */
+  revealOnRequest?: boolean;
 }) {
   const [loadingPlan, setLoadingPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +95,36 @@ export function Paywall({
   // every other A/B decision in this mission (folded into the existing B
   // arm rather than a new, orthogonal test).
   const [abVariant] = useState(() => getAbVariant());
+
+  const [revealed, setRevealed] = useState(!revealOnRequest || canceled);
+  useEffect(() => {
+    if (!revealOnRequest) return;
+    // A #formules / #paywall link opens with the offers visible.
+    const fromHash = window.location.hash === "#formules" || window.location.hash === "#paywall";
+    const timer = fromHash ? window.setTimeout(() => setRevealed(true), 0) : undefined;
+    function onRequest(e: Event) {
+      const detail = (e as CustomEvent<{ handled: boolean }>).detail;
+      if (detail) detail.handled = true;
+      setRevealed(true);
+      // After the offers are painted: bring them into view.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const target = document.getElementById("paywall");
+          if (!target) return;
+          const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+          target.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+          // Keyboard and screen-reader users land on the offers too.
+          target.setAttribute("tabindex", "-1");
+          target.focus({ preventScroll: true });
+        })
+      );
+    }
+    window.addEventListener(SHOW_OFFERS_EVENT, onRequest);
+    return () => {
+      window.removeEventListener(SHOW_OFFERS_EVENT, onRequest);
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [revealOnRequest]);
 
   // Fires on mount, independent of scroll position -- diagnostic only (see
   // ANALYTICS_EVENTS's comment on paywall_mounted), to tell apart the
@@ -190,7 +228,14 @@ export function Paywall({
   }
 
   return (
-    <div ref={ref} id="paywall" className="mx-auto mt-6 max-w-5xl scroll-mt-20">
+    // Always mounted (the view trackers attach on mount); display:none until
+    // revealed, so paywall_viewed / offers_viewed fire only once really shown.
+    <div
+      ref={ref}
+      id="paywall"
+      hidden={!revealed}
+      className={`mx-auto mt-6 max-w-5xl scroll-mt-20 ${revealOnRequest && revealed ? "gm-reveal" : ""}`}
+    >
       <ConciergerieCheckoutSheet
         open={sheetOpen}
         addon={addon}
@@ -271,8 +316,8 @@ export function Paywall({
               {loadingPlan === "one_time"
                 ? "Redirection…"
                 : preview
-                  ? `Débloquer mes recommandations — ${formatEur(OFFERS.one_time.amountEur)}`
-                  : `Débloquer mon rapport — ${formatEur(OFFERS.one_time.amountEur)}`}
+                  ? `Débloquer mes recommandations\u00a0—\u00a0${formatEur(OFFERS.one_time.amountEur).replace(/ /g, "\u00a0")}`
+                  : `Débloquer mon rapport\u00a0—\u00a0${formatEur(OFFERS.one_time.amountEur).replace(/ /g, "\u00a0")}`}
             </Button>
           }
           conciergerieAction={
