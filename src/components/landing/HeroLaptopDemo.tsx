@@ -158,7 +158,7 @@ function DiagnosticScreen({ compact = false }: { compact?: boolean }) {
                   <AlertTriangle aria-hidden className="h-[1em] w-[1em]" />
                   Des points à améliorer
                 </span>
-                <p className="mt-[0.55em] text-[0.88em] leading-[1.35] text-neutral-600">
+                <p className="mt-[0.55em] text-[0.9em] leading-[1.35] text-neutral-700">
                   Ton annonce a du potentiel, mais certains éléments peuvent freiner les réservations.
                 </p>
               </div>
@@ -173,7 +173,7 @@ function DiagnosticScreen({ compact = false }: { compact?: boolean }) {
                   <Icon aria-hidden className="h-[1.25em] w-[1.25em] shrink-0 text-neutral-500" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-[0.95em] font-semibold">{title}</span>
-                    <span className="block truncate text-[0.78em] text-neutral-500">{text}</span>
+                    <span className="block truncate text-[0.8em] text-neutral-600">{text}</span>
                   </span>
                   <span className={`shrink-0 rounded-full px-[0.7em] py-[0.25em] text-[0.75em] font-semibold ring-1 ${tone}`}>
                     {chip}
@@ -189,7 +189,7 @@ function DiagnosticScreen({ compact = false }: { compact?: boolean }) {
           <Sparkles aria-hidden className="h-[1.6em] w-[1.6em] shrink-0 text-amber-400" />
           <span className="min-w-0 flex-1">
             <span className="block text-[0.98em] font-bold text-emerald-950">Notre recommandation clé</span>
-            <span className="block text-[0.8em] leading-[1.35] text-neutral-600">
+            <span className="block text-[0.82em] leading-[1.35] text-neutral-700">
               Mets en avant la vue et l&apos;espace extérieur dès la première photo pour capter plus d&apos;attention.
             </span>
           </span>
@@ -252,14 +252,14 @@ export function HeroLaptopDemo() {
       </div>
 
       {/* ---------- Large desktop (xl+): laptop in perspective ---------- */}
-      <div className="relative hidden w-full pt-10 pb-[11%] pl-[10%] pr-[3%] xl:block">
+      <div className="relative hidden w-full -mt-16 pt-4 pb-[10%] pl-[7%] pr-[1%] xl:block">
         <div className="[perspective:2200px]">
           <div className="relative [transform:rotateY(-15deg)_rotateX(5deg)_rotateZ(-0.6deg)] [transform-style:preserve-3d]">
             {/* Lid */}
             <div className="relative rounded-[1.7rem] bg-gradient-to-b from-[#2d2838] via-[#1d1926] to-[#15121c] p-[1.7%] shadow-[0_50px_80px_-30px_rgba(60,30,40,0.55),0_0_0_1px_rgba(0,0,0,0.35)]">
               <span aria-hidden className="absolute top-[0.75%] left-1/2 h-[0.45rem] w-[0.45rem] -translate-x-1/2 rounded-full bg-[#3a3546]" />
               <div className="@container relative aspect-[16/10] overflow-hidden rounded-[0.85rem] ring-1 ring-black/40">
-                <div className="h-full" style={{ fontSize: "calc(100cqw / 60)" }}>
+                <div className="h-full" style={{ fontSize: "calc(100cqw / 58)" }}>
                   <DiagnosticScreen />
                 </div>
                 {/* glass reflection */}
@@ -274,8 +274,8 @@ export function HeroLaptopDemo() {
                 rotation would otherwise keep its unrotated layout height) */}
             <div
               aria-hidden
-              className="absolute top-[calc(100%-0.35rem)] right-[-5%] left-[-5%] origin-top [transform:rotateX(74deg)] rounded-[1rem] bg-gradient-to-b from-[#ece7f3] via-[#ddd5ea] to-[#c9bedb] shadow-[inset_0_2px_0_rgba(255,255,255,0.75),0_40px_60px_-10px_rgba(255,130,80,0.45)]"
-              style={{ aspectRatio: "16 / 6" }}
+              className="absolute top-[calc(100%-0.35rem)] right-[-6%] left-[-1%] origin-top [transform:rotateX(74deg)] rounded-[1rem] bg-gradient-to-b from-[#ece7f3] via-[#ddd5ea] to-[#c9bedb] shadow-[inset_0_2px_0_rgba(255,255,255,0.75),0_40px_60px_-10px_rgba(255,130,80,0.45)]"
+              style={{ aspectRatio: "16 / 5.2" }}
             >
               <div className="absolute inset-x-[8%] top-[7%] h-[50%] rounded-[0.5rem] bg-[repeating-linear-gradient(90deg,#3d364c_0_5.6%,transparent_5.6%_6.5%),repeating-linear-gradient(0deg,#3d364c_0_16.5%,transparent_16.5%_20%)] opacity-85 [background-blend-mode:multiply]" />
               <div className="absolute bottom-[14%] left-1/2 h-[22%] w-[32%] -translate-x-1/2 rounded-[0.6rem] bg-[#d3cae1] shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)]" />
@@ -296,7 +296,7 @@ export function HeroLaptopDemo() {
           <FloatingCard {...FLOATING[2]} />
         </Reveal>
 
-        <AirbnbTile className="top-[-7%] right-[0%] z-10 h-[5.5rem] w-[5.5rem] 2xl:right-[-3%]" />
+        <AirbnbTile className="top-[-9%] right-[1.5%] z-10 h-[4.6rem] w-[4.6rem]" />
       </div>
 
       {/* ---------- Mobile, tablet, small desktop: flat card ---------- */}
@@ -306,7 +306,7 @@ export function HeroLaptopDemo() {
             <DiagnosticScreen compact />
           </div>
         </div>
-        <AirbnbTile className="-top-1 -right-2 h-16 w-16 sm:h-20 sm:w-20" />
+        <AirbnbTile className="-top-1 -right-2 h-[3.3rem] w-[3.3rem] sm:h-[4.1rem] sm:w-[4.1rem]" />
         <div className="mt-4 grid grid-cols-3 gap-2">
           {FLOATING.map(({ icon: Icon, line1, line2, tone }) => (
             <div
