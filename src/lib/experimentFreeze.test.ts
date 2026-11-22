@@ -18,22 +18,22 @@ describe("fixed experiment configuration (week of 23 Nov 2026)", () => {
   });
 
   it("is active with the owner's combination", () => {
-    expect(EXPERIMENT_FREEZE).toMatchObject({ active: true, ab: "B", paywall: "control", loader: "immersive", onboarding: "control" });
+    expect(EXPERIMENT_FREEZE).toMatchObject({ active: true, ab: "B", paywall: "control", loader: "immersive", onboarding: "background" });
   });
 
   it("every reader returns the fixed variant, whatever an old cookie says", () => {
-    withCookies("gm_ab=A; gm_pw=v2; gm_ld=control; gm_ob=background");
+    withCookies("gm_ab=A; gm_pw=v2; gm_ld=control; gm_ob=control");
     expect(getAbVariant()).toBe("B");
     expect(getPaywallVariant()).toBe("control");
     expect(getLoaderVariant()).toBe("immersive");
-    expect(getOnboardingVariant()).toBe("control");
+    expect(getOnboardingVariant()).toBe("background");
   });
 
   it("server render (no document) gives the same answers: no hydration flip", () => {
     expect(getAbVariant()).toBe("B");
     expect(getPaywallVariant()).toBe("control");
     expect(getLoaderVariant()).toBe("immersive");
-    expect(getOnboardingVariant()).toBe("control");
+    expect(getOnboardingVariant()).toBe("background");
   });
 
   it("the ?ob= QA override still works", () => {
@@ -54,22 +54,22 @@ describe("proxy writes the fixed combination", () => {
   it("new visitor: the four cookies are the fixed combination, never a draw", () => {
     vi.spyOn(Math, "random").mockReturnValue(0); // a draw would pick B / v2 / immersive / background
     for (let i = 0; i < 3; i++) {
-      expect(cookieMap(proxy(req({})))).toEqual({ gm_ab: "B", gm_pw: "control", gm_ld: "immersive", gm_ob: "control" });
+      expect(cookieMap(proxy(req({})))).toEqual({ gm_ab: "B", gm_pw: "control", gm_ld: "immersive", gm_ob: "background" });
     }
     vi.restoreAllMocks();
   });
 
   it("returning visitor with other variants is switched to the fixed combination", () => {
-    expect(cookieMap(proxy(req({ gm_ab: "A", gm_pw: "v2", gm_ld: "control", gm_ob: "background" })))).toEqual({
+    expect(cookieMap(proxy(req({ gm_ab: "A", gm_pw: "v2", gm_ld: "control", gm_ob: "control" })))).toEqual({
       gm_ab: "B",
       gm_pw: "control",
       gm_ld: "immersive",
-      gm_ob: "control",
+      gm_ob: "background",
     });
   });
 
   it("visitor already on the fixed combination: nothing rewritten", () => {
-    expect(cookieMap(proxy(req({ gm_ab: "B", gm_pw: "control", gm_ld: "immersive", gm_ob: "control" })))).toEqual({});
+    expect(cookieMap(proxy(req({ gm_ab: "B", gm_pw: "control", gm_ld: "immersive", gm_ob: "background" })))).toEqual({});
   });
 
   it("QA override ?ob=background is kept", () => {

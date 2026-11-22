@@ -5,7 +5,8 @@
  *   Aha A/B (lib/ab.ts)               -> "B"
  *   Paywall (lib/paywallExperiment.ts) -> "control"
  *   Loader (lib/loaderExperiment.ts)   -> "immersive"
- *   Onboarding (lib/onboardingExperiment.ts) -> "control"
+ *   Onboarding (lib/onboardingExperiment.ts) -> "background" (questions while
+ *     the analysis already runs; owner's decision, 22 Nov 2026 evening)
  * It is the combination of the two sales of 17 and 19 Nov 2026 (two sales
  * prove nothing: this is a deliberate one-week bet, measured in
  * /admin/analytics "Configuration figée").
@@ -29,7 +30,7 @@ export const EXPERIMENT_FREEZE = {
   ab: "B",
   paywall: "control",
   loader: "immersive",
-  onboarding: "control",
+  onboarding: "background",
 } as const;
 
 export function experimentFreezeActive(): boolean {
