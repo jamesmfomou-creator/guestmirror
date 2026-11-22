@@ -170,6 +170,14 @@ body {
   color: var(--foreground);
 }
 
+/* Hero link field, phones / tablets: the typed text stays 16px (iOS zooms
+   into smaller inputs), only the placeholder shrinks so it is not cut at 320px. */
+@media (max-width: 1023px) {
+  .hero-url-input::placeholder {
+    font-size: clamp(13.5px, 4.1vw, 16px);
+  }
+}
+
 /* Display type: tight bold grotesk. In the components layer so a weight
    utility (font-semibold…) can still override it on smaller headings. */
 @layer components {

@@ -54,12 +54,18 @@ const FLOATING = [
 ] as const;
 
 /** Static score dial (no count-up): 43/100, example only. */
-function ScoreDial() {
+function ScoreDial({ softGlow = false }: { softGlow?: boolean }) {
   const r = 42;
   const c = 2 * Math.PI * r;
   return (
     <div className="relative h-[8.6em] w-[8.6em] shrink-0">
-      <div aria-hidden className="absolute inset-[8%] rounded-full bg-rose-400/15 blur-[0.9em]" />
+      {softGlow ? (
+        // Mobile: gradient instead of a blur filter (the filter left a paint
+        // artefact in WebKit / iOS Safari on this layout).
+        <div aria-hidden className="absolute inset-[-6%] rounded-full bg-[radial-gradient(closest-side,rgba(251,113,133,0.2),transparent)]" />
+      ) : (
+        <div aria-hidden className="absolute inset-[8%] rounded-full bg-rose-400/15 blur-[0.9em]" />
+      )}
       <svg viewBox="0 0 100 100" className="relative h-full w-full -rotate-90">
         <defs>
           <linearGradient id="gm-hero-dial" x1="0" y1="0" x2="1" y2="1">
@@ -378,6 +384,136 @@ function MacBookBase({ className = "" }: { className?: string }) {
   );
 }
 
+// ---- Mobile / tablet (< 1024 px): a portrait composition built for the
+// phone, not a shrunk laptop. Flat device frame (see below), warm glow, the
+// three "floating" cards as pills
+// overlapping the bottom edge, small Airbnb tile on the top-right corner.
+// Sizes in em from the frame width (container units) so 320-768 px scale as one.
+function MobileDemo() {
+  return (
+    <div data-hero-demo className="relative mx-auto w-full max-w-[27rem] pt-3 pb-1 lg:hidden">
+      {/* warm light */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-[-12%] top-[2%] bottom-[-4%] -z-10 bg-[radial-gradient(closest-side,rgba(255,150,105,0.38),rgba(255,180,150,0.14)_60%,transparent)]" />
+
+      {/* Slight backward tilt: one transform on one element (WebKit-safe). */}
+      <div className="relative origin-bottom [transform:perspective(1600px)_rotateX(5deg)]">
+        <div className="@container relative rounded-[1.6rem] bg-[#15121c] p-[5px] shadow-[0_0_0_1px_rgba(255,255,255,0.6),0_36px_60px_-26px_rgba(70,30,20,0.55),0_14px_24px_-14px_rgba(70,30,20,0.35)]">
+          <div className="overflow-hidden rounded-[1.3rem]" style={{ fontSize: "clamp(11px, calc(100cqw / 27), 15.5px)" }}>
+            <MobileDiagnostic />
+          </div>
+        </div>
+      </div>
+
+      <AirbnbTile className="-top-4 -right-2 h-10 w-10 sm:-top-5 sm:h-12 sm:w-12" />
+
+      {/* floating cards, overlapping the bottom edge of the device */}
+      <div className="relative z-10 -mt-7 grid grid-cols-3 gap-1 px-0.5 min-[375px]:gap-1.5 min-[375px]:px-1.5 sm:gap-2.5 sm:px-4">
+        {FLOATING.map(({ icon: Icon, line1, line2, tone }) => (
+          <div
+            key={line1}
+            className="flex flex-col items-center gap-1 rounded-[0.95rem] border border-white/90 bg-white/95 px-0.5 py-2 text-center shadow-[0_14px_26px_-14px_rgba(60,35,25,0.45)] sm:gap-1.5 sm:py-2.5"
+          >
+            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${tone}`}>
+              <Icon aria-hidden size={14} strokeWidth={2.3} />
+            </span>
+            <span className="min-w-0 text-[clamp(9.5px,2.85vw,11px)] leading-[1.15] text-neutral-800 sm:text-[12px]">
+              <span className="block font-semibold">{line1}</span>
+              <span className="block">{line2}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MobileDiagnostic() {
+  return (
+    <div className="bg-[#f6f3f1] text-neutral-900">
+      {/* app bar: logo + example label (no separate row) */}
+      <div className="flex items-center gap-[0.5em] bg-[#1c1828] py-[0.7em] pr-[3.3em] pl-[1em] text-white">
+        <Image src="/brand/logo.png" alt="" width={20} height={20} className="h-[1.4em] w-[1.4em] rounded-[0.3em]" />
+        <span className="text-[1.05em] font-semibold tracking-tight">GuestMirror</span>
+        <span className="ml-auto rounded-full bg-violet-500 px-[0.75em] py-[0.28em] text-[0.78em] font-semibold text-white shadow-[0_0.3em_0.9em_-0.3em_rgba(139,92,246,0.8)]">
+          Exemple de résultat
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-[0.75em] p-[0.85em] pb-[2.9em]">
+        {/* photos */}
+        <div className="grid grid-cols-[2fr_1fr] gap-[0.45em]">
+          <div className="relative overflow-hidden rounded-[0.75em]">
+            <Image
+              src="/hero/listing-main.jpg"
+              alt="Exemple d'annonce : terrasse avec vue sur la mer"
+              width={800}
+              height={600}
+              sizes="(max-width: 640px) 62vw, 300px"
+              className="aspect-[16/11] h-auto w-full object-cover"
+            />
+            <span className="absolute top-[0.5em] left-[0.5em] inline-flex items-center gap-[0.3em] rounded-full bg-white/95 px-[0.55em] py-[0.22em] text-[0.78em] font-semibold text-neutral-800 shadow-sm">
+              <Image src="/brand/airbnb-logo.png" alt="" width={14} height={14} className="h-[1.05em] w-[1.05em]" />
+              Annonce Airbnb
+            </span>
+          </div>
+          <div className="grid min-h-0 grid-rows-2 gap-[0.45em]">
+            {["/hero/listing-thumb-1.jpg", "/hero/listing-thumb-2.jpg"].map((src) => (
+              <div key={src} className="relative min-h-0 overflow-hidden rounded-[0.6em]">
+                <Image src={src} alt="" width={420} height={280} sizes="120px" className="absolute inset-0 h-full w-full object-cover" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* score */}
+        <div className="flex items-center gap-[0.85em] rounded-[0.85em] bg-white px-[0.8em] py-[0.65em] shadow-[0_0.1em_0.6em_-0.3em_rgba(28,24,40,0.18)]">
+          <div className="text-[0.78em]">
+            <ScoreDial softGlow />
+          </div>
+          <div className="min-w-0">
+            <span className="inline-flex items-center gap-[0.35em] rounded-full bg-amber-50 px-[0.65em] py-[0.25em] text-[0.85em] font-semibold text-amber-700 ring-1 ring-amber-200">
+              <AlertTriangle aria-hidden className="h-[1em] w-[1em]" />
+              Des points à améliorer
+            </span>
+            <p className="mt-[0.4em] text-[0.88em] leading-[1.3] font-medium text-neutral-800">
+              Ton annonce a du potentiel, mais certains éléments peuvent freiner les réservations.
+            </p>
+          </div>
+        </div>
+
+        {/* categories */}
+        <ul className="flex flex-col gap-[0.4em]">
+          {ROWS.map(({ icon: Icon, title, text, chip, tone }) => (
+            <li
+              key={title}
+              className="flex items-center gap-[0.65em] rounded-[0.7em] border border-neutral-100 bg-white px-[0.75em] py-[0.5em] shadow-[0_0.1em_0.5em_-0.25em_rgba(28,24,40,0.15)]"
+            >
+              <Icon aria-hidden className="h-[1.2em] w-[1.2em] shrink-0 text-neutral-600" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[0.95em] font-semibold">{title}</span>
+                <span className="block truncate text-[0.8em] font-medium text-neutral-700">{text}</span>
+              </span>
+              <span className={`shrink-0 rounded-full px-[0.65em] py-[0.22em] text-[0.76em] font-semibold ring-1 ${tone}`}>{chip}</span>
+            </li>
+          ))}
+        </ul>
+
+        {/* key recommendation */}
+        <div className="flex items-center gap-[0.7em] rounded-[0.8em] border border-emerald-100 bg-gradient-to-r from-emerald-50 to-emerald-50/40 px-[0.85em] py-[0.65em]">
+          <Sparkles aria-hidden className="h-[1.4em] w-[1.4em] shrink-0 text-amber-400" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[0.95em] font-bold text-emerald-950">Notre recommandation clé</span>
+            <span className="block text-[0.82em] leading-[1.3] font-medium text-neutral-800">
+              Mets en avant la vue et l&apos;espace extérieur dès la première photo pour capter plus d&apos;attention.
+            </span>
+          </span>
+          <TrendingUp aria-hidden className="h-[1.6em] w-[1.6em] shrink-0 text-emerald-500" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function HeroLaptopDemo() {
   return (
     <div className="relative w-full">
@@ -426,14 +562,14 @@ export function HeroLaptopDemo() {
         </Reveal>
       </div>
 
-      {/* ---------- Mobile, tablet, small desktop: flat card ---------- */}
-      <div className="relative mx-auto max-w-[34rem] pt-6 lg:max-w-[25rem] xl:hidden">
+      {/* ---------- Small desktop (1024-1279): flat card, unchanged ---------- */}
+      <div className="relative mx-auto hidden max-w-[25rem] pt-6 lg:block xl:hidden">
         <div className="@container relative overflow-hidden rounded-[1.4rem] border border-white/70 bg-[#1c1828] p-[0.35rem] shadow-[0_30px_60px_-28px_rgba(60,30,40,0.5)]">
           <div className="overflow-hidden rounded-[1.1rem]" style={{ fontSize: "calc(100cqw / 30)" }}>
             <DiagnosticScreen compact />
           </div>
         </div>
-        <AirbnbTile className="-top-1 -right-2 h-[3.3rem] w-[3.3rem] sm:h-[4.1rem] sm:w-[4.1rem]" />
+        <AirbnbTile className="-top-1 -right-2 h-[4.1rem] w-[4.1rem]" />
         <div className="mt-4 grid grid-cols-3 gap-2">
           {FLOATING.map(({ icon: Icon, line1, line2, tone }) => (
             <div
@@ -451,6 +587,9 @@ export function HeroLaptopDemo() {
           ))}
         </div>
       </div>
+
+      {/* ---------- Mobile / tablet (< 1024): portrait composition ---------- */}
+      <MobileDemo />
     </div>
   );
 }
