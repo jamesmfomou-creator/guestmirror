@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ArrowDown, ArrowRight, Zap } from "lucide-react";
 import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
 import { HeroForm } from "@/components/landing/HeroForm";
-import { HeroProductDemo } from "@/components/landing/HeroProductDemo";
+import { HeroLaptopDemo } from "@/components/landing/HeroLaptopDemo";
 import { StepsShowcase } from "@/components/landing/StepsShowcase";
 import { BeforeAfterShowcase } from "@/components/landing/BeforeAfterShowcase";
 import { LandingCompareTeaser } from "@/components/landing/LandingCompareTeaser";
@@ -79,7 +79,7 @@ export default async function LandingPage() {
         />
         {/* grid-cols-1 = minmax(0,1fr): a wide child can no longer widen the
             column past the screen and push the form out on small phones. */}
-        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-16 px-5 pt-8 pb-20 sm:pt-20 lg:grid-cols-[1.12fr_1fr] lg:gap-10 lg:pt-20 lg:pb-28">
+        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-5 pt-8 pb-20 sm:gap-14 sm:pt-20 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-8 xl:max-w-[84rem] xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] xl:gap-4 lg:pt-20 lg:pb-28">
           {/* Centred on mobile, left-aligned from lg (desktop layout unchanged). */}
           <div className="flex flex-col items-center text-center lg:block lg:text-left">
             <Reveal y={8}>
@@ -140,10 +140,11 @@ export default async function LandingPage() {
             </Reveal>
           </div>
 
-          <Reveal delay={0.25} y={24} className="flex flex-col items-center gap-4">
-            <HeroProductDemo />
-            <p className="max-w-xs text-center text-xs text-muted-2">
-              Exemple de démonstration. Tes propres captures servent uniquement à produire ton analyse.
+          <Reveal delay={0.25} y={24} className="flex flex-col items-center gap-3">
+            <HeroLaptopDemo />
+            <p className="max-w-sm text-center text-xs text-muted-2">
+              Exemple de résultat fictif, à titre de démonstration. Tes propres captures servent uniquement à
+              produire ton analyse.
             </p>
           </Reveal>
         </div>
