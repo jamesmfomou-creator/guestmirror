@@ -79,11 +79,11 @@ export default async function LandingPage() {
         />
         {/* grid-cols-1 = minmax(0,1fr): a wide child can no longer widen the
             column past the screen and push the form out on small phones. */}
-        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-5 pt-8 pb-20 sm:gap-14 sm:pt-20 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-8 xl:max-w-[84rem] xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] xl:gap-4 lg:pt-20 lg:pb-28">
+        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-7 px-5 pt-4 pb-16 sm:gap-10 sm:pt-14 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-8 xl:max-w-[84rem] xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] xl:gap-4 lg:pt-20 lg:pb-28">
           {/* Centred on mobile, left-aligned from lg (desktop layout unchanged). */}
           <div className="flex flex-col items-center text-center lg:block lg:text-left">
             <Reveal y={8}>
-              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card/70 px-3.5 py-2 text-[12.5px] backdrop-blur max-[359px]:gap-1 max-[359px]:px-3 max-[359px]:text-[11px] sm:gap-2 sm:px-4 sm:text-[14px]">
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card/70 px-3.5 py-2 text-[12.5px] backdrop-blur max-sm:gap-[clamp(3px,1.2vw,6px)] max-sm:px-[clamp(9px,3.4vw,14px)] max-sm:py-1.5 max-sm:text-[clamp(10.5px,3vw,12.5px)] sm:gap-2 sm:px-4 sm:text-[14px]">
                 <span className="font-bold tracking-tight text-foreground uppercase">Diagnostic IA</span>
                 <Zap aria-hidden size={15} className="fill-accent text-accent max-[359px]:hidden" />
                 <span className="font-medium text-muted">Analyse automatique de ton annonce</span>
@@ -93,7 +93,7 @@ export default async function LandingPage() {
             {/* Mobile first (Instagram traffic): compact type and spacing so the
                 link field and the CTA stay above the fold on small phones. */}
             <StaggerWords
-              className="text-display mt-5 text-balance text-[2.5rem] text-foreground max-[359px]:text-[2.2rem] sm:mt-7 sm:text-[4rem] lg:text-[4.25rem]"
+              className="text-display mt-4 text-balance text-[clamp(2.2rem,10.8vw,2.9rem)] leading-[0.98] text-foreground sm:mt-7 sm:text-[4rem] lg:text-[4.25rem] lg:leading-none"
               segments={[
                 { text: "Découvre ce qui" },
                 { text: "freine les réservations", em: true },
@@ -102,36 +102,41 @@ export default async function LandingPage() {
             />
 
             <Reveal delay={0.38}>
-              <p className="mx-auto mt-4 max-w-lg text-pretty text-[15px] leading-relaxed text-muted sm:mt-6 sm:text-lg lg:mx-0">
+              <p className="mx-auto mt-3.5 max-w-[22rem] text-pretty text-[15.5px] leading-[1.55] text-foreground/65 sm:mt-6 sm:max-w-lg sm:text-lg sm:leading-relaxed sm:text-muted lg:mx-0">
                 Colle ton lien Airbnb. Notre IA repère les points qui peuvent faire hésiter les voyageurs et
                 t&apos;aide à améliorer ton annonce.
               </p>
             </Reveal>
 
-            <Reveal delay={0.45} className="mt-6 flex w-full justify-center sm:mt-9 lg:block">
+            <Reveal delay={0.45} className="mt-5 flex w-full justify-center sm:mt-9 lg:block">
               <HeroForm />
             </Reveal>
 
+            {/* Desktop only here (mobile: after the demo). The display toggle sits on
+                a plain wrapper: hiding the animated Reveal itself left a paint
+                artefact in WebKit. */}
+            <div className="hidden lg:block">
             <Reveal delay={0.55} className="mt-9 flex flex-col items-center gap-5 lg:items-start">
-              <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[13px] text-muted lg:justify-start">
-                {CHECKS.map((c) => (
-                  <li key={c} className="inline-flex items-center gap-2">
-                    <span aria-hidden className="h-1 w-1 rounded-full bg-accent" />
-                    {c}
-                  </li>
-                ))}
-              </ul>
-              <div className="flex flex-wrap items-center justify-center gap-4 lg:justify-start">
-                <SocialProof />
-                <a
-                  href="#methode"
-                  className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground"
-                >
-                  Voir comment ça marche
-                  <ArrowDown size={14} className="transition-transform duration-300 group-hover:translate-y-0.5" />
-                </a>
-              </div>
-            </Reveal>
+                <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[13px] text-muted lg:justify-start">
+                  {CHECKS.map((c) => (
+                    <li key={c} className="inline-flex items-center gap-2">
+                      <span aria-hidden className="h-1 w-1 rounded-full bg-accent" />
+                      {c}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex flex-wrap items-center justify-center gap-4 lg:justify-start">
+                  <SocialProof />
+                  <a
+                    href="#methode"
+                    className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground"
+                  >
+                    Voir comment ça marche
+                    <ArrowDown size={14} className="transition-transform duration-300 group-hover:translate-y-0.5" />
+                  </a>
+                </div>
+              </Reveal>
+            </div>
           </div>
 
           <Reveal delay={0.25} y={24} className="flex flex-col items-center gap-3">
@@ -140,6 +145,17 @@ export default async function LandingPage() {
               Exemple de résultat fictif, à titre de démonstration. Tes propres captures servent uniquement à
               produire ton analyse.
             </p>
+            {/* Mobile / tablet: social proof + "how it works" after the demo */}
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-3 lg:hidden">
+              <SocialProof />
+              <a
+                href="#methode"
+                className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground"
+              >
+                Voir comment ça marche
+                <ArrowDown size={14} className="transition-transform duration-300 group-hover:translate-y-0.5" />
+              </a>
+            </div>
           </Reveal>
         </div>
       </section>
