@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { AB_COOKIE_NAME } from "@/lib/ab";
 import { PAYWALL_COOKIE_NAME, drawPaywallVariant, isPaywallVariant } from "@/lib/paywallExperiment";
 import { LOADER_COOKIE_NAME, drawLoaderVariant, isLoaderVariant } from "@/lib/loaderExperiment";
+import { EXPERIMENT_FREEZE } from "@/lib/experimentFreeze";
 import {
   ONBOARDING_COOKIE_NAME,
+  ONBOARDING_FORCED_VALUE,
   drawOnboardingVariant,
   isOnboardingCookieValue,
   onboardingOverride,
@@ -60,6 +62,31 @@ const EXPERIMENT_COOKIE_OPTIONS = {
  */
 function assignExperiments(req: NextRequest): NextResponse {
   const assignments: { name: string; value: string }[] = [];
+
+  // Fixed configuration (lib/experimentFreeze.ts): no draw; every visitor's
+  // cookies -- new or returning -- are set to the fixed combination, so the
+  // page and the analytics events agree. The ?ob= QA override still works.
+  if (EXPERIMENT_FREEZE.active) {
+    const obOverride = onboardingOverride(req.nextUrl.searchParams.get("ob"));
+    const currentOb = req.cookies.get(ONBOARDING_COOKIE_NAME)?.value;
+    const wanted: [string, string][] = [
+      [AB_COOKIE_NAME, EXPERIMENT_FREEZE.ab],
+      [PAYWALL_COOKIE_NAME, EXPERIMENT_FREEZE.paywall],
+      [LOADER_COOKIE_NAME, EXPERIMENT_FREEZE.loader],
+      [
+        ONBOARDING_COOKIE_NAME,
+        obOverride ?? (currentOb === ONBOARDING_FORCED_VALUE ? ONBOARDING_FORCED_VALUE : EXPERIMENT_FREEZE.onboarding),
+      ],
+    ];
+    for (const [name, value] of wanted) {
+      if (req.cookies.get(name)?.value !== value) assignments.push({ name, value });
+    }
+    if (assignments.length === 0) return NextResponse.next();
+    for (const { name, value } of assignments) req.cookies.set(name, value);
+    const frozen = NextResponse.next({ request: { headers: req.headers } });
+    for (const { name, value } of assignments) frozen.cookies.set(name, value, EXPERIMENT_COOKIE_OPTIONS);
+    return frozen;
+  }
 
   const ab = req.cookies.get(AB_COOKIE_NAME)?.value;
   if (ab !== "A" && ab !== "B") {

@@ -23,6 +23,8 @@
  * so testers should keep analytics blocked.
  */
 
+import { EXPERIMENT_FREEZE } from "@/lib/experimentFreeze";
+
 export const ONBOARDING_EXPERIMENT_ID = "onboarding_bg_v1";
 export const ONBOARDING_COOKIE_NAME = "gm_ob";
 export const ONBOARDING_VARIANTS = ["control", "background"] as const;
@@ -60,9 +62,12 @@ export function resolveOnboardingVariant(
 
 /** Client-side read; never assigns (proxy.ts does). */
 export function getOnboardingVariant(): OnboardingVariant {
-  if (typeof document === "undefined") return "control";
+  if (typeof document === "undefined") return EXPERIMENT_FREEZE.active ? EXPERIMENT_FREEZE.onboarding : "control";
   const match = document.cookie.match(new RegExp(`(?:^|; )${ONBOARDING_COOKIE_NAME}=([^;]*)`));
-  return resolveOnboardingVariant(match ? decodeURIComponent(match[1]) : null);
+  const value = match ? decodeURIComponent(match[1]) : null;
+  // Fixed configuration (lib/experimentFreeze.ts); the ?ob= QA override still wins.
+  if (EXPERIMENT_FREEZE.active && value !== ONBOARDING_FORCED_VALUE) return EXPERIMENT_FREEZE.onboarding;
+  return resolveOnboardingVariant(value);
 }
 
 /** The ?ob= override: the cookie value to set, or null. */

@@ -30,6 +30,8 @@
  * that is what isPaywallV2Active() is for.
  */
 
+import { EXPERIMENT_FREEZE } from "@/lib/experimentFreeze";
+
 export const PAYWALL_EXPERIMENT_ID = "paywall_v2";
 export const PAYWALL_COOKIE_NAME = "gm_pw";
 export const PAYWALL_VARIANTS = ["control", "v2"] as const;
@@ -59,6 +61,7 @@ export function resolvePaywallVariant(cookieValue: string | null | undefined): P
  * control too. proxy.ts is the only place a variant is drawn.
  */
 export function getPaywallVariant(): PaywallVariant {
+  if (EXPERIMENT_FREEZE.active) return EXPERIMENT_FREEZE.paywall; // lib/experimentFreeze.ts
   if (typeof document === "undefined") return "control";
   const match = document.cookie.match(new RegExp(`(?:^|; )${PAYWALL_COOKIE_NAME}=([^;]*)`));
   return resolvePaywallVariant(match ? decodeURIComponent(match[1]) : null);
