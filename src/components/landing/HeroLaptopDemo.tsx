@@ -392,7 +392,7 @@ export function HeroLaptopDemo() {
         {/* One flat composition, tilted as a whole: a single transformed
             element renders the same in Chrome and Safari (nested 3D planes
             flattened in WebKit). The keyboard deck is pre-projected in SVG. */}
-        <div className="relative origin-center [transform:perspective(2600px)_rotateY(-11deg)_rotateX(2deg)]">
+        <div className="relative origin-center [transform:perspective(2200px)_rotateY(-16deg)_rotateX(3deg)]">
           {/* Lid: thin black bezel, aluminium rim, camera notch */}
           <div className="relative rounded-[1.35rem] bg-[#0c0c0f] p-[1.15%] pt-[1.5%] shadow-[0_0_0_1.5px_#b8bac0,0_0_0_2.5px_#8f9197,0_40px_70px_-30px_rgba(40,30,40,0.55)]">
             <div className="@container relative aspect-[16/10] overflow-hidden rounded-[0.75rem]">
@@ -415,13 +415,13 @@ export function HeroLaptopDemo() {
         <AirbnbTile className="top-[-6%] right-[2.5%] z-10 h-[4.4rem] w-[4.4rem] 2xl:right-[0%]" />
 
         {/* Floating cards (left edge) */}
-        <Reveal delay={0.45} y={10} className="absolute top-[11%] left-[-3%] z-10">
+        <Reveal delay={0.45} y={10} className="absolute top-[11%] left-[-8%] z-10">
           <FloatingCard {...FLOATING[0]} />
         </Reveal>
-        <Reveal delay={0.55} y={10} className="absolute top-[27%] left-[-5%] z-10">
+        <Reveal delay={0.55} y={10} className="absolute top-[27%] left-[-8.5%] z-10">
           <FloatingCard {...FLOATING[1]} />
         </Reveal>
-        <Reveal delay={0.65} y={10} className="absolute top-[43%] left-[-2%] z-10">
+        <Reveal delay={0.65} y={10} className="absolute top-[43%] left-[-7%] z-10">
           <FloatingCard {...FLOATING[2]} />
         </Reveal>
       </div>
