@@ -86,7 +86,7 @@ export default async function LandingPage() {
               <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card/70 px-3.5 py-2 text-[12.5px] backdrop-blur max-[359px]:gap-1 max-[359px]:px-3 max-[359px]:text-[11px] sm:gap-2 sm:px-4 sm:text-[14px]">
                 <span className="font-bold tracking-tight text-foreground uppercase">Diagnostic IA</span>
                 <Zap aria-hidden size={15} className="fill-accent text-accent max-[359px]:hidden" />
-                <span className="font-medium text-muted">Résultat en moins d&apos;une minute</span>
+                <span className="font-medium text-muted">Analyse automatique de ton annonce</span>
               </span>
             </Reveal>
 
@@ -109,8 +109,8 @@ export default async function LandingPage() {
 
             <Reveal delay={0.38}>
               <p className="mx-auto mt-3 max-w-lg text-pretty text-[15px] leading-relaxed text-muted sm:mt-4 sm:text-lg lg:mx-0">
-                Colle le lien de ton annonce Airbnb. {BRAND_NAME} analyse tes photos, ton titre et ta description
-                pour identifier ce qui pourrait faire hésiter les voyageurs.
+                Colle ton lien Airbnb. Notre IA repère les points qui peuvent faire hésiter les voyageurs et
+                t&apos;aide à améliorer ton annonce.
               </p>
             </Reveal>
 
