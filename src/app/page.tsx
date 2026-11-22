@@ -79,7 +79,7 @@ export default async function LandingPage() {
         />
         {/* grid-cols-1 = minmax(0,1fr): a wide child can no longer widen the
             column past the screen and push the form out on small phones. */}
-        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-16 px-5 pt-14 pb-20 sm:pt-20 lg:grid-cols-[1.12fr_1fr] lg:gap-10 lg:pt-24 lg:pb-28">
+        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-16 px-5 pt-8 pb-20 sm:pt-20 lg:grid-cols-[1.12fr_1fr] lg:gap-10 lg:pt-20 lg:pb-28">
           {/* Centred on mobile, left-aligned from lg (desktop layout unchanged). */}
           <div className="flex flex-col items-center text-center lg:block lg:text-left">
             <Reveal y={8}>
@@ -90,19 +90,31 @@ export default async function LandingPage() {
               </span>
             </Reveal>
 
+            {/* Mobile first (Instagram traffic): compact type and spacing so the
+                link field and the CTA stay above the fold on small phones. */}
             <StaggerWords
-              className="text-display mt-7 text-[3.15rem] text-foreground sm:text-[4.4rem] lg:text-[5.25rem]"
-              segments={[{ text: "Améliore ton annonce Airbnb pour" }, { text: "donner envie de réserver.", em: true }]}
+              className="text-display mt-5 text-balance text-[2.5rem] text-foreground max-[359px]:text-[2.2rem] sm:mt-7 sm:text-[4rem] lg:text-[4.25rem]"
+              segments={[
+                { text: "Découvre ce qui" },
+                { text: "freine les réservations", em: true },
+                { text: "sur ton Airbnb." },
+              ]}
             />
 
-            <Reveal delay={0.35}>
-              <p className="mx-auto mt-7 max-w-lg text-pretty text-lg leading-relaxed text-muted lg:mx-0">
-                Colle ton lien Airbnb. {BRAND_NAME} analyse ton annonce, identifie ses points faibles et
-                te montre comment l&apos;améliorer.
+            <Reveal delay={0.3}>
+              <p className="mx-auto mt-4 max-w-xl text-balance text-[1.2rem] leading-snug font-medium tracking-tight text-foreground/85 sm:mt-5 sm:text-2xl lg:mx-0">
+                Et comment rendre ton annonce <span className="text-foreground">plus attractive</span>, grâce à l&apos;IA.
               </p>
             </Reveal>
 
-            <Reveal delay={0.45} className="mt-9 flex w-full justify-center lg:block">
+            <Reveal delay={0.38}>
+              <p className="mx-auto mt-3 max-w-lg text-pretty text-[15px] leading-relaxed text-muted sm:mt-4 sm:text-lg lg:mx-0">
+                Colle le lien de ton annonce Airbnb. {BRAND_NAME} analyse tes photos, ton titre et ta description
+                pour identifier ce qui pourrait faire hésiter les voyageurs.
+              </p>
+            </Reveal>
+
+            <Reveal delay={0.45} className="mt-6 flex w-full justify-center sm:mt-9 lg:block">
               <HeroForm />
             </Reveal>
 
