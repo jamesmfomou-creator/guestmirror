@@ -129,23 +129,17 @@ function DiagnosticScreen({ compact = false }: { compact?: boolean }) {
                 Annonce Airbnb
               </span>
             </div>
-            <div className={compact ? "grid grid-rows-2 gap-[0.5em]" : "grid grid-cols-2 gap-[0.5em]"}>
-              <Image
-                src="/hero/listing-thumb-1.jpg"
-                alt=""
-                width={420}
-                height={280}
-                sizes="120px"
-                className="h-full w-full rounded-[0.6em] object-cover"
-              />
-              <Image
-                src="/hero/listing-thumb-2.jpg"
-                alt=""
-                width={420}
-                height={280}
-                sizes="120px"
-                className="h-full w-full rounded-[0.6em] object-cover"
-              />
+            {/* Thumbnails: the image is absolutely positioned so it never sizes
+                its cell (WebKit let the 2nd one overflow in the compact card). */}
+            <div className={compact ? "grid min-h-0 grid-rows-2 gap-[0.5em]" : "grid grid-cols-2 gap-[0.5em]"}>
+              {["/hero/listing-thumb-1.jpg", "/hero/listing-thumb-2.jpg"].map((src) => (
+                <div
+                  key={src}
+                  className={`relative overflow-hidden rounded-[0.6em] ${compact ? "min-h-0" : "aspect-[3/2]"}`}
+                >
+                  <Image src={src} alt="" width={420} height={280} sizes="120px" className="absolute inset-0 h-full w-full object-cover" />
+                </div>
+              ))}
             </div>
           </div>
 
@@ -242,6 +236,148 @@ function AirbnbTile({ className = "" }: { className?: string }) {
   );
 }
 
+// ---- MacBook base (SVG, pre-projected perspective) ---------------------------
+// Coordinates: viewBox 1120 x 262. The lid spans x 60..1060 (the SVG is 112 %
+// of the lid width, offset -6 %). Back edge (hinge) is narrower than the front
+// edge; rows get taller towards the viewer (v^1.18), like a photo taken from
+// slightly above.
+const BX0 = 72; // back edge, left
+const BX1 = 1048; // back edge, right
+const BY0 = 12; // back edge y
+const BY1 = 200; // front edge y
+const FLARE = 72; // how much wider the front edge is, per side
+
+function deckPoint(u: number, v: number): [number, number] {
+  const y = BY0 + (BY1 - BY0) * Math.pow(v, 1.18);
+  const t = (y - BY0) / (BY1 - BY0);
+  const left = BX0 - FLARE * t;
+  const right = BX1 + FLARE * t;
+  return [left + u * (right - left), y];
+}
+
+function quad(u0: number, u1: number, v0: number, v1: number): string {
+  const pts = [deckPoint(u0, v0), deckPoint(u1, v0), deckPoint(u1, v1), deckPoint(u0, v1)];
+  return "M" + pts.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L") + " Z";
+}
+
+// Key widths per row (relative units), function row is short.
+const KEY_ROWS: { h: number; keys: number[] }[] = [
+  { h: 0.62, keys: Array(14).fill(1) },
+  { h: 1, keys: [...Array(13).fill(1), 1.5] },
+  { h: 1, keys: [1.5, ...Array(12).fill(1), 1] },
+  { h: 1, keys: [1.8, ...Array(11).fill(1), 1.7] },
+  { h: 1, keys: [2.3, ...Array(10).fill(1), 2.2] },
+  { h: 1, keys: [1, 1, 1, 1.25, 5.25, 1.25, 1, 1, 1, 1] },
+];
+
+function keyboardPaths(): string[] {
+  const U0 = 0.118, U1 = 0.882, V0 = 0.075, V1 = 0.6;
+  const GAP_V = 0.12; // in row units
+  const totalH = KEY_ROWS.reduce((a, r) => a + r.h, 0) + GAP_V * (KEY_ROWS.length - 1);
+  const paths: string[] = [];
+  let acc = 0;
+  for (const row of KEY_ROWS) {
+    const v0 = V0 + ((V1 - V0) * acc) / totalH;
+    const v1 = V0 + ((V1 - V0) * (acc + row.h)) / totalH;
+    const total = row.keys.reduce((a, b) => a + b, 0);
+    const gapU = 0.0042;
+    let x = 0;
+    for (const w of row.keys) {
+      const u0 = U0 + ((U1 - U0) * x) / total + gapU / 2;
+      const u1 = U0 + ((U1 - U0) * (x + w)) / total - gapU / 2;
+      paths.push(quad(u0, u1, v0, v1));
+      x += w;
+    }
+    acc += row.h + GAP_V;
+  }
+  return paths;
+}
+
+const KEY_PATHS = keyboardPaths();
+const KEYBOARD_WELL = quad(0.11, 0.89, 0.06, 0.615);
+const TRACKPAD = quad(0.315, 0.685, 0.665, 0.955);
+const GRILLE_L = quad(0.032, 0.098, 0.075, 0.6);
+const GRILLE_R = quad(0.902, 0.968, 0.075, 0.6);
+
+function MacBookBase({ className = "" }: { className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 1120 262" className={className} xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="mb-top" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#cfd1d6" />
+          <stop offset="55%" stopColor="#e4e5e9" />
+          <stop offset="100%" stopColor="#eef0f3" />
+        </linearGradient>
+        <linearGradient id="mb-sheen" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0" />
+          <stop offset="45%" stopColor="#ffffff" stopOpacity="0.35" />
+          <stop offset="60%" stopColor="#ffffff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="mb-front" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#d5d7dc" />
+          <stop offset="100%" stopColor="#9c9ea5" />
+        </linearGradient>
+        <linearGradient id="mb-hinge" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#1a1a1e" />
+          <stop offset="100%" stopColor="#3a3b41" />
+        </linearGradient>
+        <linearGradient id="mb-pad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#d9dbe0" />
+          <stop offset="100%" stopColor="#e9ebee" />
+        </linearGradient>
+        <radialGradient id="mb-shadow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#2a1f24" stopOpacity="0.38" />
+          <stop offset="70%" stopColor="#2a1f24" stopOpacity="0.08" />
+          <stop offset="100%" stopColor="#2a1f24" stopOpacity="0" />
+        </radialGradient>
+        <pattern id="mb-grille" width="5" height="5" patternUnits="userSpaceOnUse">
+          <circle cx="2.5" cy="2.5" r="0.9" fill="#7d7f86" />
+        </pattern>
+      </defs>
+
+      {/* contact shadow + warm glow */}
+      <ellipse cx="560" cy="236" rx="600" ry="26" fill="url(#mb-shadow)" />
+      <ellipse cx="560" cy="232" rx="470" ry="14" fill="#ff8a5c" opacity="0.18" />
+
+      {/* hinge */}
+      <rect x="96" y="0" width="928" height="16" rx="6" fill="url(#mb-hinge)" />
+
+      {/* top surface */}
+      <path
+        d={`M${BX0 + 8} ${BY0} L${BX1 - 8} ${BY0} Q${BX1} ${BY0} ${BX1 + 4} ${BY0 + 8} L${1120 - 2} ${BY1 - 8} Q1120 ${BY1} ${1110} ${BY1} L10 ${BY1} Q0 ${BY1} 2 ${BY1 - 8} L${BX0 - 4} ${BY0 + 8} Q${BX0} ${BY0} ${BX0 + 8} ${BY0} Z`}
+        fill="url(#mb-top)"
+      />
+      <path d={`M${BX0} ${BY0} L${BX1} ${BY0} L1120 ${BY1} L0 ${BY1} Z`} fill="url(#mb-sheen)" opacity="0.6" />
+
+      {/* speaker grilles */}
+      <path d={GRILLE_L} fill="url(#mb-grille)" opacity="0.55" />
+      <path d={GRILLE_R} fill="url(#mb-grille)" opacity="0.55" />
+
+      {/* keyboard well + keys */}
+      <path d={KEYBOARD_WELL} fill="#b9bbc1" opacity="0.55" />
+      <g fill="#1e1f24" stroke="#2c2d33" strokeWidth="1.2" strokeLinejoin="round">
+        {KEY_PATHS.map((d, i) => (
+          <path key={i} d={d} />
+        ))}
+      </g>
+      {/* key top highlight (light from above) */}
+      <g fill="none" stroke="#ffffff" strokeOpacity="0.08" strokeWidth="0.8">
+        {KEY_PATHS.map((d, i) => (
+          <path key={i} d={d} transform="translate(0 -0.6)" />
+        ))}
+      </g>
+
+      {/* trackpad */}
+      <path d={TRACKPAD} fill="url(#mb-pad)" stroke="#b7b9bf" strokeWidth="1.2" strokeLinejoin="round" />
+
+      {/* front edge (lip) with thumb notch */}
+      <path d={`M0 ${BY1} L1120 ${BY1} L1113 ${BY1 + 20} Q1110 ${BY1 + 26} 1100 ${BY1 + 26} L20 ${BY1 + 26} Q10 ${BY1 + 26} 7 ${BY1 + 20} Z`} fill="url(#mb-front)" />
+      <path d={`M488 ${BY1} Q560 ${BY1 + 12} 632 ${BY1} Z`} fill="#8e9097" opacity="0.6" />
+      <line x1="6" y1={BY1 + 0.6} x2="1114" y2={BY1 + 0.6} stroke="#ffffff" strokeOpacity="0.7" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
 export function HeroLaptopDemo() {
   return (
     <div className="relative w-full">
@@ -252,51 +388,42 @@ export function HeroLaptopDemo() {
       </div>
 
       {/* ---------- Large desktop (xl+): laptop in perspective ---------- */}
-      <div className="relative hidden w-full -mt-16 pt-4 pb-[10%] pl-[7%] pr-[1%] xl:block">
-        <div className="[perspective:2200px]">
-          <div className="relative [transform:rotateY(-15deg)_rotateX(5deg)_rotateZ(-0.6deg)] [transform-style:preserve-3d]">
-            {/* Lid */}
-            <div className="relative rounded-[1.7rem] bg-gradient-to-b from-[#2d2838] via-[#1d1926] to-[#15121c] p-[1.7%] shadow-[0_50px_80px_-30px_rgba(60,30,40,0.55),0_0_0_1px_rgba(0,0,0,0.35)]">
-              <span aria-hidden className="absolute top-[0.75%] left-1/2 h-[0.45rem] w-[0.45rem] -translate-x-1/2 rounded-full bg-[#3a3546]" />
-              <div className="@container relative aspect-[16/10] overflow-hidden rounded-[0.85rem] ring-1 ring-black/40">
-                <div className="h-full" style={{ fontSize: "calc(100cqw / 58)" }}>
-                  <DiagnosticScreen />
-                </div>
-                {/* glass reflection */}
-                <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.10)_0%,transparent_35%)]" />
+      <div className="relative hidden w-full -mt-16 pt-4 pb-[4%] pl-[8%] pr-[5%] xl:block 2xl:pr-[2%]">
+        {/* One flat composition, tilted as a whole: a single transformed
+            element renders the same in Chrome and Safari (nested 3D planes
+            flattened in WebKit). The keyboard deck is pre-projected in SVG. */}
+        <div className="relative origin-center [transform:perspective(2600px)_rotateY(-11deg)_rotateX(2deg)]">
+          {/* Lid: thin black bezel, aluminium rim, camera notch */}
+          <div className="relative rounded-[1.35rem] bg-[#0c0c0f] p-[1.15%] pt-[1.5%] shadow-[0_0_0_1.5px_#b8bac0,0_0_0_2.5px_#8f9197,0_40px_70px_-30px_rgba(40,30,40,0.55)]">
+            <div className="@container relative aspect-[16/10] overflow-hidden rounded-[0.75rem]">
+              <div className="h-full" style={{ fontSize: "calc(100cqw / 58)" }}>
+                <DiagnosticScreen />
               </div>
+              {/* glass reflection */}
+              <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.09)_0%,transparent_32%)]" />
             </div>
-
-            {/* Hinge */}
-            <div aria-hidden className="relative mx-[3%] h-[0.7rem] rounded-b-[0.6rem] bg-gradient-to-b from-[#3b3547] to-[#26212f]" />
-
-            {/* Keyboard deck, folded towards the viewer (absolute: the 3D
-                rotation would otherwise keep its unrotated layout height) */}
-            <div
-              aria-hidden
-              className="absolute top-[calc(100%-0.35rem)] right-[-6%] left-[-1%] origin-top [transform:rotateX(74deg)] rounded-[1rem] bg-gradient-to-b from-[#ece7f3] via-[#ddd5ea] to-[#c9bedb] shadow-[inset_0_2px_0_rgba(255,255,255,0.75),0_40px_60px_-10px_rgba(255,130,80,0.45)]"
-              style={{ aspectRatio: "16 / 5.2" }}
-            >
-              <div className="absolute inset-x-[8%] top-[7%] h-[50%] rounded-[0.5rem] bg-[repeating-linear-gradient(90deg,#3d364c_0_5.6%,transparent_5.6%_6.5%),repeating-linear-gradient(0deg,#3d364c_0_16.5%,transparent_16.5%_20%)] opacity-85 [background-blend-mode:multiply]" />
-              <div className="absolute bottom-[14%] left-1/2 h-[22%] w-[32%] -translate-x-1/2 rounded-[0.6rem] bg-[#d3cae1] shadow-[inset_0_1px_2px_rgba(0,0,0,0.12)]" />
-              {/* front lip */}
-              <div className="absolute inset-x-0 bottom-0 h-[5%] rounded-b-[1rem] bg-gradient-to-b from-[#b9add1] to-[#8a7da8]" />
-            </div>
+            {/* notch with camera */}
+            <span aria-hidden className="absolute top-0 left-1/2 flex h-[3.4%] w-[10%] -translate-x-1/2 items-center justify-center rounded-b-[0.55rem] bg-[#0c0c0f]">
+              <span className="h-[0.32rem] w-[0.32rem] rounded-full bg-[#1d2333] ring-1 ring-[#2c3346]" />
+            </span>
           </div>
+          {/* Base: hinge, keyboard, trackpad, front lip, shadow */}
+          <MacBookBase className="relative -mt-[0.3%] -ml-[6%] block w-[112%]" />
         </div>
 
+        {/* Airbnb tile: above the top-right corner of the screen */}
+        <AirbnbTile className="top-[-6%] right-[2.5%] z-10 h-[4.4rem] w-[4.4rem] 2xl:right-[0%]" />
+
         {/* Floating cards (left edge) */}
-        <Reveal delay={0.45} y={10} className="absolute top-[20%] left-[-3%] z-10">
+        <Reveal delay={0.45} y={10} className="absolute top-[11%] left-[-3%] z-10">
           <FloatingCard {...FLOATING[0]} />
         </Reveal>
-        <Reveal delay={0.55} y={10} className="absolute top-[40%] left-[-5%] z-10">
+        <Reveal delay={0.55} y={10} className="absolute top-[27%] left-[-5%] z-10">
           <FloatingCard {...FLOATING[1]} />
         </Reveal>
-        <Reveal delay={0.65} y={10} className="absolute top-[54%] left-[-2%] z-10">
+        <Reveal delay={0.65} y={10} className="absolute top-[43%] left-[-2%] z-10">
           <FloatingCard {...FLOATING[2]} />
         </Reveal>
-
-        <AirbnbTile className="top-[-9%] right-[1.5%] z-10 h-[4.6rem] w-[4.6rem]" />
       </div>
 
       {/* ---------- Mobile, tablet, small desktop: flat card ---------- */}
