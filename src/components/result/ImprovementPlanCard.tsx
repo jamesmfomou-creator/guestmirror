@@ -4,6 +4,9 @@ import { Check, Lock } from "lucide-react";
 import { track } from "@/lib/analytics";
 import { useInViewOnce } from "@/lib/tracking/useInViewOnce";
 
+/** Asks the Paywall (revealOnRequest) to show the offers. detail: { handled: boolean } */
+export const SHOW_OFFERS_EVENT = "gm:show-offers";
+
 // "Ton plan d'amélioration": what the paid report contains for THIS listing,
 // every line and figure computed by buildFreeReveal() from the report itself
 // (never a fixed list, never an invented number). Receives only those
@@ -35,6 +38,12 @@ export function ImprovementPlanCard({
 
   function showOffers() {
     track("unlock_cta_clicked", { analysisId, source: "plan_card" });
+    // The Paywall keeps its offers hidden until this click (revealOnRequest):
+    // it reveals them and scrolls there itself. Fallback below if no Paywall
+    // listens (offers already visible).
+    const request = { handled: false };
+    window.dispatchEvent(new CustomEvent(SHOW_OFFERS_EVENT, { detail: request }));
+    if (request.handled) return;
     const offers = document.getElementById("formules") ?? document.getElementById("paywall");
     if (!offers) return;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -94,7 +103,7 @@ export function ImprovementPlanCard({
         onClick={showOffers}
         className="btn-sheen mt-6 inline-flex w-full items-center justify-center rounded-full bg-accent px-6 py-3.5 text-base font-semibold text-accent-foreground transition-colors hover:bg-accent-hover"
       >
-        Découvrir mes formules
+        Débloquer mon plan d&apos;amélioration
       </button>
       <p className="mt-2.5 text-center text-[12.5px] text-muted-2">Tu choisis ta formule juste en dessous, avant tout paiement.</p>
       </>

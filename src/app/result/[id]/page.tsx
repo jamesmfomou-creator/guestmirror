@@ -276,6 +276,7 @@ export default async function ResultPage({
               addonAvailable={addonAvailable}
               singleCopy
               hidePreviewContents
+              revealOnRequest
               {...(paywallPreview ? { preview: paywallPreview, emailsReportLink } : {})}
             />
           )}
