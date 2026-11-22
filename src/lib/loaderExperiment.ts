@@ -20,6 +20,8 @@
  * maps them back to control while the share is 0.
  */
 
+import { EXPERIMENT_FREEZE } from "@/lib/experimentFreeze";
+
 export const LOADER_EXPERIMENT_ID = "loader_immersive_v1";
 export const LOADER_COOKIE_NAME = "gm_ld";
 export const LOADER_VARIANTS = ["control", "immersive"] as const;
@@ -52,6 +54,7 @@ export function resolveLoaderVariant(
  * control too.
  */
 export function getLoaderVariant(): LoaderVariant {
+  if (EXPERIMENT_FREEZE.active) return EXPERIMENT_FREEZE.loader; // lib/experimentFreeze.ts
   if (typeof document === "undefined") return "control";
   const match = document.cookie.match(new RegExp(`(?:^|; )${LOADER_COOKIE_NAME}=([^;]*)`));
   return resolveLoaderVariant(match ? decodeURIComponent(match[1]) : null);

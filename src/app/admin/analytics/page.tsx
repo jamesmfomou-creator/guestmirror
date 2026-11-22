@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { getConfigComparison } from "@/lib/admin/configComparison";
+import { ConfigComparisonSection } from "./ConfigComparisonSection";
 import {
   getAnalyticsDashboard,
   Period,
@@ -114,7 +116,7 @@ export default async function AdminAnalyticsPage({
 }) {
   const sp = await searchParams;
   const period: Period = sp.period === "today" || sp.period === "30d" ? sp.period : "7d";
-  const data = await getAnalyticsDashboard(period);
+  const [data, configComparison] = await Promise.all([getAnalyticsDashboard(period), getConfigComparison()]);
   // Not period-scoped (all-time) -- feedback volume is low enough that a
   // rolling funnel window isn't useful here, unlike the rest of this page.
   const feedback = await listFeedback();
@@ -638,6 +640,7 @@ export default async function AdminAnalyticsPage({
         title={<>Les expériences <em>en cours.</em></>}
         description={<>Chaque test avec ses intervalles de confiance : un écart n&apos;est un résultat que s&apos;il est net.</>}
       />
+      <ConfigComparisonSection data={configComparison} />
       {/* A/B test: pre-paywall "Aha moment" */}
       <section className="admin-sub">
         <h3 className="admin-h3">A/B Test — Aha moment</h3>

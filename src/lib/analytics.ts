@@ -1,4 +1,5 @@
 import { captureAttribution, getAnonymousId, getFirstTouch, getLastTouch, getSessionId } from "@/lib/tracking/identity";
+import { EXPERIMENT_FREEZE } from "@/lib/experimentFreeze";
 import { getAbVariant } from "@/lib/ab";
 import { getPaywallVariant } from "@/lib/paywallExperiment";
 import { getLoaderVariant } from "@/lib/loaderExperiment";
@@ -258,6 +259,8 @@ export function track(event: AnalyticsEvent, props?: Props) {
     result_version: RESULT_VERSION,
     // Journey version (onboarding + loader + free result framing).
     journey_version: JOURNEY_VERSION,
+    // Fixed experiment configuration (lib/experimentFreeze.ts), if any.
+    experiment_config: EXPERIMENT_FREEZE.active ? EXPERIMENT_FREEZE.id : undefined,
   };
 
   try {

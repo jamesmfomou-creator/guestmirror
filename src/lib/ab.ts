@@ -20,6 +20,8 @@
  * this date: compare the periods separately.
  */
 
+import { EXPERIMENT_FREEZE } from "@/lib/experimentFreeze";
+
 export const AB_COOKIE_NAME = "gm_ab";
 export type AbVariant = "A" | "B";
 
@@ -32,6 +34,9 @@ const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
  * some reason -- keeps the session internally consistent even then.
  */
 export function getAbVariant(): AbVariant {
+  // Fixed configuration (lib/experimentFreeze.ts): same answer on the server
+  // render and in the browser, no draw, no cookie written here (proxy.ts does).
+  if (EXPERIMENT_FREEZE.active) return EXPERIMENT_FREEZE.ab;
   if (typeof document === "undefined") return "A";
 
   const match = document.cookie.match(new RegExp(`(?:^|; )${AB_COOKIE_NAME}=([^;]*)`));
