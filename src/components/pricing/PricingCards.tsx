@@ -15,12 +15,15 @@ export function PricingCards({
   lifetimeAction,
   highlight = "conciergerie",
   showConciergeBanner,
+  lifetimePromo,
 }: {
   oneTimeAction: ReactNode;
   conciergerieAction: ReactNode;
   lifetimeAction: ReactNode;
   highlight?: OfferId;
   showConciergeBanner?: boolean;
+  /** Marketing campaign treatment of "Accès à vie" (components/promo). */
+  lifetimePromo?: { badge: string; content: ReactNode };
 }) {
   return (
     <div>
@@ -29,10 +32,18 @@ export function PricingCards({
           Tu gères plusieurs logements ? L&apos;offre Conciergerie est généralement plus adaptée.
         </p>
       )}
-      <div className="mx-auto grid max-w-5xl gap-5 md:grid-cols-3">
+      <div className="mx-auto grid max-w-5xl grid-cols-1 gap-5 md:grid-cols-3">
         <PricingCard plan={ONE_TIME_PLAN} highlighted={highlight === "one_time"} action={oneTimeAction} />
         <PricingCard plan={CONCIERGERIE_PLAN} highlighted={highlight === "conciergerie"} action={conciergerieAction} />
-        <PricingCard plan={LIFETIME_PLAN} highlighted={highlight === "lifetime"} action={lifetimeAction} />
+        <div id="acces-a-vie" className="scroll-mt-28 md:h-full">
+          <PricingCard
+            plan={lifetimePromo ? { ...LIFETIME_PLAN, badge: lifetimePromo.badge } : LIFETIME_PLAN}
+            highlighted={highlight === "lifetime"}
+            featured={Boolean(lifetimePromo)}
+            promo={lifetimePromo?.content}
+            action={lifetimeAction}
+          />
+        </div>
       </div>
     </div>
   );
