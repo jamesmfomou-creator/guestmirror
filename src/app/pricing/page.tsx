@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { CtaTrackedButton } from "@/components/landing/CtaTrackedButton";
-import { PricingCards } from "@/components/pricing/PricingCards";
+import { LifetimePromoCards } from "@/components/promo/LifetimePromoCards";
 
 export const metadata: Metadata = {
   title: "Tarif",
@@ -20,7 +20,7 @@ export default function PricingPage() {
       </p>
 
       <div className="mt-10">
-        <PricingCards
+        <LifetimePromoCards
           oneTimeAction={
             <CtaTrackedButton href="/analyze" size="lg" variant="outline" className="mt-6 w-full" ctaLocation="pricing_page_one_time">
               Analyser mon annonce
@@ -33,6 +33,16 @@ export default function PricingPage() {
           }
           lifetimeAction={
             <CtaTrackedButton href="/analyze" size="lg" variant="outline" className="mt-6 w-full" ctaLocation="pricing_page_lifetime">
+              Obtenir l&apos;accès à vie
+            </CtaTrackedButton>
+          }
+          campaignConciergerieAction={
+            <CtaTrackedButton href="/analyze" size="lg" variant="outline" className="mt-6 w-full" ctaLocation="pricing_page_conciergerie">
+              Choisir Conciergerie
+            </CtaTrackedButton>
+          }
+          campaignLifetimeAction={
+            <CtaTrackedButton href="/analyze" size="lg" className="mt-6 w-full" ctaLocation="pricing_page_lifetime">
               Obtenir l&apos;accès à vie
             </CtaTrackedButton>
           }

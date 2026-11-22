@@ -12,7 +12,7 @@ import { SocialProof } from "@/components/landing/SocialProof";
 import { ScrollingShowcase } from "@/components/landing/ScrollingShowcase";
 import { CaseStudiesCarousel } from "@/components/landing/CaseStudiesCarousel";
 import { getShowcaseItems } from "@/lib/showcase";
-import { PricingCards } from "@/components/pricing/PricingCards";
+import { LifetimePromoCards } from "@/components/promo/LifetimePromoCards";
 import { FAQAccordion } from "@/components/landing/FAQAccordion";
 import { Reveal } from "@/components/landing/Reveal";
 import { BRAND_NAME } from "@/lib/brand";
@@ -217,7 +217,7 @@ export default async function LandingPage() {
         <Reveal className="mx-auto mt-14 max-w-5xl px-5 text-center">
           {/* Every CTA starts with a free analysis; the offer is chosen on the
               diagnostic page (the paywall), where checkout happens. */}
-          <PricingCards
+          <LifetimePromoCards
             oneTimeAction={
               <CtaTrackedButton
                 href="/analyze"
@@ -245,6 +245,27 @@ export default async function LandingPage() {
                 size="lg"
                 variant="outline"
                 className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
+                ctaLocation="pricing_lifetime"
+              >
+                Obtenir l&apos;accès à vie
+              </CtaTrackedButton>
+            }
+            campaignConciergerieAction={
+              <CtaTrackedButton
+                href="/analyze"
+                size="lg"
+                variant="outline"
+                className="mt-6 w-full whitespace-normal text-[15px] sm:text-base"
+                ctaLocation="pricing_conciergerie"
+              >
+                Choisir Conciergerie
+              </CtaTrackedButton>
+            }
+            campaignLifetimeAction={
+              <CtaTrackedButton
+                href="/analyze"
+                size="lg"
+                className="btn-sheen mt-6 w-full whitespace-normal text-[15px] sm:text-base"
                 ctaLocation="pricing_lifetime"
               >
                 Obtenir l&apos;accès à vie

@@ -198,6 +198,31 @@ body {
   }
 }
 
+/* Black Friday banner ticker (components/promo/BlackFridayBanner.tsx):
+   four identical segments, the track slides by half its width for a seamless loop. */
+@keyframes gm-ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.gm-ticker {
+  animation: gm-ticker 55s linear infinite;
+  will-change: transform;
+}
+a:hover .gm-ticker,
+a:focus-visible .gm-ticker {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gm-ticker {
+    animation: none;
+    transform: none;
+  }
+}
+
 /* Display type: tight bold grotesk. In the components layer so a weight
    utility (font-semibold…) can still override it on smaller headings. */
 @layer components {
