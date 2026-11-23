@@ -19,6 +19,7 @@ import { editTokenFor } from "@/lib/analysisEditToken";
 import { checkAnalyzeRateLimit, rateIdentity } from "@/lib/analyzeRateLimit";
 import { currentIdentity } from "@/lib/access/session";
 import { normalizeEmail } from "@/lib/access/accessStore";
+import { descriptionExcerpt } from "@/lib/listingMakeover";
 
 const AIRBNB_EXTRACTION_FAILED_MESSAGE =
   "Impossible d'analyser automatiquement ce lien Airbnb. Importe une capture d'écran de ton annonce pour continuer.";
@@ -429,6 +430,10 @@ export async function POST(req: NextRequest) {
     // Added after the AI call: the model never sees or produces this field.
     const extractedTitle = extractedListingText?.title?.replace(/\s+/g, " ").trim() || null;
     if (extractedTitle) result = { ...result, listing_title: extractedTitle };
+    // Same for the opening of its real description: the "Avant" side of the
+    // free Avant / Après preview (lib/listingMakeover.ts). Capped excerpt only.
+    const extractedExcerpt = descriptionExcerpt(extractedListingText?.description);
+    if (extractedExcerpt) result = { ...result, listing_description_excerpt: extractedExcerpt };
     // Kept with the report so the result page can say which photos were
     // analysed (never produced by the model; absent on older reports).
     result = { ...result, photo_coverage: photoCoverage };

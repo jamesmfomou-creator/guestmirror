@@ -43,6 +43,8 @@ import { GoalPrompt } from "@/components/result/GoalPrompt";
 import { OwnershipVerify } from "@/components/result/OwnershipVerify";
 import { maskEmail } from "@/lib/access/maskEmail";
 import { EMAIL_CONFIGURED } from "@/lib/env";
+import { buildListingMakeover, listingMakeoverEnabled } from "@/lib/listingMakeover";
+import { ListingMakeover } from "@/components/result/ListingMakeover";
 
 export const metadata: Metadata = {
   title: `Ton ${BRAND_NAME}`,
@@ -121,6 +123,13 @@ export default async function ResultPage({
   // Journey goal_value_v1: the revealed weakness is tied to the stored goal
   // (lib/goalValue.ts), wording only; no goal: the neutral framing.
   const freeReveal = !unlocked && !incomplete ? buildFreeReveal(analysis.result, analysis.goal) : null;
+  // Free result makeover_v1: "Avant / Après" of the visitor's own listing,
+  // built from the stored report and its real photos (no AI call, nothing
+  // invented). null: nothing to compare, or switched off for an incident
+  // (LISTING_MAKEOVER_DISABLED=1) -- the page then renders as before.
+  const makeoverOn = listingMakeoverEnabled();
+  const makeover =
+    freeReveal && makeoverOn ? buildListingMakeover(analysis.result, images, { city: analysis.city }) : null;
 
   const previous = analysis.previous_analysis_id
     ? await getAnalysis(analysis.previous_analysis_id)
@@ -257,6 +266,14 @@ export default async function ResultPage({
       {!unlocked && !incomplete && freeReveal && (
         <>
           <FreeInsight reveal={freeReveal} analysisId={id} />
+          {makeover ? (
+            <ListingMakeover makeover={makeover} analysisId={id} showOffersButton={!creditUsable} />
+          ) : (
+            <AnalyticsBeacon
+              event="listing_preview_unavailable"
+              props={{ analysisId: id, reason: makeoverOn ? "nothing_to_compare" : "disabled" }}
+            />
+          )}
           <ImprovementPlanCard
             analysisId={id}
             insightShown={freeReveal.insight !== null}

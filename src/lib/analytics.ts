@@ -215,6 +215,21 @@ export const ANALYTICS_EVENTS = [
   // Background onboarding reflection questions (StepReflection.tsx):
   // question = doubt | projection | priority, answer = option value.
   "onboarding_answer",
+  // Free result makeover_v1 (components/result/ListingMakeover.tsx), shown to
+  // everyone (no experiment; compare periods by result_version):
+  //  - listing_preview_viewed: the Avant / Après preview entered the viewport
+  //    (title_changed, cover_changed, text_changed, changes = count).
+  //  - listing_preview_toggled: Avant / Après switched (to: before | after).
+  //  - listing_preview_cta_clicked: "Obtenir mon annonce optimisée". It also
+  //    fires the existing unlock_cta_clicked (source: listing_preview), so the
+  //    current funnel keeps counting it; pricing_viewed / checkout_started /
+  //    payment_completed are the existing events, unchanged.
+  //  - listing_preview_unavailable: a free result without a preview (reason),
+  //    the denominator of the preview's coverage.
+  "listing_preview_viewed",
+  "listing_preview_toggled",
+  "listing_preview_cta_clicked",
+  "listing_preview_unavailable",
 ] as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[number];

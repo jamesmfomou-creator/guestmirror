@@ -8,8 +8,12 @@
  *               the existing offers. The Aha test is closed on the result
  *               page (ab_variant still exists: it keeps driving the control
  *               loader of the loader experiment, unchanged).
+ *   makeover_v1 reveal_v1 + the "Avant / Après" preview of the visitor's own
+ *               listing (lib/listingMakeover.ts, components/result/
+ *               ListingMakeover.tsx), for everyone, no experiment: compare
+ *               makeover_v1 against reveal_v1 periods.
  */
-export const RESULT_VERSION = "reveal_v1";
+export const RESULT_VERSION = "makeover_v1";
 
 /**
  * Version of the whole journey (onboarding questions, loader messages, free
