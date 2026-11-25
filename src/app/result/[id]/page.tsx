@@ -280,7 +280,9 @@ export default async function ResultPage({
             weaknessCount={freeReveal.weaknessCount}
             reportHighlights={freeReveal.reportHighlights}
             reportMore={freeReveal.reportMore}
-            showOffersButton={!creditUsable}
+            // One button to the offers: the preview's "Obtenir mon annonce
+            // optimisée" when it is shown; this one only without a preview.
+            showOffersButton={!creditUsable && !makeover}
           />
           {!creditUsable && (
             <Paywall
