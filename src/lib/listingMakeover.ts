@@ -92,7 +92,11 @@ export function openingOf(text: string | null, max: number): string | null {
   const sentences = t.match(/[^.!?…]+[.!?…]+(?=\s|$)|[^.!?…]+$/g)?.map((s) => s.trim()).filter(Boolean) ?? [t];
   let out = sentences[0];
   if (sentences[1] && out.length + 1 + sentences[1].length <= max) out = `${out} ${sentences[1]}`;
-  return cutAtWord(out, max);
+  const cut = cutAtWord(out, max);
+  // Never end inside an unclosed parenthesis ("(lustres en laiton…"): stop before it.
+  const open = cut.lastIndexOf("(");
+  if (open > 0 && cut.indexOf(")", open) === -1 && open > max * 0.4) return `${cut.slice(0, open).replace(/[\s,;:–-]+$/, "")}…`;
+  return cut;
 }
 
 /** Excerpt of the real listing description kept with a new report (set server side, never by the model). */

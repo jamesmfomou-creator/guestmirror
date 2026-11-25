@@ -126,6 +126,11 @@ describe("text helpers", () => {
     expect(openingOf('{"x": 1}', 50)).toBeNull();
     expect(openingOf(null, 50)).toBeNull();
   });
+  it("openingOf never ends inside an unclosed parenthesis", () => {
+    const t = "Dans une petite rue calme du 12e, cet appartement cosy a été refait avec des enduits bleu-gris et des touches vintage (lustres en laiton, miroirs anciens, tapis berbères et fauteuils chinés) pour un séjour.";
+    expect(openingOf(t, 190)).toBe("Dans une petite rue calme du 12e, cet appartement cosy a été refait avec des enduits bleu-gris et des touches vintage…");
+    expect(openingOf("Studio (climatisation réversible) au calme.", 190)).toBe("Studio (climatisation réversible) au calme.");
+  });
   it("cutAtWord never cuts inside a word", () => {
     expect(cutAtWord("appartement lumineux et calme", 20)).toBe("appartement…");
   });
