@@ -4,8 +4,10 @@ import { Check, Lock } from "lucide-react";
 import { track } from "@/lib/analytics";
 import { useInViewOnce } from "@/lib/tracking/useInViewOnce";
 
-/** Asks the Paywall (revealOnRequest) to show the offers. detail: { handled: boolean } */
-export const SHOW_OFFERS_EVENT = "gm:show-offers";
+import { showOffers } from "@/lib/showOffers";
+
+// Kept here too: Paywall.tsx imports it from this module.
+export { SHOW_OFFERS_EVENT } from "@/lib/showOffers";
 
 // "Ton plan d'amélioration": what the paid report contains for THIS listing,
 // every line and figure computed by buildFreeReveal() from the report itself
@@ -36,21 +38,9 @@ export function ImprovementPlanCard({
     track("locked_preview_viewed", { analysisId, weakness_count: weaknessCount, presentation: "plan_card" });
   });
 
-  function showOffers() {
+  function onShowOffers() {
     track("unlock_cta_clicked", { analysisId, source: "plan_card" });
-    // The Paywall keeps its offers hidden until this click (revealOnRequest):
-    // it reveals them and scrolls there itself. Fallback below if no Paywall
-    // listens (offers already visible).
-    const request = { handled: false };
-    window.dispatchEvent(new CustomEvent(SHOW_OFFERS_EVENT, { detail: request }));
-    if (request.handled) return;
-    const offers = document.getElementById("formules") ?? document.getElementById("paywall");
-    if (!offers) return;
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    offers.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-    // Keyboard and screen-reader users land on the offers too.
-    offers.setAttribute("tabindex", "-1");
-    offers.focus({ preventScroll: true });
+    showOffers();
   }
 
   return (
@@ -100,7 +90,7 @@ export function ImprovementPlanCard({
       <>
       <button
         type="button"
-        onClick={showOffers}
+        onClick={onShowOffers}
         className="btn-sheen mt-6 inline-flex w-full items-center justify-center rounded-full bg-accent px-6 py-3.5 text-base font-semibold text-accent-foreground transition-colors hover:bg-accent-hover"
       >
         Débloquer mon plan d&apos;amélioration
