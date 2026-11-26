@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { ImagePlus, ArrowRight, Check } from "lucide-react";
+import { ImagePlus, ArrowRight } from "lucide-react";
 import { track } from "@/lib/analytics";
 import { isAirbnbUrl } from "@/lib/airbnbUrl";
 
@@ -32,22 +32,11 @@ export function HeroScreenshotLink({ className = "" }: { className?: string }) {
   );
 }
 
-/** "Premier diagnostic gratuit". */
-export function HeroReassurance({ className = "" }: { className?: string }) {
-  return (
-    <p className={`flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[13px] text-muted lg:justify-start lg:pl-1 ${className}`}>
-      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-        <Check aria-hidden size={13} strokeWidth={2.5} className="text-accent" />
-        Premier diagnostic gratuit
-      </span>
-    </p>
-  );
-}
-
 /**
- * belowOnMobile: on phones (< sm) the reassurance line and the screenshot
- * link are shown by the page after the visual (HeroReassurance,
- * HeroScreenshotLink), so the first screen keeps title, form and visual.
+ * belowOnMobile: on phones (< sm) the screenshot link is shown by the page
+ * after the visual (HeroScreenshotLink), so the first screen keeps title,
+ * form and visual. (The reassurance line under the form was removed at the
+ * owner's request on 2026-11-26.)
  */
 export function HeroForm({ belowOnMobile = false }: { belowOnMobile?: boolean } = {}) {
   const router = useRouter();
@@ -122,7 +111,6 @@ export function HeroForm({ belowOnMobile = false }: { belowOnMobile?: boolean } 
       </div>
       {error && <p className="mt-2 pl-1 text-left text-sm text-score-low">{error}</p>}
 
-      <HeroReassurance className={`mt-3 ${belowOnMobile ? "max-sm:hidden" : ""}`} />
 
       <HeroScreenshotLink className={`mt-3 pl-1 max-lg:mt-2 max-lg:pl-0 ${belowOnMobile ? "max-sm:hidden" : ""}`} />
     </form>
