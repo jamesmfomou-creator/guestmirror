@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, Home, Loader2 } from "lucide-react";
 import { BRAND_NAME } from "@/lib/brand";
 import { AnalysisValueMessages } from "./AnalysisValueMessages";
+import { BenefitBubbles } from "./BenefitBubbles";
 import { loaderImageUrl, type ListingPreview } from "@/lib/listingPreview";
 import {
   DESCRIPTION_LINE_MS,
@@ -222,35 +223,41 @@ export function AnalysisImmersive({
           analyses take about a minute (server total ~56-61 s). */}
       {!done && <p className="mt-1.5 text-xs text-muted-2">Ça prend environ une minute.</p>}
 
-      <div className="mt-7 w-full">
+      <div className={`${done ? "mt-7" : "mt-3"} w-full`}>
         {done ? (
           <SuccessBeat
             photo={livePhotos[0] ? srcOf(livePhotos[0]) : null}
             reduceMotion={reduceMotion}
             label={embedded ? "Analyse terminée." : "Ton diagnostic est prêt."}
           />
-        ) : fetching ? (
-          <FetchingCard reduceMotion={reduceMotion} />
         ) : (
-          <Stage
-            phase={phase}
-            photos={photos}
-            livePhotos={livePhotos}
-            srcOf={srcOf}
-            title={title}
-            descriptionLines={descriptionLines}
-            fromScreenshots={preview.status === "idle"}
-            unavailable={(preview.status === "unavailable" && photos.length === 0) || allPhotosFailed}
-            photosPending={photos.length > 0 && livePhotos.length === 0 && !allPhotosFailed}
-            loadingPhotos={photos.filter((p) => failures[p.key] !== "dead")}
-            reduceMotion={reduceMotion}
-            onPhotoLoad={handlePhotoLoad}
-            onPhotoError={handlePhotoError}
-          />
+          // Benefit reminders above / below the card while the analysis runs
+          // (one at a time, fixed bands: nothing covered). Gone once done.
+          <BenefitBubbles>
+            {fetching ? (
+              <FetchingCard reduceMotion={reduceMotion} />
+            ) : (
+              <Stage
+                phase={phase}
+                photos={photos}
+                livePhotos={livePhotos}
+                srcOf={srcOf}
+                title={title}
+                descriptionLines={descriptionLines}
+                fromScreenshots={preview.status === "idle"}
+                unavailable={(preview.status === "unavailable" && photos.length === 0) || allPhotosFailed}
+                photosPending={photos.length > 0 && livePhotos.length === 0 && !allPhotosFailed}
+                loadingPhotos={photos.filter((p) => failures[p.key] !== "dead")}
+                reduceMotion={reduceMotion}
+                onPhotoLoad={handlePhotoLoad}
+                onPhotoError={handlePhotoError}
+              />
+            )}
+          </BenefitBubbles>
         )}
       </div>
 
-      <ol className="mt-7 w-full max-w-sm space-y-2 text-left" aria-label="Étapes de l'analyse">
+      <ol className={`${done ? "mt-7" : "mt-3"} w-full max-w-sm space-y-2 text-left`} aria-label="Étapes de l'analyse">
         {steps.map((s) => (
           <li key={s.label} className="flex items-center gap-3 text-sm">
             <StepIcon status={s.status} />
