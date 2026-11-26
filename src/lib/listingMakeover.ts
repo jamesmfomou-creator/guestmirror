@@ -23,9 +23,13 @@ import { AIRBNB_TITLE_MAX_LENGTH, titleCharCount } from "@/lib/titles";
 //
 // Pure and dependency-light (no Supabase, no SDK): unit-tested.
 
-/** Emergency switch for a technical incident only (not an experiment): LISTING_MAKEOVER_DISABLED=1. */
+/**
+ * Withdrawn from the free result on 2026-11-26 at the owner's request (live
+ * 2026-11-25 -> 2026-11-26 as result_version makeover_v1). OFF unless
+ * LISTING_MAKEOVER_ENABLED=1; the code is kept so it can come back as is.
+ */
 export function listingMakeoverEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return env.LISTING_MAKEOVER_DISABLED !== "1";
+  return env.LISTING_MAKEOVER_ENABLED === "1";
 }
 
 export interface MakeoverSide {

@@ -126,7 +126,8 @@ export default async function ResultPage({
   // Free result makeover_v1: "Avant / Après" of the visitor's own listing,
   // built from the stored report and its real photos (no AI call, nothing
   // invented). null: nothing to compare, or switched off for an incident
-  // (LISTING_MAKEOVER_DISABLED=1) -- the page then renders as before.
+  // Withdrawn on 2026-11-26: off unless LISTING_MAKEOVER_ENABLED=1, so the
+  // page renders as reveal_v1 (plan card button included).
   const makeoverOn = listingMakeoverEnabled();
   const makeover =
     freeReveal && makeoverOn ? buildListingMakeover(analysis.result, images, { city: analysis.city }) : null;
@@ -269,10 +270,9 @@ export default async function ResultPage({
           {makeover ? (
             <ListingMakeover makeover={makeover} analysisId={id} showOffersButton={!creditUsable} />
           ) : (
-            <AnalyticsBeacon
-              event="listing_preview_unavailable"
-              props={{ analysisId: id, reason: makeoverOn ? "nothing_to_compare" : "disabled" }}
-            />
+            makeoverOn && (
+              <AnalyticsBeacon event="listing_preview_unavailable" props={{ analysisId: id, reason: "nothing_to_compare" }} />
+            )
           )}
           <ImprovementPlanCard
             analysisId={id}
