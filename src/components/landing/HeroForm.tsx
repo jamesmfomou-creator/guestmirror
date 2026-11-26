@@ -111,12 +111,12 @@ export function HeroForm({ belowOnMobile = false }: { belowOnMobile?: boolean } 
             value={url}
             onChange={(e) => handleChange(e.target.value)}
             placeholder="Colle le lien de ton annonce Airbnb"
-            className="hero-url-input w-full min-w-0 bg-transparent py-3 text-[15px] text-foreground placeholder:text-muted-2 focus:outline-none max-lg:py-3.5 max-lg:text-[16px]"
+            className="hero-url-input w-full min-w-0 bg-transparent py-3 text-[15px] text-foreground placeholder:text-muted-2 focus:outline-none max-lg:py-3.5 max-lg:text-[16px] max-sm:py-2.5"
           />
         </div>
         <button
           type="submit"
-          className="btn-sheen group/btn inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[16px] bg-accent px-6 py-3.5 text-[15px] font-medium text-accent-foreground transition-colors hover:bg-accent-hover max-lg:min-h-[54px] max-lg:gap-[clamp(4px,1.6vw,8px)] max-lg:rounded-full max-lg:px-[clamp(10px,4.5vw,20px)] max-lg:text-[clamp(13.5px,4.1vw,16px)] max-lg:font-semibold max-lg:shadow-[0_14px_28px_-12px_rgba(217,103,63,0.75),inset_0_1px_0_rgba(255,255,255,0.25)]"
+          className="btn-sheen group/btn inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[16px] bg-accent px-6 py-3.5 text-[15px] font-medium text-accent-foreground transition-colors hover:bg-accent-hover max-lg:min-h-[54px] max-sm:min-h-[48px] max-sm:py-2.5 max-lg:gap-[clamp(4px,1.6vw,8px)] max-lg:rounded-full max-lg:px-[clamp(10px,4.5vw,20px)] max-lg:text-[clamp(13.5px,4.1vw,16px)] max-lg:font-semibold max-lg:shadow-[0_14px_28px_-12px_rgba(217,103,63,0.75),inset_0_1px_0_rgba(255,255,255,0.25)]"
         >
           Analyser mon annonce gratuitement
           <ArrowRight size={16} className="shrink-0 transition-transform duration-300 group-hover/btn:translate-x-0.5" />

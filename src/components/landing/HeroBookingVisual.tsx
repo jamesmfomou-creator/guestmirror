@@ -132,7 +132,7 @@ function Calendar() {
 
 export function HeroBookingVisual() {
   return (
-    <div className="@container relative mx-auto w-full max-w-[29rem] lg:max-w-[36rem] xl:max-w-[40rem]">
+    <div className="@container relative mx-auto w-full max-w-[29rem] max-sm:w-[clamp(15.5rem,calc((100svh-25.5rem)*0.95),100%)] lg:max-w-[36rem] xl:max-w-[40rem]">
       <div className="relative aspect-[40/41]" style={{ fontSize: "calc(100cqw / 40)" }}>
         {/* warm light (gradient, not a blur filter: WebKit paint artefacts) */}
         <div

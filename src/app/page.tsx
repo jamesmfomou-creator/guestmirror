@@ -86,7 +86,7 @@ export default async function LandingPage() {
         />
         {/* grid-cols-1 = minmax(0,1fr): a wide child can no longer widen the
             column past the screen and push the form out on small phones. */}
-        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-5 px-5 pt-3 pb-16 sm:gap-10 sm:pt-14 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-8 xl:max-w-[84rem] xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] xl:gap-4 lg:pt-20 lg:pb-28">
+        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-3 px-5 pt-2 pb-16 sm:gap-10 sm:pt-14 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-8 xl:max-w-[84rem] xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] xl:gap-4 lg:pt-20 lg:pb-28">
           {/* Centred on mobile, left-aligned from lg (desktop layout unchanged). */}
           <div className="flex flex-col items-center text-center lg:block lg:text-left">
             {/* Phones: no badge (first screen = title, form and visual). */}
@@ -102,7 +102,7 @@ export default async function LandingPage() {
             {/* Mobile first (Instagram traffic): compact type and spacing so the
                 link field and the CTA stay above the fold on small phones. */}
             <StaggerWords
-              className="text-display mt-1 text-balance text-[clamp(1.85rem,8.9vw,2.6rem)] leading-[1.02] text-foreground sm:mt-7 sm:text-[3.6rem] lg:text-[3.2rem] lg:leading-[1.04] xl:text-[3.55rem]"
+              className="text-display mt-1 text-balance text-[clamp(1.55rem,7.5vw,2.1rem)] leading-[1.05] text-foreground sm:mt-7 sm:text-[3.6rem] lg:text-[3.2rem] lg:leading-[1.04] xl:text-[3.55rem]"
               segments={[
                 { text: "Moins de nuits vides." },
                 { text: "Plus de réservations.", em: true, br: true },
@@ -110,26 +110,26 @@ export default async function LandingPage() {
             />
 
             <Reveal delay={0.38}>
-              <p className="mx-auto mt-2.5 max-w-[22rem] text-pretty text-[15px] leading-[1.5] text-foreground/65 sm:mt-6 sm:max-w-lg sm:text-lg sm:leading-relaxed sm:text-muted lg:mx-0">
+              <p className="mx-auto mt-2 max-w-[21rem] text-pretty text-[13.5px] leading-[1.45] text-foreground/65 sm:mt-6 sm:max-w-lg sm:text-lg sm:leading-relaxed sm:text-muted lg:mx-0">
                 Optimise ton annonce Airbnb pour attirer plus de voyageurs, sans avoir à brader tes nuits.
               </p>
             </Reveal>
 
             <Reveal delay={0.42}>
-              <ul className="mt-3 flex flex-wrap items-center justify-center gap-x-3.5 gap-y-1 sm:mt-6 sm:gap-2 lg:justify-start">
+              <ul className="mt-2 flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 sm:mt-6 sm:gap-2 lg:justify-start">
                 {HERO_BENEFITS.map(({ icon: Icon, text }) => (
                   <li
                     key={text}
-                    className="inline-flex items-center gap-1.5 text-[clamp(11.5px,3.4vw,13px)] font-medium whitespace-nowrap text-foreground/75 sm:gap-2 sm:rounded-full sm:border sm:border-border sm:bg-card/80 sm:px-3.5 sm:py-1.5 sm:text-[14px] sm:text-foreground sm:backdrop-blur"
+                    className="inline-flex items-center gap-1 text-[clamp(10.5px,3vw,12px)] font-medium whitespace-nowrap text-foreground/70 sm:gap-2 sm:rounded-full sm:border sm:border-border sm:bg-card/80 sm:px-3.5 sm:py-1.5 sm:text-[14px] sm:text-foreground sm:backdrop-blur"
                   >
-                    <Icon aria-hidden size={15} strokeWidth={2.2} className="text-accent" />
+                    <Icon aria-hidden strokeWidth={2.2} className="h-3 w-3 text-accent sm:h-[15px] sm:w-[15px]" />
                     {text}
                   </li>
                 ))}
               </ul>
             </Reveal>
 
-            <Reveal delay={0.45} className="mt-4 flex w-full justify-center sm:mt-9 lg:block">
+            <Reveal delay={0.45} className="mt-3 flex w-full justify-center sm:mt-9 lg:block">
               <HeroForm belowOnMobile />
             </Reveal>
             {/* Phones: shown after the visual instead (first screen). */}
