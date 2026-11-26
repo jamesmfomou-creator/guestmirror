@@ -54,7 +54,7 @@ const FAQ = [
   },
   {
     q: "Dois-je connecter mon compte Airbnb ?",
-    a: "Non, jamais. Il te suffit d'importer une capture d'écran de ton annonce — tes captures servent uniquement à produire ton analyse.",
+    a: "Non, jamais. Il te suffit de coller le lien public de ton annonce : on lit uniquement ce que n'importe quel voyageur peut voir.",
   },
   {
     q: `Est-ce que ${BRAND_NAME} garantit plus de réservations ?`,

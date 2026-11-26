@@ -18,7 +18,14 @@ export function StepImport({
   canContinue,
   error,
   continueLabel = "Continuer",
+  showScreenshots = false,
 }: {
+  /**
+   * Link-only by default (the onboarding is "colle ton lien, puis tes infos").
+   * The screenshot import stays as the fallback, shown only when the link
+   * cannot be used (error) or captures were already added.
+   */
+  showScreenshots?: boolean;
   url: string;
   onUrlChange: (v: string) => void;
   images: PendingImage[];
@@ -44,15 +51,21 @@ export function StepImport({
             Voyons ce qu&apos;un voyageur <em>voit en premier</em>
           </>
         }
-        description="Colle le lien de ton annonce Airbnb : on récupère ses photos, son titre et sa description. Le lien ne fonctionne pas ? Importe tes captures."
+        description={
+          showScreenshots
+            ? "Colle le lien de ton annonce Airbnb : on récupère ses photos, son titre et sa description. Le lien ne fonctionne pas ? Importe tes captures."
+            : "Colle le lien de ton annonce Airbnb : on récupère ses photos, son titre et sa description."
+        }
       />
 
       <Surface className="mt-9">
         <FieldLabel
           aside={
-            <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-hover">
-              Recommandé
-            </span>
+            showScreenshots ? (
+              <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-accent-hover">
+                Recommandé
+              </span>
+            ) : undefined
           }
         >
           Colle le lien de ton annonce
@@ -71,6 +84,8 @@ export function StepImport({
         </div>
       </Surface>
 
+      {showScreenshots && (
+      <>
       <div className="my-6 flex items-center gap-4">
         <span className="h-px flex-1 bg-border" />
         <span className="label-mono text-muted-2">Ou</span>
@@ -133,6 +148,8 @@ export function StepImport({
           className="hidden"
         />
       </Surface>
+      </>
+      )}
 
       {error && <ErrorNote>{error}</ErrorNote>}
 

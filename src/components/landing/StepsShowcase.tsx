@@ -4,8 +4,8 @@ import { SectionHeading } from "./SectionHeading";
 const STEPS = [
   {
     n: "01",
-    title: "Capture ton annonce",
-    text: "Colle ton lien Airbnb, ou importe une capture de tes premières photos.",
+    title: "Colle ton lien",
+    text: "Colle le lien de ton annonce Airbnb : on récupère ses photos, son titre et sa description.",
   },
   {
     n: "02",
