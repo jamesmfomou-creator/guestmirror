@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowDown, ArrowRight, Clock, Sparkles, TrendingUp } from "lucide-react";
+import { ArrowDown, ArrowRight, CalendarCheck, Clock, Tag, TrendingUp } from "lucide-react";
 import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
 import { HeroForm } from "@/components/landing/HeroForm";
 // HeroLaptopDemo (diagnostic mockup) is kept in components/landing for reuse further down the page.
@@ -32,9 +32,9 @@ export const metadata: Metadata = {
 export const revalidate = 3600;
 
 const HERO_BENEFITS = [
-  { icon: Sparkles, text: "Une annonce plus attractive" },
+  { icon: CalendarCheck, text: "Moins de nuits vides" },
   { icon: Clock, text: "Gagne du temps" },
-  { icon: TrendingUp, text: "Démarque-toi des concurrents" },
+  { icon: Tag, text: "Sans baisser tes prix" },
 ];
 
 const CHECKS = [
