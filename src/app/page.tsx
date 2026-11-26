@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowDown, ArrowRight, Clock, Sparkles, TrendingUp, Zap } from "lucide-react";
+import { ArrowDown, ArrowRight, Clock, Sparkles, TrendingUp } from "lucide-react";
 import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
 import { HeroForm } from "@/components/landing/HeroForm";
 // HeroLaptopDemo (diagnostic mockup) is kept in components/landing for reuse further down the page.
@@ -9,7 +9,7 @@ import { BeforeAfterShowcase } from "@/components/landing/BeforeAfterShowcase";
 import { LandingCompareTeaser } from "@/components/landing/LandingCompareTeaser";
 import { WhatWeSee } from "@/components/landing/WhatWeSee";
 import { ReportMockup } from "@/components/landing/ReportMockup";
-import { SocialProof } from "@/components/landing/SocialProof";
+import { HeroAnalysesProof } from "@/components/landing/HeroAnalysesProof";
 import { ScrollingShowcase } from "@/components/landing/ScrollingShowcase";
 import { CaseStudiesCarousel } from "@/components/landing/CaseStudiesCarousel";
 import { getShowcaseItems } from "@/lib/showcase";
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-// The social proof count is a real DB read (see SocialProof) -- revalidate
+// The social proof count is a real DB read (see HeroAnalysesProof) -- revalidate
 // periodically instead of on every request so the landing page stays
 // effectively static.
 export const revalidate = 3600;
@@ -91,9 +91,8 @@ export default async function LandingPage() {
           <div className="flex flex-col items-center text-center lg:block lg:text-left">
             <Reveal y={8}>
               <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card/70 px-3.5 py-2 text-[12.5px] backdrop-blur max-sm:gap-[clamp(3px,1.2vw,6px)] max-sm:px-[clamp(9px,3.4vw,14px)] max-sm:py-1.5 max-sm:text-[clamp(10.5px,3vw,12.5px)] sm:gap-2 sm:px-4 sm:text-[14px]">
-                <span className="font-bold tracking-tight text-foreground uppercase">Diagnostic IA</span>
-                <Zap aria-hidden size={15} className="fill-accent text-accent max-[359px]:hidden" />
-                <span className="font-medium text-muted">Analyse automatique de ton annonce</span>
+                <TrendingUp aria-hidden size={15} strokeWidth={2.4} className="text-accent" />
+                <span className="font-semibold text-foreground">L&apos;assistant des hôtes Airbnb</span>
               </span>
             </Reveal>
 
@@ -109,7 +108,8 @@ export default async function LandingPage() {
 
             <Reveal delay={0.38}>
               <p className="mx-auto mt-3.5 max-w-[22rem] text-pretty text-[15.5px] leading-[1.55] text-foreground/65 sm:mt-6 sm:max-w-lg sm:text-lg sm:leading-relaxed sm:text-muted lg:mx-0">
-                Optimise ton annonce Airbnb pour attirer plus de voyageurs et obtenir davantage de réservations.
+                Rends ton annonce Airbnb plus attractive et démarque-toi de tes concurrents sans forcément baisser tes
+                prix.
               </p>
             </Reveal>
 
@@ -130,6 +130,9 @@ export default async function LandingPage() {
             <Reveal delay={0.45} className="mt-5 flex w-full justify-center sm:mt-9 lg:block">
               <HeroForm />
             </Reveal>
+            <Reveal delay={0.5} className="mt-4 flex w-full justify-center lg:justify-start">
+              <HeroAnalysesProof />
+            </Reveal>
 
             {/* Desktop only here (mobile: after the demo). The display toggle sits on
                 a plain wrapper: hiding the animated Reveal itself left a paint
@@ -145,7 +148,6 @@ export default async function LandingPage() {
                   ))}
                 </ul>
                 <div className="flex flex-wrap items-center justify-center gap-4 lg:justify-start">
-                  <SocialProof />
                   <a
                     href="#methode"
                     className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground"
@@ -165,7 +167,6 @@ export default async function LandingPage() {
             </p>
             {/* Mobile / tablet: social proof + "how it works" after the demo */}
             <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-3 lg:hidden">
-              <SocialProof />
               <a
                 href="#methode"
                 className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-foreground/80 transition-colors hover:text-foreground"
