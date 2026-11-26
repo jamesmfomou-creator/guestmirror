@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { ImagePlus, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { track } from "@/lib/analytics";
 import { isAirbnbUrl } from "@/lib/airbnbUrl";
 
@@ -14,31 +14,9 @@ import { isAirbnbUrl } from "@/lib/airbnbUrl";
 // format légère (mêmes règles que lib/airbnbExtract.ts, voir
 // lib/airbnbUrl.ts) -- l'extraction réelle reste entièrement gérée par le
 // flow /analyze existant, rien n'est dupliqué ici.
-/** "Ou importe une capture d'écran": same link, same event, wherever it sits. */
-export function HeroScreenshotLink({ className = "" }: { className?: string }) {
-  const router = useRouter();
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        track("cta_test_clicked", { cta_location: "hero_screenshot" });
-        router.push("/analyze");
-      }}
-      className={`inline-flex items-center gap-2 text-sm text-muted transition-colors hover:text-foreground max-lg:min-h-[40px] max-lg:text-[13.5px] max-lg:font-medium max-lg:text-foreground/70 ${className}`}
-    >
-      <ImagePlus size={15} />
-      Ou importe une capture d&apos;écran
-    </button>
-  );
-}
-
-/**
- * belowOnMobile: on phones (< sm) the screenshot link is shown by the page
- * after the visual (HeroScreenshotLink), so the first screen keeps title,
- * form and visual. (The reassurance line under the form was removed at the
- * owner's request on 2026-11-26.)
- */
-export function HeroForm({ belowOnMobile = false }: { belowOnMobile?: boolean } = {}) {
+// The reassurance line and the "Ou importe une capture d'écran" link under
+// the form were removed at the owner's request on 2026-11-26.
+export function HeroForm() {
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -110,9 +88,6 @@ export function HeroForm({ belowOnMobile = false }: { belowOnMobile?: boolean } 
         </button>
       </div>
       {error && <p className="mt-2 pl-1 text-left text-sm text-score-low">{error}</p>}
-
-
-      <HeroScreenshotLink className={`mt-3 pl-1 max-lg:mt-2 max-lg:pl-0 ${belowOnMobile ? "max-sm:hidden" : ""}`} />
     </form>
   );
 }
