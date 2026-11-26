@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ArrowDown, ArrowRight, CalendarCheck, Clock, Tag, TrendingUp } from "lucide-react";
 import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
-import { HeroForm } from "@/components/landing/HeroForm";
+import { HeroForm, HeroReassurance, HeroScreenshotLink } from "@/components/landing/HeroForm";
 // HeroLaptopDemo (diagnostic mockup) is kept in components/landing for reuse further down the page.
 import { HeroBookingVisual } from "@/components/landing/HeroBookingVisual";
 import { StepsShowcase } from "@/components/landing/StepsShowcase";
@@ -86,20 +86,23 @@ export default async function LandingPage() {
         />
         {/* grid-cols-1 = minmax(0,1fr): a wide child can no longer widen the
             column past the screen and push the form out on small phones. */}
-        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-7 px-5 pt-4 pb-16 sm:gap-10 sm:pt-14 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-8 xl:max-w-[84rem] xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] xl:gap-4 lg:pt-20 lg:pb-28">
+        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-5 px-5 pt-3 pb-16 sm:gap-10 sm:pt-14 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-8 xl:max-w-[84rem] xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] xl:gap-4 lg:pt-20 lg:pb-28">
           {/* Centred on mobile, left-aligned from lg (desktop layout unchanged). */}
           <div className="flex flex-col items-center text-center lg:block lg:text-left">
+            {/* Phones: no badge (first screen = title, form and visual). */}
+            <div className="hidden sm:block">
             <Reveal y={8}>
               <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-card/70 px-3.5 py-2 text-[12.5px] backdrop-blur max-sm:gap-[clamp(3px,1.2vw,6px)] max-sm:px-[clamp(9px,3.4vw,14px)] max-sm:py-1.5 max-sm:text-[clamp(10.5px,3vw,12.5px)] sm:gap-2 sm:px-4 sm:text-[14px]">
                 <TrendingUp aria-hidden size={15} strokeWidth={2.4} className="text-accent" />
                 <span className="font-semibold text-foreground">L&apos;assistant des hôtes Airbnb</span>
               </span>
             </Reveal>
+            </div>
 
             {/* Mobile first (Instagram traffic): compact type and spacing so the
                 link field and the CTA stay above the fold on small phones. */}
             <StaggerWords
-              className="text-display mt-4 text-balance text-[clamp(1.95rem,9.4vw,2.6rem)] leading-[1.02] text-foreground sm:mt-7 sm:text-[3.6rem] lg:text-[3.2rem] lg:leading-[1.04] xl:text-[3.55rem]"
+              className="text-display mt-1 text-balance text-[clamp(1.85rem,8.9vw,2.6rem)] leading-[1.02] text-foreground sm:mt-7 sm:text-[3.6rem] lg:text-[3.2rem] lg:leading-[1.04] xl:text-[3.55rem]"
               segments={[
                 { text: "Moins de nuits vides." },
                 { text: "Plus de réservations.", em: true, br: true },
@@ -107,17 +110,17 @@ export default async function LandingPage() {
             />
 
             <Reveal delay={0.38}>
-              <p className="mx-auto mt-3.5 max-w-[22rem] text-pretty text-[15.5px] leading-[1.55] text-foreground/65 sm:mt-6 sm:max-w-lg sm:text-lg sm:leading-relaxed sm:text-muted lg:mx-0">
+              <p className="mx-auto mt-2.5 max-w-[22rem] text-pretty text-[15px] leading-[1.5] text-foreground/65 sm:mt-6 sm:max-w-lg sm:text-lg sm:leading-relaxed sm:text-muted lg:mx-0">
                 Optimise ton annonce Airbnb pour attirer plus de voyageurs, sans avoir à brader tes nuits.
               </p>
             </Reveal>
 
             <Reveal delay={0.42}>
-              <ul className="mt-4 flex flex-col items-center gap-2 sm:mt-6 sm:flex-row sm:flex-wrap sm:justify-center lg:justify-start">
+              <ul className="mt-3 flex flex-wrap items-center justify-center gap-x-3.5 gap-y-1 sm:mt-6 sm:gap-2 lg:justify-start">
                 {HERO_BENEFITS.map(({ icon: Icon, text }) => (
                   <li
                     key={text}
-                    className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3.5 py-1.5 text-[14px] font-medium text-foreground backdrop-blur"
+                    className="inline-flex items-center gap-1.5 text-[clamp(11.5px,3.4vw,13px)] font-medium whitespace-nowrap text-foreground/75 sm:gap-2 sm:rounded-full sm:border sm:border-border sm:bg-card/80 sm:px-3.5 sm:py-1.5 sm:text-[14px] sm:text-foreground sm:backdrop-blur"
                   >
                     <Icon aria-hidden size={15} strokeWidth={2.2} className="text-accent" />
                     {text}
@@ -126,12 +129,15 @@ export default async function LandingPage() {
               </ul>
             </Reveal>
 
-            <Reveal delay={0.45} className="mt-5 flex w-full justify-center sm:mt-9 lg:block">
-              <HeroForm />
+            <Reveal delay={0.45} className="mt-4 flex w-full justify-center sm:mt-9 lg:block">
+              <HeroForm belowOnMobile />
             </Reveal>
-            <Reveal delay={0.5} className="mt-4 flex w-full justify-center lg:justify-start">
-              <HeroAnalysesProof />
-            </Reveal>
+            {/* Phones: shown after the visual instead (first screen). */}
+            <div className="hidden sm:block">
+              <Reveal delay={0.5} className="mt-4 flex w-full justify-center lg:justify-start">
+                <HeroAnalysesProof />
+              </Reveal>
+            </div>
 
             {/* Desktop only here (mobile: after the demo). The display toggle sits on
                 a plain wrapper: hiding the animated Reveal itself left a paint
@@ -164,7 +170,14 @@ export default async function LandingPage() {
             <p className="max-w-sm text-center text-xs text-muted-2">
               Illustration du résultat recherché. Les réservations ne sont pas garanties.
             </p>
-            {/* Mobile / tablet: social proof + "how it works" after the demo */}
+            {/* Phones: the social proof and the screenshot alternative, moved
+                below the visual so the first screen shows title, form and visual. */}
+            <div className="flex flex-col items-center gap-2 sm:hidden">
+              <HeroReassurance className="text-[12.5px]" />
+              <HeroAnalysesProof className="mt-1" />
+              <HeroScreenshotLink />
+            </div>
+            {/* Mobile / tablet: "how it works" after the demo */}
             <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-3 lg:hidden">
               <a
                 href="#methode"
