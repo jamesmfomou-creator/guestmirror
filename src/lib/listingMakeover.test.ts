@@ -139,8 +139,9 @@ describe("text helpers", () => {
     expect(descriptionExcerpt("mot ".repeat(300))!.length).toBeLessThanOrEqual(LISTING_DESCRIPTION_EXCERPT_MAX);
     expect(descriptionExcerpt(null)).toBeNull();
   });
-  it("emergency switch: on unless LISTING_MAKEOVER_DISABLED=1", () => {
-    expect(listingMakeoverEnabled({})).toBe(true);
+  it("withdrawn: off unless LISTING_MAKEOVER_ENABLED=1", () => {
+    expect(listingMakeoverEnabled({})).toBe(false);
     expect(listingMakeoverEnabled({ LISTING_MAKEOVER_DISABLED: "1" })).toBe(false);
+    expect(listingMakeoverEnabled({ LISTING_MAKEOVER_ENABLED: "1" })).toBe(true);
   });
 });

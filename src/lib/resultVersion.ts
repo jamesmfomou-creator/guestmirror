@@ -12,8 +12,10 @@
  *               listing (lib/listingMakeover.ts, components/result/
  *               ListingMakeover.tsx), for everyone, no experiment: compare
  *               makeover_v1 against reveal_v1 periods.
+ *               Withdrawn 2026-11-26 (owner's request): back to reveal_v1,
+ *               the same page as before 2026-11-25.
  */
-export const RESULT_VERSION = "makeover_v1";
+export const RESULT_VERSION = "reveal_v1";
 
 /**
  * Version of the whole journey (onboarding questions, loader messages, free
