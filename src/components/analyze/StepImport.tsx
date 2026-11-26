@@ -1,7 +1,8 @@
 "use client";
 
 import { ChangeEvent, useRef } from "react";
-import { X, ImagePlus, Link2, ArrowRight } from "lucide-react";
+import Image from "next/image";
+import { X, ImagePlus, ArrowRight } from "lucide-react";
 import { PendingImage } from "@/lib/files";
 import { Button } from "@/components/ui/Button";
 import { ErrorNote, FieldLabel, OnboardingHeading, Surface } from "./OnboardingUI";
@@ -71,7 +72,8 @@ export function StepImport({
           Colle le lien de ton annonce
         </FieldLabel>
         <div className="group mt-4 flex items-center gap-3 rounded-2xl border border-border bg-background px-4 transition-all focus-within:border-foreground/40 focus-within:shadow-[0_0_0_4px_rgba(217,108,63,0.12)]">
-          <Link2 aria-hidden size={18} className="shrink-0 text-muted-2 transition-colors group-focus-within:text-accent" />
+          {/* Same Airbnb app icon as the landing's link field (HeroForm). */}
+          <Image src="/brand/airbnb-logo.png" alt="" aria-hidden width={28} height={28} className="h-7 w-7 shrink-0" />
           <input
             type="text"
             inputMode="url"
