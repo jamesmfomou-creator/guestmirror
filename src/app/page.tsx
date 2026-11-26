@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { ArrowDown, ArrowRight, Zap } from "lucide-react";
+import { ArrowDown, ArrowRight, Clock, Sparkles, TrendingUp, Zap } from "lucide-react";
 import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
 import { HeroForm } from "@/components/landing/HeroForm";
-import { HeroLaptopDemo } from "@/components/landing/HeroLaptopDemo";
+// HeroLaptopDemo (diagnostic mockup) is kept in components/landing for reuse further down the page.
+import { HeroBookingVisual } from "@/components/landing/HeroBookingVisual";
 import { StepsShowcase } from "@/components/landing/StepsShowcase";
 import { BeforeAfterShowcase } from "@/components/landing/BeforeAfterShowcase";
 import { LandingCompareTeaser } from "@/components/landing/LandingCompareTeaser";
@@ -29,6 +30,12 @@ export const metadata: Metadata = {
 // periodically instead of on every request so the landing page stays
 // effectively static.
 export const revalidate = 3600;
+
+const HERO_BENEFITS = [
+  { icon: Sparkles, text: "Une annonce plus attractive" },
+  { icon: Clock, text: "Gagne du temps" },
+  { icon: TrendingUp, text: "Démarque-toi des concurrents" },
+];
 
 const CHECKS = [
   "Gratuit pour commencer",
@@ -93,19 +100,31 @@ export default async function LandingPage() {
             {/* Mobile first (Instagram traffic): compact type and spacing so the
                 link field and the CTA stay above the fold on small phones. */}
             <StaggerWords
-              className="text-display mt-4 text-balance text-[clamp(2.2rem,10.8vw,2.9rem)] leading-[0.98] text-foreground sm:mt-7 sm:text-[4rem] lg:text-[4.25rem] lg:leading-none"
+              className="text-display mt-4 text-balance text-[clamp(1.95rem,9.4vw,2.6rem)] leading-[1.02] text-foreground sm:mt-7 sm:text-[3.6rem] lg:text-[3.2rem] lg:leading-[1.04] xl:text-[3.55rem]"
               segments={[
-                { text: "Découvre ce qui" },
-                { text: "freine les réservations", em: true },
-                { text: "sur ton Airbnb." },
+                { text: "Moins de nuits vides." },
+                { text: "Plus de réservations.", em: true, br: true },
               ]}
             />
 
             <Reveal delay={0.38}>
               <p className="mx-auto mt-3.5 max-w-[22rem] text-pretty text-[15.5px] leading-[1.55] text-foreground/65 sm:mt-6 sm:max-w-lg sm:text-lg sm:leading-relaxed sm:text-muted lg:mx-0">
-                Colle ton lien Airbnb. Notre IA repère les points qui peuvent faire hésiter les voyageurs et
-                t&apos;aide à améliorer ton annonce.
+                Optimise ton annonce Airbnb pour attirer plus de voyageurs et obtenir davantage de réservations.
               </p>
+            </Reveal>
+
+            <Reveal delay={0.42}>
+              <ul className="mt-4 flex flex-col items-center gap-2 sm:mt-6 sm:flex-row sm:flex-wrap sm:justify-center lg:justify-start">
+                {HERO_BENEFITS.map(({ icon: Icon, text }) => (
+                  <li
+                    key={text}
+                    className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3.5 py-1.5 text-[14px] font-medium text-foreground backdrop-blur"
+                  >
+                    <Icon aria-hidden size={15} strokeWidth={2.2} className="text-accent" />
+                    {text}
+                  </li>
+                ))}
+              </ul>
             </Reveal>
 
             <Reveal delay={0.45} className="mt-5 flex w-full justify-center sm:mt-9 lg:block">
@@ -140,10 +159,9 @@ export default async function LandingPage() {
           </div>
 
           <Reveal delay={0.25} y={24} className="flex flex-col items-center gap-3">
-            <HeroLaptopDemo />
+            <HeroBookingVisual />
             <p className="max-w-sm text-center text-xs text-muted-2">
-              Exemple de résultat fictif, à titre de démonstration. Tes propres captures servent uniquement à
-              produire ton analyse.
+              Illustration du résultat recherché. Les réservations ne sont pas garanties.
             </p>
             {/* Mobile / tablet: social proof + "how it works" after the demo */}
             <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-3 lg:hidden">
