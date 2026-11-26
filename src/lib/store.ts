@@ -271,6 +271,23 @@ export async function getTotalAnalysesCount(): Promise<number | null> {
 }
 
 /**
+ * Analyses made by real visitors, for the hero's "Déjà plus de N analyses
+ * réalisées": like getTotalAnalysesCount, minus obvious test / automation
+ * addresses, so the public figure can only be an understatement.
+ */
+export async function getVisitorAnalysesCount(): Promise<number | null> {
+  if (!SUPABASE_CONFIGURED) return null;
+  const supabase = getSupabaseAdmin()!;
+  let q = supabase.from("analyses").select("*", { count: "exact", head: true });
+  for (const pattern of ["%@example.com", "%@example.org", "%e2e%", "%mailinator%", "%@test.%", "test@%"]) {
+    q = q.not("email", "ilike", pattern);
+  }
+  const { count, error } = await q;
+  if (error) return null;
+  return count ?? null;
+}
+
+/**
  * Free-trial links (/analyze?promo=<code>): grants the first
  * max_free_unlocks analyses submitted with a given code a real unlock,
  * no payment. Returns null for an unknown code -- the caller treats that
