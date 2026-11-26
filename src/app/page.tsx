@@ -167,9 +167,6 @@ export default async function LandingPage() {
 
           <Reveal delay={0.25} y={24} className="flex flex-col items-center gap-3">
             <HeroBookingVisual />
-            <p className="max-w-sm text-center text-xs text-muted-2">
-              Illustration du résultat recherché. Les réservations ne sont pas garanties.
-            </p>
             {/* Phones: the social proof and the screenshot alternative, moved
                 below the visual so the first screen shows title, form and visual. */}
             <div className="flex flex-col items-center gap-2 sm:hidden">
