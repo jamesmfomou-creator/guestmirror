@@ -237,6 +237,15 @@ export function AnalyzeWizard({ knownEmail = null }: { knownEmail?: string | nul
   const submitEmail = () => (directMode ? DIRECT_LINK_EMAIL : email.trim());
   // Background onboarding (never for the content link, which has no questions).
   const bg = onboardingVariant === "background" && !directMode;
+  // Link already pasted on the landing (/analyze?url=<valid Airbnb link>): the
+  // import step is skipped, the onboarding starts with the next step (email in
+  // the background flow) -- same events and preview prefetch as the click on
+  // "Continuer". The email step's listing card still offers "Modifier", back
+  // to the import step. No link or an invalid one: the import step as before.
+  const [linkFromLanding] = useState(() => isAirbnbUrl((searchParams.get("url") || "").trim()));
+  const [autoStart, setAutoStart] = useState(linkFromLanding);
+  // Guards the handoff against a second effect run (React dev double-invoke).
+  const autoStarted = useRef(false);
   const urlStartedTracked = useRef(false);
 
   function inputMethod(): "airbnb_url" | "screenshot" | "mixed" {
@@ -1129,18 +1138,33 @@ export function AnalyzeWizard({ knownEmail = null }: { knownEmail?: string | nul
     });
   }
 
+  useEffect(() => {
+    if (!autoStart) return;
+    // The first (hydration) render sees the server snapshot of the onboarding
+    // variant: wait for the browser's own value so the right flow starts.
+    if (onboardingVariant !== getOnboardingVariant()) return;
+    if (autoStarted.current) return;
+    autoStarted.current = true;
+    // One-time handoff of the landing's link into the wizard (external input).
+    setAutoStart(false);
+    goToProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, onboardingVariant]);
+
   // Onboarding progress (the loader keeps its own layout, untouched).
   const onboardingSteps: { id: Step; label: string }[] = [
-    { id: "import", label: "Ton annonce" },
-    { id: "profile", label: "Ton profil" },
-    { id: "email", label: "Ton email" },
-    { id: "goal", label: "Ton objectif" },
-  ];
+    { id: "import" as Step, label: "Ton annonce" },
+    { id: "profile" as Step, label: "Ton profil" },
+    { id: "email" as Step, label: "Ton email" },
+    { id: "goal" as Step, label: "Ton objectif" },
+  ].filter((s) => !(linkFromLanding && s.id === "import"));
   const onboardingIndex = onboardingSteps.findIndex((s) => s.id === step);
   // Background onboarding: annonce → email → objectif → profil (the last two during the analysis).
-  const bgSteps = ["Ton annonce", "Ton email", "3 questions", "Ton profil"];
-  const bgIndex =
+  // Link from the landing: no "Ton annonce" step, the count starts at the email.
+  const bgSteps = linkFromLanding ? ["Ton email", "3 questions", "Ton profil"] : ["Ton annonce", "Ton email", "3 questions", "Ton profil"];
+  const bgIndexFull =
     step === "import" ? 0 : step === "email" ? 1 : step === "questions" ? (questionPhase === "profile" || questionPhase === "done" ? 3 : 2) : -1;
+  const bgIndex = linkFromLanding ? (bgIndexFull > 0 ? bgIndexFull - 1 : -1) : bgIndexFull;
   const liveState = apiError ? "failed" : readyResult ? "ready" : "running";
   const networkLimitVerify =
     networkLimit === "verified" ? (
@@ -1180,7 +1204,7 @@ export function AnalyzeWizard({ knownEmail = null }: { knownEmail?: string | nul
       {step !== "analyzing" && !bg && onboardingIndex >= 0 && !directMode && (
         <OnboardingProgress steps={onboardingSteps.map((s) => s.label)} current={onboardingIndex} />
       )}
-      {bg && bgIndex >= 0 && (
+      {bg && bgIndex >= 0 && !autoStart && (
         <div className="mx-auto max-w-xl">
           <OnboardingProgress steps={bgSteps} current={bgIndex} />
         </div>
@@ -1202,7 +1226,7 @@ export function AnalyzeWizard({ knownEmail = null }: { knownEmail?: string | nul
           <p className="mt-0.5">{RECOVERY_NOTICES[recoveryNotice].body}</p>
         </div>
       )}
-      {step === "import" && (
+      {step === "import" && !autoStart && (
         <StepImport
           url={url}
           onUrlChange={handleUrlChange}
