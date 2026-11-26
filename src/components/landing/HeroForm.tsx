@@ -14,7 +14,44 @@ import { isAirbnbUrl } from "@/lib/airbnbUrl";
 // format légère (mêmes règles que lib/airbnbExtract.ts, voir
 // lib/airbnbUrl.ts) -- l'extraction réelle reste entièrement gérée par le
 // flow /analyze existant, rien n'est dupliqué ici.
-export function HeroForm() {
+/** "Ou importe une capture d'écran": same link, same event, wherever it sits. */
+export function HeroScreenshotLink({ className = "" }: { className?: string }) {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        track("cta_test_clicked", { cta_location: "hero_screenshot" });
+        router.push("/analyze");
+      }}
+      className={`inline-flex items-center gap-2 text-sm text-muted transition-colors hover:text-foreground max-lg:min-h-[40px] max-lg:text-[13.5px] max-lg:font-medium max-lg:text-foreground/70 ${className}`}
+    >
+      <ImagePlus size={15} />
+      Ou importe une capture d&apos;écran
+    </button>
+  );
+}
+
+/** "Premier diagnostic gratuit · Sans modification de ton annonce". */
+export function HeroReassurance({ className = "" }: { className?: string }) {
+  return (
+    <p className={`flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-[13px] text-muted lg:justify-start lg:pl-1 ${className}`}>
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+        <Check aria-hidden size={13} strokeWidth={2.5} className="text-accent" />
+        Premier diagnostic gratuit
+      </span>
+      <span aria-hidden className="text-muted-2">·</span>
+      <span className="whitespace-nowrap">Sans modification de ton annonce</span>
+    </p>
+  );
+}
+
+/**
+ * belowOnMobile: on phones (< sm) the reassurance line and the screenshot
+ * link are shown by the page after the visual (HeroReassurance,
+ * HeroScreenshotLink), so the first screen keeps title, form and visual.
+ */
+export function HeroForm({ belowOnMobile = false }: { belowOnMobile?: boolean } = {}) {
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -42,11 +79,6 @@ export function HeroForm() {
     // the import step (URL pre-filled) before it's truly "submitted".
     track("cta_test_clicked", { cta_location: "hero" });
     router.push(`/analyze?url=${encodeURIComponent(trimmed)}`);
-  }
-
-  function handleScreenshotClick() {
-    track("cta_test_clicked", { cta_location: "hero_screenshot" });
-    router.push("/analyze");
   }
 
   return (
@@ -79,12 +111,12 @@ export function HeroForm() {
             value={url}
             onChange={(e) => handleChange(e.target.value)}
             placeholder="Colle le lien de ton annonce Airbnb"
-            className="hero-url-input w-full min-w-0 bg-transparent py-3 text-[15px] text-foreground placeholder:text-muted-2 focus:outline-none max-lg:py-3.5 max-lg:text-[16px]"
+            className="hero-url-input w-full min-w-0 bg-transparent py-3 text-[15px] text-foreground placeholder:text-muted-2 focus:outline-none max-lg:py-3.5 max-lg:text-[16px] max-sm:py-2.5"
           />
         </div>
         <button
           type="submit"
-          className="btn-sheen group/btn inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[16px] bg-accent px-6 py-3.5 text-[15px] font-medium text-accent-foreground transition-colors hover:bg-accent-hover max-lg:min-h-[54px] max-lg:gap-[clamp(4px,1.6vw,8px)] max-lg:rounded-full max-lg:px-[clamp(10px,4.5vw,20px)] max-lg:text-[clamp(13.5px,4.1vw,16px)] max-lg:font-semibold max-lg:shadow-[0_14px_28px_-12px_rgba(217,103,63,0.75),inset_0_1px_0_rgba(255,255,255,0.25)]"
+          className="btn-sheen group/btn inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[16px] bg-accent px-6 py-3.5 text-[15px] font-medium text-accent-foreground transition-colors hover:bg-accent-hover max-lg:min-h-[54px] max-sm:min-h-[48px] max-sm:py-2.5 max-lg:gap-[clamp(4px,1.6vw,8px)] max-lg:rounded-full max-lg:px-[clamp(10px,4.5vw,20px)] max-lg:text-[clamp(13.5px,4.1vw,16px)] max-lg:font-semibold max-lg:shadow-[0_14px_28px_-12px_rgba(217,103,63,0.75),inset_0_1px_0_rgba(255,255,255,0.25)]"
         >
           Analyser mon annonce gratuitement
           <ArrowRight size={16} className="shrink-0 transition-transform duration-300 group-hover/btn:translate-x-0.5" />
@@ -92,28 +124,9 @@ export function HeroForm() {
       </div>
       {error && <p className="mt-2 pl-1 text-left text-sm text-score-low">{error}</p>}
 
-      {/* One line from sm ("A · B"); two clean lines on phones, where the
-          whole sentence does not fit and the dot would dangle. */}
-      <p className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5 text-[12.5px] text-muted sm:gap-x-1.5 sm:text-[13px] lg:justify-start lg:pl-1">
-        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-          <Check aria-hidden size={14} strokeWidth={2.5} className="text-accent" />
-          Premier diagnostic gratuit
-        </span>
-        <span aria-hidden className="hidden text-muted-2 sm:inline">·</span>
-        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-          <Check aria-hidden size={14} strokeWidth={2.5} className="text-accent sm:hidden" />
-          Sans modification de ton annonce
-        </span>
-      </p>
+      <HeroReassurance className={`mt-3 ${belowOnMobile ? "max-sm:hidden" : ""}`} />
 
-      <button
-        type="button"
-        onClick={handleScreenshotClick}
-        className="mt-3 inline-flex items-center gap-2 pl-1 text-sm text-muted transition-colors hover:text-foreground max-lg:mt-2 max-lg:min-h-[40px] max-lg:pl-0 max-lg:text-[13.5px] max-lg:font-medium max-lg:text-foreground/70"
-      >
-        <ImagePlus size={15} />
-        Ou importe une capture d&apos;écran
-      </button>
+      <HeroScreenshotLink className={`mt-3 pl-1 max-lg:mt-2 max-lg:pl-0 ${belowOnMobile ? "max-sm:hidden" : ""}`} />
     </form>
   );
 }
