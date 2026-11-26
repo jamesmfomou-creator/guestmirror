@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ArrowDown, ArrowRight, CalendarCheck, Clock, Tag, TrendingUp } from "lucide-react";
 import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
-import { HeroForm, HeroReassurance, HeroScreenshotLink } from "@/components/landing/HeroForm";
+import { HeroForm, HeroScreenshotLink } from "@/components/landing/HeroForm";
 // HeroLaptopDemo (diagnostic mockup) is kept in components/landing for reuse further down the page.
 import { HeroBookingVisual } from "@/components/landing/HeroBookingVisual";
 import { StepsShowcase } from "@/components/landing/StepsShowcase";
@@ -167,13 +167,9 @@ export default async function LandingPage() {
 
           <Reveal delay={0.25} y={24} className="flex flex-col items-center gap-3">
             <HeroBookingVisual />
-            <p className="max-w-sm text-center text-xs text-muted-2">
-              Illustration du résultat recherché. Les réservations ne sont pas garanties.
-            </p>
             {/* Phones: the social proof and the screenshot alternative, moved
                 below the visual so the first screen shows title, form and visual. */}
             <div className="flex flex-col items-center gap-2 sm:hidden">
-              <HeroReassurance className="text-[12.5px]" />
               <HeroAnalysesProof className="mt-1" />
               <HeroScreenshotLink />
             </div>

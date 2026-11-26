@@ -2,10 +2,10 @@ import Image from "next/image";
 import { CalendarCheck, Heart, Sparkles, TrendingUp } from "lucide-react";
 
 // Hero visual (results-oriented): what a host wants -- a well-filled booking
-// calendar -- next to an attractive listing. An ILLUSTRATION of the goal,
-// labelled as such under the visual ("Les réservations ne sont pas
-// garanties"): no score, no figure presented as real, no testimonial, no
-// calendar sync (GuestMirror has none). The listing card uses the hero's own
+// calendar -- next to an attractive listing. An ILLUSTRATION of the goal (the
+// caption under it was removed at the owner's request on 2026-11-26): no
+// score, no figure presented as real, no testimonial, no calendar sync
+// (GuestMirror has none). The listing card uses the hero's own
 // photo; its title only says what the photo shows (terrace, sea view).
 //
 // One flat composition scaled as a whole: 1em = container width / 40 (container
