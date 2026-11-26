@@ -32,11 +32,9 @@ export function Header() {
         { href: "#methode", label: "Méthode" },
         { href: "#exemple", label: "Exemple" },
         { href: "#tarifs", label: "Tarifs" },
-        { href: "/compare", label: "Comparer" },
         { href: "/espace", label: "Mon espace", wide: true },
       ]
     : [
-        { href: "/compare", label: "Comparer" },
         { href: "/pricing", label: "Tarifs" },
         { href: "/espace", label: "Mon espace", wide: true },
       ];

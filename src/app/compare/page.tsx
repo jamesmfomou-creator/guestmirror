@@ -1,11 +1,7 @@
-import type { Metadata } from "next";
-import { CompareWizard } from "@/components/compare/CompareWizard";
+import { permanentRedirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Mode comparaison — Laquelle tu cliquerais ?",
-  description: "Compare deux annonces et découvre laquelle donne le plus envie de cliquer, et pourquoi.",
-};
-
+// The compare mode was withdrawn on 2026-11-26 (owner's request): old links
+// and bookmarks land on the home page instead of a 404.
 export default function ComparePage() {
-  return <CompareWizard />;
+  permanentRedirect("/");
 }

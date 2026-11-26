@@ -6,7 +6,6 @@ import { HeroForm } from "@/components/landing/HeroForm";
 import { HeroBookingVisual } from "@/components/landing/HeroBookingVisual";
 import { StepsShowcase } from "@/components/landing/StepsShowcase";
 import { BeforeAfterShowcase } from "@/components/landing/BeforeAfterShowcase";
-import { LandingCompareTeaser } from "@/components/landing/LandingCompareTeaser";
 import { WhatWeSee } from "@/components/landing/WhatWeSee";
 import { ReportMockup } from "@/components/landing/ReportMockup";
 import { HeroAnalysesProof } from "@/components/landing/HeroAnalysesProof";
@@ -206,30 +205,11 @@ export default async function LandingPage() {
       {/* 04 — illustrative cases */}
       <CaseStudiesCarousel />
 
-      {/* 05 — compare mode */}
-      <section className="border-t border-border/70 py-24 sm:py-32">
-        <div className="mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-[1fr_1.05fr] lg:gap-20">
-          <SectionHeading
-            index="05"
-            label="Mode comparaison"
-            title={
-              <>
-                Laquelle <em>tu cliquerais</em> ?
-              </>
-            }
-            description="Deux annonces. Quelques secondes. Découvre laquelle crée la meilleure première impression — et pourquoi."
-          />
-          <Reveal delay={0.1}>
-            <LandingCompareTeaser />
-          </Reveal>
-        </div>
-      </section>
-
-      {/* 06 — pricing */}
+      {/* 05 — pricing */}
       <section id="tarifs" className="scroll-mt-24 border-t border-border/70 bg-background-alt/60 py-24 sm:py-32">
         <div className="mx-auto max-w-6xl px-5">
           <SectionHeading
-            index="06"
+            index="05"
             label="Tarifs"
             align="center"
             title={
@@ -306,11 +286,11 @@ export default async function LandingPage() {
           back: render <TestimonialsSection /> here again (it still only shows
           real, consented testimonials). */}
 
-      {/* 07 — FAQ */}
+      {/* 06 — FAQ */}
       <section className="border-t border-border/70 py-24 sm:py-32">
         <div className="mx-auto grid max-w-6xl gap-12 px-5 lg:grid-cols-[1fr_1.35fr] lg:gap-20">
           <SectionHeading
-            index="07"
+            index="06"
             label="Questions"
             title={
               <>
