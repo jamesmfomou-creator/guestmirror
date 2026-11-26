@@ -108,8 +108,7 @@ export default async function LandingPage() {
 
             <Reveal delay={0.38}>
               <p className="mx-auto mt-3.5 max-w-[22rem] text-pretty text-[15.5px] leading-[1.55] text-foreground/65 sm:mt-6 sm:max-w-lg sm:text-lg sm:leading-relaxed sm:text-muted lg:mx-0">
-                Rends ton annonce Airbnb plus attractive et démarque-toi de tes concurrents sans forcément baisser tes
-                prix.
+                Optimise ton annonce Airbnb pour attirer plus de voyageurs, sans avoir à brader tes nuits.
               </p>
             </Reveal>
 
