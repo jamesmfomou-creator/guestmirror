@@ -3,14 +3,16 @@
 import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { animate, motion, useInView, useMotionValue, useReducedMotion, useTransform } from "framer-motion";
-import { CircleAlert, Lock } from "lucide-react";
+import { ArrowRight, Check, CircleAlert, Lock } from "lucide-react";
 import { scoreColor, verdictFor } from "@/lib/utils";
 
 // Landing-page example of a GuestMirror report (ReportMockup). Everything
 // here is fixed DEMONSTRATION content, independent of any real analysis: an
 // illustrative listing whose best asset (the terrace) only appears as photo
 // n°5, which is exactly what the "main problem" says. The cover is therefore
-// a different photo (the living room), with photo n°5 shown as an inset.
+// a different photo (the living room, "Photo de couverture actuelle"), and the
+// terrace is shown as the "Photo de couverture recommandée" inset, with an
+// arrow and a check, so the recommendation reads without the text below.
 //
 // The reveal plays once, when the card scrolls into view (~3.5 s), and never
 // holds anything back: with reduced motion everything is shown at once.
@@ -65,27 +67,48 @@ export function ReportPreviewCard() {
           className="object-cover"
         />
         <span className="absolute left-3 top-3 rounded-full bg-foreground/70 px-2.5 py-1 text-[11px] font-medium text-background backdrop-blur-sm">
-          Photo de couverture
+          Photo de couverture actuelle
         </span>
-        <motion.figure
-          className="absolute bottom-3 right-3 w-[30%] max-w-[150px] overflow-hidden rounded-[var(--radius-sm)] border-2 border-card shadow-[0_12px_30px_-10px_rgba(28,26,23,0.55)]"
+        {/* The recommendation, at a glance: an arrow from the current cover to
+            the recommended one (orange outline + check). */}
+        <motion.div
+          className="absolute right-3 bottom-3 w-[36%] max-w-[180px]"
           initial={{ opacity: 0, scale: reduced ? 1 : 0.9 }}
           animate={shown ? { opacity: 1, scale: 1 } : undefined}
           transition={{ duration: reduced ? 0.01 : 0.5, delay: reduced ? 0 : 0.5, ease: EASE }}
         >
-          <div className="relative aspect-[4/5]">
-            <Image
-              src="/demo/annonce-a.jpg"
-              alt="Exemple d'annonce : photo n°5, la terrasse avec vue sur la mer"
-              fill
-              sizes="150px"
-              className="object-cover"
-            />
-          </div>
-          <figcaption className="bg-accent px-2 py-1 text-center text-[11px] font-semibold text-accent-foreground">
-            Photo n°5
-          </figcaption>
-        </motion.figure>
+          <figure className="overflow-hidden rounded-[var(--radius-sm)] border-[3px] border-accent bg-accent shadow-[0_14px_34px_-10px_rgba(201,80,42,0.6)]">
+            <div className="relative aspect-[4/5]">
+              <Image
+                src="/demo/annonce-a.jpg"
+                alt="Exemple d'annonce : photo de couverture recommandée, la terrasse avec vue sur la mer"
+                fill
+                sizes="180px"
+                className="object-cover"
+              />
+            </div>
+            <figcaption className="px-1.5 py-1 text-center text-[10.5px] leading-tight font-semibold text-accent-foreground sm:text-[11px]">
+              Photo de couverture recommandée
+            </figcaption>
+          </figure>
+          {/* check badge on the corner */}
+          <span
+            aria-hidden
+            className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-[0_4px_10px_-2px_rgba(201,80,42,0.6)] ring-2 ring-card"
+          >
+            <Check size={13} strokeWidth={3} />
+          </span>
+          {/* arrow: current cover -> recommended cover */}
+          <motion.span
+            aria-hidden
+            className="absolute top-[38%] -left-4 flex h-8 w-8 items-center justify-center rounded-full bg-card text-accent shadow-[0_6px_16px_-4px_rgba(28,26,23,0.45)] sm:-left-5 sm:h-9 sm:w-9"
+            initial={{ opacity: 0, x: reduced ? 0 : -8 }}
+            animate={shown ? { opacity: 1, x: 0 } : undefined}
+            transition={{ duration: reduced ? 0.01 : 0.45, delay: reduced ? 0 : 0.85, ease: EASE }}
+          >
+            <ArrowRight size={17} strokeWidth={2.6} />
+          </motion.span>
+        </motion.div>
       </motion.div>
 
       <div className="p-5 sm:p-8">
