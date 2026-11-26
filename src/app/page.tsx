@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ArrowDown, ArrowRight, CalendarCheck, Clock, Tag, TrendingUp } from "lucide-react";
 import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
-import { HeroForm, HeroScreenshotLink } from "@/components/landing/HeroForm";
+import { HeroForm } from "@/components/landing/HeroForm";
 // HeroLaptopDemo (diagnostic mockup) is kept in components/landing for reuse further down the page.
 import { HeroBookingVisual } from "@/components/landing/HeroBookingVisual";
 import { StepsShowcase } from "@/components/landing/StepsShowcase";
@@ -54,7 +54,7 @@ const FAQ = [
   },
   {
     q: "Dois-je connecter mon compte Airbnb ?",
-    a: "Non, jamais. Il te suffit d'importer une capture d'écran de ton annonce — tes captures servent uniquement à produire ton analyse.",
+    a: "Non, jamais. Il te suffit de coller le lien public de ton annonce : on lit uniquement ce que n'importe quel voyageur peut voir.",
   },
   {
     q: `Est-ce que ${BRAND_NAME} garantit plus de réservations ?`,
@@ -130,7 +130,7 @@ export default async function LandingPage() {
             </Reveal>
 
             <Reveal delay={0.45} className="mt-3 flex w-full justify-center sm:mt-9 lg:block">
-              <HeroForm belowOnMobile />
+              <HeroForm />
             </Reveal>
             {/* Phones: shown after the visual instead (first screen). */}
             <div className="hidden sm:block">
@@ -167,11 +167,10 @@ export default async function LandingPage() {
 
           <Reveal delay={0.25} y={24} className="flex flex-col items-center gap-3">
             <HeroBookingVisual />
-            {/* Phones: the social proof and the screenshot alternative, moved
-                below the visual so the first screen shows title, form and visual. */}
+            {/* Phones: the social proof, below the visual so the first screen
+                shows title, form and visual. */}
             <div className="flex flex-col items-center gap-2 sm:hidden">
               <HeroAnalysesProof className="mt-1" />
-              <HeroScreenshotLink />
             </div>
             {/* Mobile / tablet: "how it works" after the demo */}
             <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-3 lg:hidden">

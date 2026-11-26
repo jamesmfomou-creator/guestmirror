@@ -1237,6 +1237,7 @@ export function AnalyzeWizard({ knownEmail = null }: { knownEmail?: string | nul
           continueLabel={directMode ? "Lancer l'analyse" : undefined}
           canContinue={url.trim().length > 0 || images.length > 0}
           error={error || apiError}
+          showScreenshots={Boolean(error || apiError) || images.length > 0}
         />
       )}
       {step === "profile" && (
